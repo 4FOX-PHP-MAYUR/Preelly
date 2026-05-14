@@ -1,0 +1,283 @@
+{
+  "categories": [
+    {
+      "id": "cars",
+      "label": "Cars",
+      "fields": [
+        {
+          "name": "brand",
+          "type": "select",
+          "label": "Brand",
+          "required": true,
+          "options": ["Toyota", "Honda", "Ford", "BMW", "Mercedes-Benz", "Audi", "Tesla", "Other"]
+        },
+        {
+          "name": "model",
+          "type": "select",
+          "label": "Model",
+          "required": true,
+          "options": {
+            "dependsOn": "brand",
+            "values": {
+              "Toyota": ["Innova", "Corolla", "Fortuner", "Camry"],
+              "Honda": ["Civic", "Accord", "City", "CR-V"],
+              "Ford": ["Focus", "Fusion", "Escape", "Explorer"],
+              "BMW": ["3 Series", "5 Series", "X3", "X5"],
+              "Mercedes-Benz": ["C-Class", "E-Class", "GLC", "GLE"],
+              "Audi": ["A3", "A4", "Q3", "Q5"],
+              "Tesla": ["Model 3", "Model S", "Model X", "Model Y"],
+              "Other": ["Other"]
+            },
+            "default": ["Other"]
+          }
+        },
+        {
+          "name": "year",
+          "type": "number",
+          "label": "Year",
+          "required": true,
+          "min": 1990,
+          "max": 2100
+        },
+        {
+          "name": "mileage",
+          "type": "number",
+          "label": "Mileage (km)",
+          "required": false,
+          "min": 0,
+          "max": 10000000
+        },
+        {
+          "name": "fuelType",
+          "type": "select",
+          "label": "Fuel Type",
+          "required": false,
+          "options": ["Petrol", "Diesel", "Hybrid", "Electric", "Other"]
+        },
+        {
+          "name": "transmission",
+          "type": "select",
+          "label": "Transmission",
+          "required": false,
+          "options": ["Automatic", "Manual"]
+        },
+        {
+          "name": "color",
+          "type": "text",
+          "label": "Color",
+          "required": false,
+          "placeholder": "e.g., Black, White, Red"
+        },
+        {
+          "name": "hasAccident",
+          "type": "checkbox",
+          "label": "Has accident history",
+          "required": false
+        },
+        {
+          "name": "images",
+          "type": "file",
+          "label": "Upload Images",
+          "required": false,
+          "accept": "image/*",
+          "multiple": true
+        }
+      ]
+    },
+    {
+      "id": "real-estate",
+      "label": "Real Estate",
+      "fields": [
+        {
+          "name": "propertyType",
+          "type": "select",
+          "label": "Property Type",
+          "required": true,
+          "options": ["Apartment", "House", "Land", "Commercial"]
+        },
+        {
+          "name": "city",
+          "type": "select",
+          "label": "City",
+          "required": true,
+          "options": ["Dubai", "Abu Dhabi", "Sharjah", "Ajman", "Other"]
+        },
+        {
+          "name": "bedrooms",
+          "type": "number",
+          "label": "Bedrooms",
+          "required": false,
+          "min": 0,
+          "max": 20
+        },
+        {
+          "name": "areaSqft",
+          "type": "number",
+          "label": "Area (sqft)",
+          "required": false,
+          "min": 0,
+          "max": 10000000
+        },
+        {
+          "name": "price",
+          "type": "number",
+          "label": "Price",
+          "required": true,
+          "min": 0,
+          "max": 100000000000
+        },
+        {
+          "name": "furnished",
+          "type": "checkbox",
+          "label": "Furnished",
+          "required": false
+        },
+        {
+          "name": "listingTitle",
+          "type": "text",
+          "label": "Listing Title",
+          "required": true,
+          "placeholder": "e.g., Spacious 2BR apartment in Marina"
+        },
+        {
+          "name": "images",
+          "type": "file",
+          "label": "Upload Images",
+          "required": false,
+          "accept": "image/*",
+          "multiple": true
+        }
+      ]
+    },
+    {
+      "id": "jobs",
+      "label": "Jobs",
+      "fields": [
+        {
+          "name": "jobType",
+          "type": "select",
+          "label": "Job Type",
+          "required": true,
+          "options": ["Full-time", "Part-time", "Contract", "Internship"]
+        },
+        {
+          "name": "industry",
+          "type": "select",
+          "label": "Industry",
+          "required": true,
+          "options": ["IT", "Construction", "Retail", "Healthcare", "Education", "Other"]
+        },
+        {
+          "name": "experienceYears",
+          "type": "number",
+          "label": "Experience (years)",
+          "required": false,
+          "min": 0,
+          "max": 60
+        },
+        {
+          "name": "salary",
+          "type": "number",
+          "label": "Salary (optional)",
+          "required": false,
+          "min": 0,
+          "max": 1000000000
+        },
+        {
+          "name": "workMode",
+          "type": "radio",
+          "label": "Work Mode",
+          "required": false,
+          "options": ["On-site", "Remote", "Hybrid"]
+        },
+        {
+          "name": "email",
+          "type": "text",
+          "label": "Contact Email",
+          "required": true,
+          "placeholder": "you@example.com"
+        },
+        {
+          "name": "coverNote",
+          "type": "text",
+          "label": "Short Note",
+          "required": false,
+          "placeholder": "Optional message for applicants"
+        }
+      ]
+    },
+    {
+      "id": "electronics",
+      "label": "Electronics",
+      "fields": [
+        {
+          "name": "deviceType",
+          "type": "select",
+          "label": "Device Type",
+          "required": true,
+          "options": ["Mobile Phones", "Laptops", "Tablets", "Cameras", "Headphones"]
+        },
+        {
+          "name": "brand",
+          "type": "select",
+          "label": "Brand",
+          "required": true,
+          "options": {
+            "dependsOn": "deviceType",
+            "values": {
+              "Mobile Phones": ["Apple", "Samsung", "Google", "Xiaomi", "OnePlus", "Huawei", "Other"],
+              "Laptops": ["Apple", "Dell", "HP", "Lenovo", "ASUS", "Acer", "Other"],
+              "Tablets": ["Apple", "Samsung", "Microsoft", "Lenovo", "Other"],
+              "Cameras": ["Canon", "Nikon", "Sony", "Fujifilm", "Panasonic", "Other"],
+              "Headphones": ["Sony", "Bose", "Apple", "Sennheiser", "JBL", "Other"]
+            },
+            "default": ["Other"]
+          }
+        },
+        {
+          "name": "model",
+          "type": "text",
+          "label": "Model",
+          "required": true,
+          "placeholder": "e.g., Galaxy S22, ThinkPad X1"
+        },
+        {
+          "name": "condition",
+          "type": "select",
+          "label": "Condition",
+          "required": true,
+          "options": ["Brand New", "Like New", "Good", "Fair", "Poor"]
+        },
+        {
+          "name": "storage",
+          "type": "select",
+          "label": "Storage",
+          "required": false,
+          "options": ["32GB", "64GB", "128GB", "256GB", "512GB", "1TB", "Other"]
+        },
+        {
+          "name": "warranty",
+          "type": "text",
+          "label": "Warranty (optional)",
+          "required": false,
+          "placeholder": "e.g., 1 year remaining"
+        },
+        {
+          "name": "includesAccessories",
+          "type": "checkbox",
+          "label": "Includes accessories",
+          "required": false
+        },
+        {
+          "name": "images",
+          "type": "file",
+          "label": "Upload Images",
+          "required": false,
+          "accept": "image/*",
+          "multiple": true
+        }
+      ]
+    }
+  ]
+}
+

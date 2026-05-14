@@ -1,0 +1,129 @@
+{
+  "categories": [
+    {
+      "name": "Electronics",
+      "emoji": "📱",
+      "subcategories": [
+        { "name": "Mobile Phones" },
+        { "name": "Laptops" },
+        { "name": "Tablets" },
+        { "name": "Cameras" },
+        { "name": "Gaming Consoles" }
+      ]
+    },
+    {
+      "name": "Vehicles",
+      "emoji": "🚗",
+      "subcategories": [
+        { "name": "Cars" },
+        { "name": "Motorcycles" },
+        { "name": "Bicycles" }
+      ]
+    },
+    {
+      "name": "Furniture",
+      "emoji": "🪑",
+      "subcategories": [
+        { "name": "Sofas" },
+        { "name": "Tables" },
+        { "name": "Chairs" },
+        { "name": "Beds" }
+      ]
+    },
+    {
+      "name": "Fashion",
+      "emoji": "👕",
+      "subcategories": [
+        { "name": "Men's Clothing" },
+        { "name": "Women's Clothing" },
+        { "name": "Shoes" },
+        { "name": "Accessories" }
+      ]
+    },
+    {
+      "name": "Home & Garden",
+      "emoji": "🏠",
+      "subcategories": [
+        { "name": "Appliances" },
+        { "name": "Tools" },
+        { "name": "Plants" },
+        { "name": "Decor" }
+      ]
+    },
+    {
+      "name": "Sports",
+      "emoji": "⚽",
+      "subcategories": [
+        { "name": "Fitness Equipment" },
+        { "name": "Outdoor Gear" },
+        { "name": "Sports Accessories" }
+      ]
+    },
+    {
+      "name": "Books",
+      "emoji": "📚",
+      "subcategories": [
+        { "name": "Fiction" },
+        { "name": "Non-Fiction" },
+        { "name": "Textbooks" }
+      ]
+    },
+    {
+      "name": "Toys & Games",
+      "emoji": "🎮",
+      "subcategories": [
+        { "name": "Board Games" },
+        { "name": "Video Games" },
+        { "name": "Toys" }
+      ]
+    }
+  ],
+  "sampleProducts": [
+    {
+      "title": "iPhone 13 Pro Max - 256GB - Like New",
+      "description": "Selling my iPhone 13 Pro Max. Bought 6 months ago, in excellent condition. Comes with original box, charger, and screen protector already applied. No scratches or dents. Battery health at 95%.",
+      "price": 850,
+      "currency": "USD",
+      "location": "New York, NY",
+      "brand": "Apple",
+      "condition": "Like New"
+    },
+    {
+      "title": "2020 MacBook Pro 13\" - M1 Chip",
+      "description": "MacBook Pro with M1 chip, 8GB RAM, 256GB SSD. Perfect condition, used for light work. Includes original charger and box.",
+      "price": 900,
+      "currency": "USD",
+      "location": "San Francisco, CA",
+      "brand": "Apple",
+      "condition": "Good"
+    },
+    {
+      "title": "Nike Air Max 270 - Size 10",
+      "description": "Barely worn Nike Air Max 270. Only used a few times, in excellent condition. Original box included.",
+      "price": 80,
+      "currency": "USD",
+      "location": "Los Angeles, CA",
+      "brand": "Nike",
+      "condition": "Like New"
+    },
+    {
+      "title": "Samsung 55\" 4K Smart TV",
+      "description": "Samsung 55-inch 4K UHD Smart TV. Great picture quality, all apps working. Remote included. Minor scratch on bezel, not visible when watching.",
+      "price": 450,
+      "currency": "USD",
+      "location": "Chicago, IL",
+      "brand": "Samsung",
+      "condition": "Good"
+    },
+    {
+      "title": "Vintage Leather Sofa - 3 Seater",
+      "description": "Beautiful vintage leather sofa in great condition. Some wear on arms but overall excellent. Very comfortable. Pickup only.",
+      "price": 600,
+      "currency": "USD",
+      "location": "Miami, FL",
+      "brand": "Unknown",
+      "condition": "Fair"
+    }
+  ]
+}
+

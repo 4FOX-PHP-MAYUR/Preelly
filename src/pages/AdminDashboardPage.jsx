@@ -20,6 +20,7 @@ import {
   MessageCircle,
 } from 'lucide-react'
 import Card from '../components/AdminUI/Card'
+import { EmiratesIdThumbnailPair, EmiratesIdLightbox } from '../components/AdminUI/EmiratesIdPreview'
 import { VERIFIED_BADGE_IMAGES } from '../utils/verifiedBadge'
 import toast from 'react-hot-toast'
 import { getMediaUrl } from '../utils/helpers'
@@ -52,6 +53,7 @@ function AdminDashboardPage() {
   const [stats, setStats] = useState(null)
   const [loading, setLoading] = useState(true)
   const [processingId, setProcessingId] = useState(null)
+  const [idLightbox, setIdLightbox] = useState(null)
   // Tabs: 'dashboard' (pending review + stats), 'products' (all products), 'sold' (sold products), 'users' (user list), 'contacts' (chat/contact list), 'comments' (comment moderation)
   const [activeTab, setActiveTab] = useState('dashboard')
   const [statusFilter, setStatusFilter] = useState('all')
@@ -809,8 +811,9 @@ function AdminDashboardPage() {
           ) : (
             <div className="divide-y">
               {users.map((user) => (
-                <div key={user._id} className="p-6 flex items-center justify-between hover:bg-gray-50">
-                  <div className="flex items-center space-x-4 flex-1">
+                <div key={user._id} className="p-6 hover:bg-gray-50">
+                  <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center space-x-4 flex-1 min-w-0">
                     <div className="relative">
                       {user.avatar ? (
                         <img
@@ -865,6 +868,16 @@ function AdminDashboardPage() {
                         >
                           {user.status === 'active' ? 'Active' : 'Inactive'}
                         </span>
+                        {user.identityVerificationStatus === 'pending' && (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
+                            ID Pending
+                          </span>
+                        )}
+                        {user.identityVerificationStatus === 'rejected' && (
+                          <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700">
+                            ID Rejected
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -948,6 +961,29 @@ function AdminDashboardPage() {
                       <span>View User</span>
                     </button>
                   </div>
+                  </div>
+
+                  {(user.emiratesIdFront || user.emiratesIdBack) && (
+                    <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center gap-4">
+                      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                        Emirates ID Preview
+                      </span>
+                      <EmiratesIdThumbnailPair
+                        front={user.emiratesIdFront}
+                        back={user.emiratesIdBack}
+                        onPreview={(src, label) => setIdLightbox({ src, label })}
+                      />
+                      {user.identityVerificationStatus === 'pending' && (
+                        <button
+                          type="button"
+                          onClick={() => navigate('/admin/identity-verification')}
+                          className="ml-auto text-xs font-semibold text-blue-600 hover:underline"
+                        >
+                          Review in Verification →
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1533,6 +1569,14 @@ function AdminDashboardPage() {
       )}
         </div>
       </div>
+
+      {idLightbox && (
+        <EmiratesIdLightbox
+          src={idLightbox.src}
+          label={idLightbox.label}
+          onClose={() => setIdLightbox(null)}
+        />
+      )}
     </div>
   )
 }

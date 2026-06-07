@@ -1,5 +1,5 @@
 import { User, Calendar, Star } from 'lucide-react'
-import { isUserVerified, getMediaUrl } from '../../utils/helpers'
+import { isIdentityVerified, getMediaUrl } from '../../utils/helpers'
 import { VERIFIED_BADGE_IMAGES } from '../../utils/verifiedBadge'
 
 function SellerInfo({ seller }) {
@@ -17,11 +17,11 @@ function SellerInfo({ seller }) {
           ) : (
             <User className="h-8 w-8 text-primary-600" />
           )}
-          {isUserVerified(seller) ? (
+          {isIdentityVerified(seller) ? (
             <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5 z-10">
               <img 
                 src={VERIFIED_BADGE_IMAGES.medium} 
-                alt="Verified" 
+                alt="Identity Verified" 
                 className="h-5 w-5"
               />
             </div>
@@ -30,12 +30,12 @@ function SellerInfo({ seller }) {
         <div className="flex-1">
           <h4 className="font-semibold text-gray-900 flex items-center gap-2">
             {seller.name}
-            {isUserVerified(seller) ? (
+            {isIdentityVerified(seller) ? (
               <img 
                 src={VERIFIED_BADGE_IMAGES.medium} 
-                alt="Verified" 
+                alt="Identity Verified" 
                 className="h-5 w-5"
-                title="Verified Account"
+                title="Identity Verified (Emirates ID)"
               />
             ) : null}
           </h4>

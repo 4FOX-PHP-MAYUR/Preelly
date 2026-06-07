@@ -1,13 +1,24 @@
+import { useState } from 'react'
+import { getCategoryImageUrl } from '../../utils/helpers'
+
 function CategoryCard({ category, onClick }) {
+  const [imageFailed, setImageFailed] = useState(false)
+  const imageSrc = getCategoryImageUrl(category)
+
   return (
     <button
       onClick={onClick}
       className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow text-center group"
     >
       <div className="mb-3 flex justify-center">
-        <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center group-hover:bg-primary-200 transition-colors">
-          {category.icon ? (
-            <img src={category.icon} alt={category.name} className="w-10 h-10" />
+        <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center overflow-hidden group-hover:bg-primary-200 transition-colors">
+          {imageSrc && !imageFailed ? (
+            <img
+              src={imageSrc}
+              alt={category.name}
+              className="h-16 w-16 object-cover"
+              onError={() => setImageFailed(true)}
+            />
           ) : (
             <span className="text-2xl">{category.emoji || '📦'}</span>
           )}

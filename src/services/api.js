@@ -1,73 +1,84 @@
 import axios from 'axios'
 import { isValidObjectId } from '../utils/helpers'
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api'
+import { API_URL } from '../utils/constants'
+import { getRouteAbortSignal } from './apiScope'
 
 const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
+  timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
   },
 })
 
-// Add token to requests
+// Add token to requests (skip when retrying with cookie-only after 401)
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+  // Layout/auth calls survive route changes; page-scoped calls are cancelled on navigate.
+  if (!config.signal && !config.persistAcrossRoutes) {
+    config.signal = getRouteAbortSignal()
+  }
+  if (!config.__skipBearer) {
+    const token = localStorage.getItem('token')
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`
+    }
+  }
+  // Let the browser set Content-Type (with boundary) for FormData uploads
+  if (config.data instanceof FormData) {
+    delete config.headers['Content-Type']
   }
   return config
 })
 
-// Invalid/expired token or user removed from DB: clear client session so UI matches API (fixes stale "Super Admin" + 401 "User not found").
-let clearingUnauthorizedSession = false
+// Drop only a stale Bearer from localStorage — never auto-logout from incidental 401s (e.g. post-ad back).
+function stripStaleBearerToken() {
+  localStorage.removeItem('token')
+}
+
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const status = error.response?.status
-    const url = String(error.config?.url || '')
+    const config = error.config
+    const url = String(config?.url || '')
     const isAuthRoute =
-      url.includes('/auth/login') ||
+      url.includes('/auth/send-otp') ||
+      url.includes('/auth/verify-otp') ||
       url.includes('/auth/register') ||
-      url.includes('/auth/admin-login')
+      url.includes('/auth/logout')
 
-    if (
-      status === 401 &&
-      !isAuthRoute &&
-      localStorage.getItem('token') &&
-      !clearingUnauthorizedSession
-    ) {
-      clearingUnauthorizedSession = true
-      try {
-        localStorage.removeItem('token')
-        localStorage.removeItem('user')
-        localStorage.removeItem('permissions')
-        const { store } = await import('../store/store')
-        const { logout } = await import('../store/slices/authSlice')
-        store.dispatch(logout())
-        const path = window.location.pathname
-        if (path.startsWith('/admin') && !path.startsWith('/admin/login')) {
-          window.location.assign('/admin/login?reason=session')
+    if (status === 401 && config && !isAuthRoute) {
+      const hadBearer = Boolean(config.headers?.Authorization)
+
+      if (hadBearer && !config.__retriedWithoutBearer) {
+        config.__retriedWithoutBearer = true
+        config.__skipBearer = true
+        if (config.headers) {
+          delete config.headers.Authorization
         }
-      } finally {
-        clearingUnauthorizedSession = false
+        try {
+          return await api.request(config)
+        } catch (retryError) {
+          error = retryError
+        }
+      }
+
+      if (error.response?.status === 401 && hadBearer) {
+        stripStaleBearerToken()
       }
     }
+
     return Promise.reject(error)
   }
 )
 
 const asAuthOptional = async (promiseFactory, fallbackData) => {
-  const token = localStorage.getItem('token')
-  if (!token) {
-    return { data: fallbackData }
-  }
   try {
     return await promiseFactory()
   } catch (error) {
     if (error?.response?.status === 401) {
-      localStorage.removeItem('token')
+      stripStaleBearerToken()
       return { data: fallbackData }
     }
     throw error
@@ -76,31 +87,46 @@ const asAuthOptional = async (promiseFactory, fallbackData) => {
 
 // Auth service
 export const authService = {
-  login: (credentials) => api.post('/auth/login', credentials),
-  adminLogin: (credentials) => api.post('/auth/admin-login', credentials),
+  sendOtp: ({ email, phone, phoneCountryCode, phoneCountryIso, mode, channel }) =>
+    api.post('/auth/send-otp', { email, phone, phoneCountryCode, phoneCountryIso, mode, channel }),
+  verifyOtp: ({ email, phone, phoneCountryCode, phoneCountryIso, otp, mode, channel }) =>
+    api.post('/auth/verify-otp', {
+      email,
+      phone,
+      phoneCountryCode,
+      phoneCountryIso,
+      otp,
+      mode,
+      channel,
+    }),
   register: (userData) => api.post('/auth/register', userData),
   sendEmailOtp: ({ email }) => api.post('/auth/send-email-otp', { email }),
+  sendPhoneOtp: ({ phone }) => api.post('/auth/send-phone-otp', { phone }),
   verifyEmailOtp: ({ email, otp }) => api.post('/auth/verify-email-otp', { email, otp }),
+  verifyPhoneOtp: ({ phone, otp }) => api.post('/auth/verify-phone-otp', { phone, otp }),
   logout: () => api.post('/auth/logout'),
 }
 
 // Category service
 export const categoryService = {
-  getCategories: () => api.get('/categories'),
-  getRootCategories: () => api.get('/categories/roots'),
-  getCategoryById: (id) => api.get(`/categories/${id}`),
-  getCategoryChildren: (parentId) =>
-    api.get('/categories', { params: { parent_id: parentId == null || parentId === '' ? '' : parentId } }),
+  getCategories: (config) => api.get('/categories', config),
+  getRootCategories: (config) => api.get('/categories/roots', config),
+  getCategoryById: (id, config) => api.get(`/categories/${id}`, config),
+  getCategoryChildren: (parentId, config) =>
+    api.get('/categories', {
+      params: { parent_id: parentId == null || parentId === '' ? '' : parentId },
+      ...config,
+    }),
   getCategoryPath: (id) => api.get(`/categories/${id}/path`),
-  getCategoryFilters: (levels) => {
+  getCategoryFilters: (levels, config) => {
     if (levels && typeof levels === 'object') {
       const params = {}
       if (levels.categoryId) params.category_id = levels.categoryId
       if (levels.subcategoryId) params.subcategory_id = levels.subcategoryId
       if (levels.childCategoryId) params.child_category_id = levels.childCategoryId
-      return api.get('/category-filters', { params })
+      return api.get('/category-filters', { params, ...config })
     }
-    return api.get('/category-filters', { params: { category_id: levels } })
+    return api.get('/category-filters', { params: { category_id: levels }, ...config })
   },
   /** Get level labels for cascading dropdowns. rootName optional: if provided returns { root, labels }, else full map. */
   getLevelLabels: (rootName) =>
@@ -112,6 +138,7 @@ export const productService = {
   getProducts: (params) => api.get('/products', { params }),
   getProductsReelsFeed: (params) => api.get('/products/reels-feed', { params }),
   getProductById: (id) => api.get(`/products/${id}`),
+  getVideoProcessingStatus: (id) => api.get(`/products/${id}/video-processing`),
   getRelatedProducts: (productId, params) =>
     api.get(`/products/${productId}/related`, { params }),
   searchProducts: (params) => api.get('/products/search', { params }),
@@ -176,14 +203,45 @@ export const productService = {
 
 // AI listing extraction
 export const listingService = {
-  aiExtract: ({ input_text } = {}) => api.post('/listings/ai-extract', { input_text }),
+  aiExtract: ({
+    input_text,
+    extracted_data,
+    vehicle_type,
+    subcategory_name,
+    category_name,
+    category_filters,
+  } = {}) =>
+    api.post('/listings/ai-extract', {
+      input_text,
+      extracted_data,
+      vehicle_type,
+      subcategory_name,
+      category_name,
+      category_filters,
+    }),
+  vehicleEnrich: ({
+    extracted_data,
+    input_text,
+    vehicle_type,
+    category_filters,
+  } = {}) =>
+    api.post('/listings/vehicle-enrich', {
+      extracted_data,
+      input_text,
+      vehicle_type,
+      category_filters,
+    }),
+}
+
+export const vehicleFilterService = {
+  getOptions: (params) => api.get('/vehicle-filters/options', { params }),
 }
 
 // Optimized “single fan-out” endpoint for reels + liked/saved + chats/unread + price range.
 export const feedService = {
   getFeedData: (params) => api.get('/feed-data', { params }),
-  getFollowingFeed: (params) => api.get('/feed/following', { params }),
-  getTrendingFeed: (params) => api.get('/feed/trending', { params }),
+  getFollowingFeed: (params, config) => api.get('/feed/following', { params, ...config }),
+  getTrendingFeed: (params, config) => api.get('/feed/trending', { params, ...config }),
 }
 
 // User service
@@ -193,16 +251,40 @@ export const userService = {
   getListings: (params) => api.get('/user/listings', { params }),
   getOrders: (params) => api.get('/user/orders', { params }),
   getWishlist: () => api.get('/user/wishlist'),
+  getLikedProducts: () => api.get('/user/liked'),
   getNotifications: (params) => api.get('/user/notifications', { params }),
+  markNotificationRead: (id) => api.patch(`/user/notifications/${id}/read`),
+  markAllNotificationsRead: () => api.patch('/user/notifications/read-all'),
   followUser: (userId) => {
     if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
     return api.post(`/user/${userId}/follow`)
+  },
+  getFollowStatus: (userId) => {
+    if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
+    return api.get(`/user/${userId}/follow-status`)
+  },
+  acceptFollowRequest: (userId) => {
+    if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
+    return api.post(`/user/${userId}/follow/accept`)
+  },
+  rejectFollowRequest: (userId) => {
+    if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
+    return api.post(`/user/${userId}/follow/reject`)
+  },
+  blockUser: (userId) => {
+    if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
+    return api.post(`/user/${userId}/block`)
   },
   getUserProfile: (userId) => {
     if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
     return api.get(`/user/${userId}/profile`)
   },
-  getCurrentUserProfile: () => api.get('/user/profile'),
+  /** useCookieSession: true = httpOnly cookie only (avoids stale Bearer 401 on boot) */
+  getCurrentUserProfile: (options = {}) =>
+    api.get('/user/profile', {
+      persistAcrossRoutes: true,
+      ...(options.useCookieSession ? { __skipBearer: true } : {}),
+    }),
   updateProfile: (data) => api.put('/user/profile', data),
   completeBasicProfile: (formData) =>
     api.post('/user/profile', formData, {
@@ -210,8 +292,29 @@ export const userService = {
     }),
   getFollowers: (userId) => api.get(`/user/${userId}/followers`),
   getFollowing: (userId) => api.get(`/user/${userId}/following`),
-  getReelsProgress: () => api.get('/user/reels-progress'),
-  saveReelsProgress: (feedKey, index) => api.put('/user/reels-progress', { feedKey, index }),
+  getFollowRequests: () => api.get('/user/follow-requests'),
+  getSuggestedUsers: (limit = 10) => api.get('/user/suggested', { params: { limit } }),
+  getReelsProgress: () => asAuthOptional(() => api.get('/user/reels-progress'), { reelsProgress: {} }),
+  saveReelsProgress: (feedKey, index) =>
+    asAuthOptional(() => api.put('/user/reels-progress', { feedKey, index }), {}),
+  changePassword: (currentPassword, newPassword) =>
+    api.post('/user/change-password', { currentPassword, newPassword }),
+  unlinkSocial: (provider) => api.post('/user/unlink-social', { provider }),
+  linkSocial: (provider) => {
+    const params = new URLSearchParams({ mode: 'link' })
+    const token = localStorage.getItem('token')
+    if (token) params.set('token', token)
+    window.location.href = `/api/auth/oauth/${encodeURIComponent(provider)}?${params.toString()}`
+  },
+  getLocations: () => api.get('/user/locations'),
+  addLocation: (data) => api.post('/user/locations', data),
+  updateLocation: (locId, data) => api.put(`/user/locations/${locId}`, data),
+  deleteLocation: (locId) => api.delete(`/user/locations/${locId}`),
+  getIdentityVerification: () => api.get('/user/identity-verification'),
+  submitIdentityVerification: (formData) =>
+    api.post('/user/identity-verification', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
 }
 
 // Interaction service
@@ -248,14 +351,25 @@ export const interactionService = {
 // Chat service
 export const chatService = {
   getChats: () => api.get('/chats'),
-  getUnreadCount: () => api.get('/chats/unread-count'),
+  getUnreadCount: (config) => api.get('/chats/unread-count', { persistAcrossRoutes: true, ...config }),
   getChatById: (chatId) => api.get(`/chats/${chatId}`),
-  createOrGetChat: (productId, sellerId) => api.post('/chats', { productId, sellerId }),
+  createOrGetChat: (productId, sellerId, options = {}) =>
+    api.post('/chats', { productId, sellerId, ...options }),
   createSupportChat: () => api.post('/chats', { type: 'support' }),
-  sendMessage: (chatId, text) => api.post(`/chats/${chatId}/messages`, { text }),
+  sendMessage: (chatId, text, files) => {
+    const fileList = !files ? [] : Array.isArray(files) ? files : [files]
+    if (fileList.length > 0) {
+      const fd = new FormData()
+      if (text) fd.append('text', text)
+      fileList.forEach((f) => fd.append('files', f))
+      return api.post(`/chats/${chatId}/messages`, fd)
+    }
+    return api.post(`/chats/${chatId}/messages`, { text })
+  },
   markAsRead: (chatId) => api.put(`/chats/${chatId}/read`),
   deleteChat: (chatId) => api.delete(`/chats/${chatId}`),
   deleteMessage: (chatId, messageId) => api.delete(`/chats/${chatId}/messages/${messageId}`),
+  saveCallEvent: (chatId, data) => api.post(`/chats/${chatId}/call-event`, data),
 }
 
 // Admin service
@@ -269,6 +383,11 @@ export const adminService = {
   getStats: () => api.get('/admin/stats'),
   getUsers: (params) => api.get('/admin/users', { params }),
   verifyUser: (userId, isVerified) => api.put(`/admin/users/${userId}/verify`, { isVerified }),
+  getIdentityVerifications: (params) => api.get('/admin/identity-verifications', { params }),
+  getIdentityVerification: (userId) => api.get(`/admin/identity-verifications/${userId}`),
+  approveIdentityVerification: (userId) => api.put(`/admin/identity-verifications/${userId}/approve`),
+  rejectIdentityVerification: (userId, reason) =>
+    api.put(`/admin/identity-verifications/${userId}/reject`, { reason }),
   setUserRole: (userId, role) => api.put(`/admin/users/${userId}/role`, { role }),
   setUserStatus: (userId, status) => api.put(`/admin/users/${userId}/status`, { status }),
   createUser: (userData) => api.post('/admin/users', userData),
@@ -285,8 +404,43 @@ export const adminService = {
   /** Nested category tree for cascading dropdowns (all levels). */
   getAdminCategoryNestedForFilters: () => api.get('/admin/categories/nested-for-filters'),
   getAdminCategoryTree: () => api.get('/admin/categories/tree'),
-  createAdminCategory: (data) => api.post('/admin/categories', data),
-  updateAdminCategory: (id, data) => api.patch(`/admin/categories/${id}`, data),
+  createAdminCategory: (data) => {
+    const hasFile = data?.category_image instanceof File
+    if (!hasFile) return api.post('/admin/categories', data)
+    const formData = new FormData()
+    Object.keys(data || {}).forEach((key) => {
+      const value = data[key]
+      if (value === undefined || value === null) return
+      if (key === 'category_image' && value instanceof File) {
+        formData.append('category_image', value)
+      } else if (value !== '') {
+        formData.append(key, value)
+      }
+    })
+    return api.post('/admin/categories', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+  updateAdminCategory: (id, data) => {
+    const hasFile = data?.category_image instanceof File
+    if (!hasFile) {
+      const { category_image, ...rest } = data || {}
+      return api.patch(`/admin/categories/${id}`, rest)
+    }
+    const formData = new FormData()
+    Object.keys(data || {}).forEach((key) => {
+      const value = data[key]
+      if (value === undefined || value === null) return
+      if (key === 'category_image' && value instanceof File) {
+        formData.append('category_image', value)
+      } else {
+        formData.append(key, value)
+      }
+    })
+    return api.patch(`/admin/categories/${id}`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
   deleteAdminCategory: (id) => api.delete(`/admin/categories/${id}`),
   getAllAdminCategories: (params) => api.get('/admin/categories/all', { params }),
   importAdminCategoriesExcel: (formData) =>
@@ -295,7 +449,7 @@ export const adminService = {
     }),
   // Filters admin endpoints
   getAdminFilters: (params) => api.get('/admin/filters', { params }),
-  getAdminFilterTree: () => api.get('/admin/filters/tree'),
+  getAdminFilterTree: (params) => api.get('/admin/filters/tree', { params }),
   importAdminFiltersExcel: (formData) =>
     api.post('/admin/filters/import', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -377,6 +531,20 @@ export const adminService = {
   getModules: () => api.get('/admin/modules'),
   // User admin role assignment
   setUserAdminRole: (userId, adminRole) => api.put(`/admin/users/${userId}/admin-role`, { adminRole }),
+  // Field Types endpoints
+  getFieldTypes: (params) => api.get('/admin/field-types', { params }),
+  getFieldTypeById: (id) => api.get(`/admin/field-types/${id}`),
+  createFieldType: (data) => api.post('/admin/field-types', data),
+  updateFieldType: (id, data) => api.patch(`/admin/field-types/${id}`, data),
+  deleteFieldType: (id) => api.delete(`/admin/field-types/${id}`),
+  // Form Fields endpoints
+  getFormFields: (params) => api.get('/admin/form-fields', { params }),
+  getFormFieldDropdowns: () => api.get('/admin/form-fields/dropdowns'),
+  getFormFieldFilters: (categoryId) => api.get('/admin/form-fields/filters', { params: { categoryId } }),
+  getFormFieldById: (id) => api.get(`/admin/form-fields/${id}`),
+  createFormField: (data) => api.post('/admin/form-fields', data),
+  updateFormField: (id, data) => api.patch(`/admin/form-fields/${id}`, data),
+  deleteFormField: (id) => api.delete(`/admin/form-fields/${id}`),
 }
 
 // Video service
@@ -391,6 +559,7 @@ export const videoService = {
     if (childCategoryId) formData.append('childCategoryId', childCategoryId)
     return api.post('/video/transcribe', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000,
     })
   },
   captureScreenshot: (videoFile, timestamp) => {
@@ -403,6 +572,20 @@ export const videoService = {
   },
   enhanceDescription: ({ title, description, category } = {}) =>
     api.post('/ai/enhance-description', { title, description, category }),
+}
+
+export const streamingService = {
+  uploadMp4: (videoFile, { onUploadProgress } = {}) => {
+    const formData = new FormData()
+    formData.append('video', videoFile)
+    return api.post('/streaming/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 600000,
+      onUploadProgress,
+    })
+  },
+  getJob: (jobId) => api.get(`/streaming/jobs/${jobId}`),
+  getHealth: () => api.get('/streaming/health'),
 }
 
 export default api

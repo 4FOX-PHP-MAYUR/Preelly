@@ -3,14 +3,23 @@ import { adminService } from '../services/api'
 import PageHeader from '../components/AdminUI/PageHeader'
 import DataTable from '../components/AdminUI/DataTable'
 import toast from 'react-hot-toast'
+import { getMediaUrl } from '../utils/helpers'
 
 function AdminCategoriesPage() {
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState(null)
-  const [form, setForm] = useState({ name: '', parentId: '', isActive: true })
+  const [form, setForm] = useState({
+    name: '',
+    parentId: '',
+    isActive: true,
+    category_image_file: null,
+    image_preview: '',
+    clear_image: false,
+  })
   const [search, setSearch] = useState('')
+  const [filterParentId, setFilterParentId] = useState('')
   const LIMIT = 100
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
@@ -97,11 +106,12 @@ function AdminCategoriesPage() {
     }
   }
 
-  const fetchCategories = async (p = 1, searchTerm = '') => {
+  const fetchCategories = async (p = 1, searchTerm = '', parentId = filterParentId) => {
     try {
       setLoading(true)
       const params = { limit: LIMIT, page: p }
       if (searchTerm && searchTerm.trim()) params.search = searchTerm.trim()
+      if (parentId) params.parentId = parentId
       const res = await adminService.getAdminCategories(params)
       const data = res.data || {}
       const items = data.categories || data.data || []
@@ -161,23 +171,67 @@ function AdminCategoriesPage() {
 
   const handleSearch = (e) => {
     e.preventDefault()
-    fetchCategories(1, search)
+    fetchCategories(1, search, filterParentId)
   }
+
+  const handleParentFilterChange = (parentId) => {
+    setFilterParentId(parentId)
+    fetchCategories(1, search, parentId)
+  }
+
+  const resetForm = () => ({
+    name: '',
+    parentId: '',
+    isActive: true,
+    category_image_file: null,
+    image_preview: '',
+    clear_image: false,
+  })
 
   const openAdd = () => {
     setEditing(null)
-    setForm({ name: '', parentId: '', isActive: true })
+    setForm(resetForm())
     setParentSelectedPath([])
     fetchParentRoots()
     setShowForm(true)
   }
 
+  const handleImageChange = (e) => {
+    const file = e.target.files?.[0] || null
+    if (!file) {
+      setForm((prev) => ({
+        ...prev,
+        category_image_file: null,
+        image_preview: '',
+        clear_image: false,
+      }))
+      return
+    }
+    const preview = URL.createObjectURL(file)
+    setForm((prev) => ({
+      ...prev,
+      category_image_file: file,
+      image_preview: preview,
+      clear_image: false,
+    }))
+  }
+
+  const existingCategoryImage = (row) => row?.image || row?.icon || null
+
   const handleSave = async (e) => {
     e.preventDefault()
     try {
       setLoading(true)
-      const payload = { name: form.name, parentId: form.parentId || null, isActive: form.isActive !== false }
+      const payload = {
+        name: form.name,
+        parentId: form.parentId || null,
+        isActive: form.isActive !== false,
+      }
+      if (form.category_image_file) {
+        payload.category_image = form.category_image_file
+      }
       if (editing) {
+        if (form.clear_image) payload.clear_image = 'true'
         await adminService.updateAdminCategory(editing._id, payload)
         toast.success('Category updated')
       } else {
@@ -186,7 +240,7 @@ function AdminCategoriesPage() {
       }
       setShowForm(false)
       setEditing(null)
-      setForm({ name: '', parentId: '', isActive: true })
+      setForm(resetForm())
       setParentSelectedPath([])
       await Promise.all([fetchCategories(1, search), fetchParentRoots()])
     } catch (err) {
@@ -337,7 +391,17 @@ function AdminCategoriesPage() {
       />
 
       <div className="mb-4 flex items-center justify-between gap-4">
-        <form onSubmit={handleSearch} className="flex items-center gap-2 flex-1">
+        <form onSubmit={handleSearch} className="flex items-center gap-2 flex-1 flex-wrap">
+          <select
+            value={filterParentId}
+            onChange={(e) => handleParentFilterChange(e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+          >
+            <option value="">All Parent Categories</option>
+            {importRootCategoryOptions.map((c) => (
+              <option key={c._id} value={c._id}>{c.name}</option>
+            ))}
+          </select>
           <input
             type="text"
             value={search}
@@ -348,10 +412,10 @@ function AdminCategoriesPage() {
           <button type="submit" className="px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">
             Search
           </button>
-          {search && (
+          {(search || filterParentId) && (
             <button
               type="button"
-              onClick={() => { setSearch(''); fetchCategories(1, ''); }}
+              onClick={() => { setSearch(''); setFilterParentId(''); fetchCategories(1, '', ''); }}
               className="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
             >
               Clear
@@ -389,6 +453,45 @@ function AdminCategoriesPage() {
                   />
                   <span>Active</span>
                 </label>
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Category Image (optional)</label>
+                <div className="flex items-center gap-3 mt-1">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageChange}
+                    className="text-xs"
+                  />
+                  {(form.image_preview ||
+                    (editing && existingCategoryImage(editing) && !form.clear_image)) && (
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={
+                          form.image_preview ||
+                          getMediaUrl(existingCategoryImage(editing)) ||
+                          existingCategoryImage(editing)
+                        }
+                        alt="Category"
+                        className="h-12 w-12 rounded object-cover border border-gray-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            category_image_file: null,
+                            image_preview: '',
+                            clear_image: true,
+                          }))
+                        }
+                        className="text-xs text-red-600 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -448,7 +551,7 @@ function AdminCategoriesPage() {
                 onClick={() => {
                   setShowForm(false)
                   setEditing(null)
-                  setForm({ name: '', parentId: '', isActive: true })
+                  setForm(resetForm())
                   setParentSelectedPath([])
                 }}
                 className="px-3 py-2 rounded-lg border border-gray-200 text-xs text-gray-700 hover:bg-gray-50"
@@ -514,13 +617,16 @@ function AdminCategoriesPage() {
         data={categories}
         loading={loading}
         serverSide
-        pagination={{ page, limit: LIMIT, total, onPageChange: (p) => fetchCategories(p, search) }}
+        pagination={{ page, limit: LIMIT, total, onPageChange: (p) => fetchCategories(p, search, filterParentId) }}
         onEdit={async (r) => {
           setEditing(r)
           setForm({
             name: r.name || '',
             parentId: r.parentId || '',
             isActive: r.isActive !== false,
+            category_image_file: null,
+            image_preview: '',
+            clear_image: false,
           })
           const pathIds = Array.isArray(r.path) ? r.path.map(id => String(id)) : []
           await restoreParentCascade(pathIds)

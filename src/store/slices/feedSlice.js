@@ -49,7 +49,7 @@ export const fetchFeedShell = createAsyncThunk('feed/fetchFeedShell', async (arg
   }
 })
 
-export const fetchFeedPage = createAsyncThunk('feed/fetchFeedPage', async (args, { rejectWithValue }) => {
+export const fetchFeedPage = createAsyncThunk('feed/fetchFeedPage', async (args, { rejectWithValue, signal }) => {
   try {
     const {
       feedType = 'trending',
@@ -75,9 +75,10 @@ export const fetchFeedPage = createAsyncThunk('feed/fetchFeedPage', async (args,
     if (maxPrice !== undefined && maxPrice !== null && maxPrice !== '') params.maxPrice = maxPrice
     if (sortBy) params.sortBy = sortBy
 
+    const requestConfig = { signal }
     const response = feedType === 'following'
-      ? await feedService.getFollowingFeed(params)
-      : await feedService.getTrendingFeed(params)
+      ? await feedService.getFollowingFeed(params, requestConfig)
+      : await feedService.getTrendingFeed(params, requestConfig)
 
     return {
       feedType,
@@ -119,6 +120,12 @@ const feedSlice = createSlice({
     },
     setCurrentFeedType: (state, action) => {
       state.currentFeedType = action.payload || 'trending'
+    },
+    pinReelAtTop: (state, action) => {
+      const product = action.payload
+      const id = String(product?._id || '')
+      if (!id) return
+      state.reels = [product, ...state.reels.filter((p) => String(p?._id) !== id)]
     },
   },
   extraReducers: (builder) => {
@@ -184,12 +191,16 @@ const feedSlice = createSlice({
         }
       })
       .addCase(fetchFeedPage.rejected, (state, action) => {
+        if (action.meta.aborted) {
+          state.loading = false
+          return
+        }
         state.loading = false
         state.error = action.payload || action.error?.message || 'Failed to fetch feed'
       })
   },
 })
 
-export const { clearReels, clearAll, setCurrentFeedType } = feedSlice.actions
+export const { clearReels, clearAll, setCurrentFeedType, pinReelAtTop } = feedSlice.actions
 export default feedSlice.reducer
 

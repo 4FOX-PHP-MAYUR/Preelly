@@ -53,12 +53,19 @@ export const getMediaUrl = (path) => {
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path
   }
-  // Get API base URL (remove /api suffix if present)
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api'
-  const baseUrl = API_URL.replace('/api', '')
+  const baseUrl =
+    import.meta.env.VITE_SOCKET_URL ||
+    (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5002')
   // If path starts with /, use it directly, otherwise prepend /uploads
   const mediaPath = path.startsWith('/') ? path : `/uploads/${path}`
   return `${baseUrl}${mediaPath}`
+}
+
+/** Category image/icon path from API → absolute URL for <img src> */
+export const getCategoryImageUrl = (category) => {
+  const path = category?.image || category?.icon
+  if (!path || typeof path !== 'string') return null
+  return getMediaUrl(path) || path
 }
 
 // Validate MongoDB ObjectId (24 hex chars)
@@ -66,13 +73,16 @@ export const isValidObjectId = (id) => {
   return typeof id === 'string' && /^[a-fA-F0-9]{24}$/.test(id)
 }
 
-// Check if user is verified (Standard Logic)
-// Verified users have isVerified: true, Unverified users have isVerified: false
+// OTP verification — email + phone confirmed (required to post ads, etc.)
 export const isUserVerified = (user) => {
   if (!user) return false
-  
-  // Standard logic: true means verified (show checkmark), false means not verified (no checkmark)
   return user.isVerified === true
+}
+
+// Emirates ID identity verification — separate trust badge on profile/listings
+export const isIdentityVerified = (user) => {
+  if (!user) return false
+  return user.identityVerificationStatus === 'approved'
 }
 
 // Fisher–Yates shuffle (random order, in place then return copy for immutability)

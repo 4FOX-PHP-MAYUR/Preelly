@@ -7,9 +7,8 @@ const Category = require('../models/Category')
 const User = require('../models/User')
 const Chat = require('../models/Chat')
 const Comment = require('../models/Comment')
-const jwt = require('jsonwebtoken')
 const authMiddleware = require('../middleware/auth')
-const { getJwtFromRequest } = require('../utils/authToken')
+const { getUserIdFromRequest } = require('../utils/authToken')
 
 const router = express.Router()
 
@@ -73,15 +72,8 @@ function parseBooleanFlag (val, defaultValue = true) {
   return defaultValue
 }
 
-function getUserIdFromOptionalToken (req) {
-  const token = getJwtFromRequest(req)
-  if (!token) return null
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET)
-    return decoded.userId || decoded.id || null
-  } catch {
-    return null
-  }
+function getUserIdFromOptionalToken(req) {
+  return getUserIdFromRequest(req, JWT_SECRET)
 }
 
 function toCanonicalId (id) {
@@ -216,6 +208,7 @@ function buildPostProjection ({ userObjectId }) {
     condition: 1,
     images: 1,
     video: 1,
+    videoStream: 1,
     views: 1,
     createdAt: 1,
     likesCount: { $size: { $ifNull: ['$likes', []] } },
@@ -618,7 +611,7 @@ async function fetchChatsForUser ({ userId }) {
     .select('type product buyer seller user lastMessage lastMessageAt unreadForBuyer unreadForSeller unreadForUser unreadForAdmin updatedAt')
     .populate('product', 'title images video')
     .populate('buyer', 'name username avatar isVerified')
-    .populate('seller', 'name username avatar isVerified')
+    .populate('seller', 'name username avatar isVerified identityVerificationStatus')
     .lean()
 
   const supportChat = await Chat.findOne({ type: 'support', user: userId })
@@ -749,6 +742,7 @@ async function fetchReelsForUser ({ userId, userObjectId, savedProductIdsSet, pa
             rating: '$_sellerDoc.rating',
             memberSince: '$_sellerDoc.memberSince',
             isVerified: '$_sellerDoc.isVerified',
+            identityVerificationStatus: '$_sellerDoc.identityVerificationStatus',
           },
           likesCount: likesCountExpression,
           liked: likedExpression,
@@ -765,6 +759,7 @@ async function fetchReelsForUser ({ userId, userObjectId, savedProductIdsSet, pa
           location: 1,
           condition: 1,
           video: 1,
+          videoStream: 1,
           images: 1,
           createdAt: 1,
           views: 1,
@@ -784,7 +779,7 @@ async function fetchReelsForUser ({ userId, userObjectId, savedProductIdsSet, pa
     const findQuery = query
     products = await Product.find(findQuery)
       .populate('category', 'name icon emoji')
-      .populate('seller', 'name avatar rating memberSince isVerified')
+      .populate('seller', 'name avatar rating memberSince isVerified identityVerificationStatus')
       .sort({ createdAt: -1 })
       .limit(limit)
       .lean()

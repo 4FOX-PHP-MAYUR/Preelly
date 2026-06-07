@@ -11,6 +11,73 @@ const { ROUTES } = require('../swagger/allPaths')
 
 const OUT = path.join(__dirname, '..', '..', 'Preelly-API.postman_collection.json')
 
+function buildProductFormData({ isUpdate = false } = {}) {
+  const fields = [
+    { key: 'title', value: '2022 Land Rover Discovery HSE', type: 'text' },
+    { key: 'description', value: 'Well maintained SUV with full service history and low mileage. Single owner, accident free.', type: 'text' },
+    { key: 'price', value: '185000', type: 'text' },
+    { key: 'currency', value: 'AED', type: 'text' },
+    { key: 'category', value: '{{categoryId}}', type: 'text' },
+    { key: 'subcategory', value: '{{categoryId}}', type: 'text' },
+    { key: 'location', value: 'Dubai Marina, Dubai, UAE', type: 'text' },
+    { key: 'country', value: 'UAE', type: 'text' },
+    { key: 'city', value: 'Dubai', type: 'text' },
+    { key: 'area', value: 'Dubai Marina', type: 'text' },
+    { key: 'brand', value: 'Land Rover', type: 'text' },
+    { key: 'condition', value: 'Good', type: 'text' },
+    { key: 'priceType', value: 'Fixed', type: 'text' },
+    { key: 'adType', value: 'free', type: 'text' },
+    { key: 'contactName', value: 'John Seller', type: 'text' },
+    { key: 'contactPhone', value: '+971501234567', type: 'text' },
+    // Optional vehicle listing fields (lowercase API keys)
+    { key: 'cityid', value: '{{filterId}}', type: 'text', description: 'Optional — Filter ObjectId' },
+    { key: 'modelid', value: '{{categoryId}}', type: 'text', description: 'Optional — Category ObjectId' },
+    { key: 'trimid', value: '{{categoryId}}', type: 'text', description: 'Optional — Category ObjectId' },
+    { key: 'regionalspecsid', value: '{{filterId}}', type: 'text' },
+    { key: 'yearid', value: '{{filterId}}', type: 'text' },
+    { key: 'kilometers', value: '45000', type: 'text' },
+    { key: 'bodytypeid', value: '{{filterId}}', type: 'text' },
+    { key: 'seatid', value: '{{filterId}}', type: 'text' },
+    { key: 'isinsuredid', value: '{{filterId}}', type: 'text' },
+    { key: 'productprice', value: '185000', type: 'text' },
+    { key: 'phonenumber', value: '+971501234567', type: 'text' },
+    { key: 'exteriorcolorid', value: '{{filterId}}', type: 'text' },
+    { key: 'interiorcolor', value: 'Beige Leather', type: 'text' },
+    { key: 'warrantyid', value: '{{filterId}}', type: 'text' },
+    { key: 'fueltypeid', value: '{{filterId}}', type: 'text' },
+    { key: 'doorsid', value: '{{filterId}}', type: 'text' },
+    { key: 'numberofcylenderid', value: '{{filterId}}', type: 'text' },
+    { key: 'transmissiontypeid', value: '{{filterId}}', type: 'text' },
+    { key: 'horsepowerid', value: '{{filterId}}', type: 'text' },
+    { key: 'steeringsideid', value: '{{filterId}}', type: 'text' },
+    { key: 'enginecapacityid', value: '{{filterId}}', type: 'text' },
+    { key: 'driverassistancesafetyid', value: '{{filterId}}', type: 'text' },
+    { key: 'entertainmenttechnologyid', value: '{{filterId}}', type: 'text' },
+    { key: 'comforfconvenienceid', value: '{{filterId}}', type: 'text' },
+    { key: 'exteriorid', value: '{{filterId}}', type: 'text' },
+    { key: 'locateyouritem', value: 'Near Marina Mall', type: 'text' },
+    { key: 'buildingstreetname', value: 'King Salman Bin Abdulaziz Al Saud St', type: 'text' },
+  ]
+
+  if (isUpdate) {
+    fields.unshift({ key: 'status', value: 'active', type: 'text', disabled: true, description: 'Owner/admin only' })
+  } else {
+    fields.push(
+      { key: 'video', type: 'file', description: 'Required — upload 1 video file' },
+      { key: 'images', type: 'file', description: 'Upload at least 1 image (or rely on auto screenshots)' },
+    )
+  }
+
+  if (isUpdate) {
+    fields.push(
+      { key: 'video', type: 'file', disabled: true, description: 'Optional replacement video' },
+      { key: 'images', type: 'file', disabled: true, description: 'Optional additional images' },
+    )
+  }
+
+  return fields
+}
+
 /** @type {Record<string, object | null>} key = "METHOD path" */
 const BODY_BY_ROUTE = {
   'POST /api/auth/register': {
@@ -20,8 +87,21 @@ const BODY_BY_ROUTE = {
     password: 'secret12',
   },
   'POST /api/auth/send-email-otp': { email: 'jane@example.com' },
+  'POST /api/auth/send-phone-otp': { phone: '918552849180' },
   'POST /api/auth/verify-email-otp': { email: 'jane@example.com', otp: '123456' },
-  'POST /api/auth/login': { email: 'jane@example.com', password: 'secret12' },
+  'POST /api/auth/verify-phone-otp': { phone: '918552849180', otp: '123456' },
+  'POST /api/auth/send-otp': {
+    channel: 'email',
+    email: 'jane@example.com',
+    mode: 'login',
+  },
+  'POST /api/auth/verify-otp': {
+    channel: 'email',
+    email: 'jane@example.com',
+    otp: '123456',
+    mode: 'login',
+  },
+  'POST /api/auth/login': {},
   'POST /api/auth/logout': {},
   'PUT /api/user/reels-progress': { feedKey: 'default', index: 0 },
   'PUT /api/user/profile': {
@@ -156,8 +236,51 @@ const BODY_BY_ROUTE = {
   },
 }
 
-function expressPathToPostmanUrl (p) {
-  return p.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, name) => `{{${name}}}`)
+const PATH_PARAM_DEFAULTS = {
+  id: '507f1f77bcf86cd799439011',
+  productId: '507f1f77bcf86cd799439011',
+  sellerId: '507f1f77bcf86cd799439012',
+  categoryId: '507f1f77bcf86cd799439013',
+  filterId: '507f1f77bcf86cd799439014',
+  adminRoleId: '507f1f77bcf86cd799439015',
+  chatId: '507f1f77bcf86cd799439016',
+  messageId: '507f1f77bcf86cd799439017',
+  commentId: '507f1f77bcf86cd799439018',
+  filepath: 'images/example.jpg',
+}
+
+/** Postman v2.1 URL object — raw-only URLs often show blank in the Postman UI. */
+function buildPostmanUrl (routePath) {
+  const segments = routePath.split('/').filter(Boolean)
+  const path = []
+  const variables = []
+
+  for (const seg of segments) {
+    if (seg.startsWith(':')) {
+      const key = seg.slice(1)
+      path.push(`:${key}`)
+      variables.push({
+        key,
+        value: PATH_PARAM_DEFAULTS[key] || PATH_PARAM_DEFAULTS.id,
+      })
+    } else {
+      path.push(seg)
+    }
+  }
+
+  const rawPath = segments
+    .map((seg) => (seg.startsWith(':') ? `{{${seg.slice(1)}}}` : seg))
+    .join('/')
+
+  const url = {
+    raw: `{{baseUrl}}/${rawPath}`,
+    protocol: '{{protocol}}',
+    host: ['{{host}}'],
+    port: '{{port}}',
+    path,
+  }
+  if (variables.length) url.variable = variables
+  return url
 }
 
 function lookupBody (method, path) {
@@ -173,8 +296,6 @@ function lookupBody (method, path) {
 }
 
 function buildRequest (method, routePath, summary, secure) {
-  const urlPath = expressPathToPostmanUrl(routePath)
-  const fullUrl = `{{baseUrl}}${urlPath}`
   const m = method.toLowerCase()
   const key = `${method.toUpperCase()} ${routePath}`
   const bodyTemplate = lookupBody(method, routePath)
@@ -183,7 +304,7 @@ function buildRequest (method, routePath, summary, secure) {
   const req = {
     method: method.toUpperCase(),
     header: [],
-    url: { raw: fullUrl },
+    url: buildPostmanUrl(routePath),
     description: summary,
   }
   if (secure) {
@@ -196,11 +317,23 @@ function buildRequest (method, routePath, summary, secure) {
   }
   if (routePath === '/api/products' && m === 'post') {
     multipartNote.push(
-      '**multipart/form-data** — required: `video` (file). Often need 3+ `images` OR auto screenshots from video. Text fields: title, description, price, currency, category, subcategory, location, country, city, area, brand, condition, … JSON strings: categoryPath, dimensions, deliveryOptions, contactOptions, display_data, filter_data, filter_* keys.'
+      '**multipart/form-data** — required: `video` (file). Often need 3+ `images` OR auto screenshots from video. All vehicle listing fields are optional. Dropdown *id fields store Filter/Category ObjectIds only (not display text). CamelCase aliases (cityId, modelId, …) also accepted.'
     )
+    req.body = {
+      mode: 'formdata',
+      formdata: buildProductFormData({ isUpdate: false }),
+    }
+    return { name: `${method.toUpperCase()} ${routePath}`, request: req }
   }
   if (routePath === '/api/products/:id' && m === 'put') {
-    multipartNote.push('**multipart/form-data** — optional `video`, `images`; other fields same as create.')
+    multipartNote.push(
+      '**multipart/form-data** — partial update supported. Send only fields to change. Optional vehicle fields same as create (cityid, modelid, trimid, …).'
+    )
+    req.body = {
+      mode: 'formdata',
+      formdata: buildProductFormData({ isUpdate: true }),
+    }
+    return { name: `${method.toUpperCase()} ${routePath}`, request: req }
   }
   if (routePath === '/api/admin/categories/import-excel') {
     multipartNote.push('**form-data**: `file` (Excel). Optional: targetCategoryId, rootCategoryId, subCategoryId.')
@@ -269,6 +402,58 @@ for (const [method, routePath, tag, summary, secure] of ROUTES) {
   byTag.get(tag).push(buildRequest(method, routePath, summary, secure))
 }
 
+// Second pass: add WhatsApp OTP variants under Auth
+const authFolder = byTag.get('Auth')
+if (authFolder) {
+  const sendOtpIdx = authFolder.findIndex((i) => i.name === 'POST /api/auth/send-otp')
+  if (sendOtpIdx !== -1) {
+    const whatsappSend = JSON.parse(JSON.stringify(authFolder[sendOtpIdx]))
+    whatsappSend.name = 'POST /api/auth/send-otp (WhatsApp login)'
+    whatsappSend.request.body = {
+      mode: 'raw',
+      raw: JSON.stringify(
+        {
+          channel: 'whatsapp',
+          phone: '8552849180',
+          phoneCountryCode: '91',
+          phoneCountryIso: 'IN',
+          mode: 'login',
+        },
+        null,
+        2
+      ),
+      options: { raw: { language: 'json' } },
+    }
+    whatsappSend.request.description =
+      'Send login OTP via WhatsApp (StreakMsg template). Requires existing user account.'
+    authFolder.splice(sendOtpIdx + 1, 0, whatsappSend)
+  }
+
+  const verifyOtpIdx = authFolder.findIndex((i) => i.name === 'POST /api/auth/verify-otp')
+  if (verifyOtpIdx !== -1) {
+    const whatsappVerify = JSON.parse(JSON.stringify(authFolder[verifyOtpIdx]))
+    whatsappVerify.name = 'POST /api/auth/verify-otp (WhatsApp login)'
+    whatsappVerify.request.body = {
+      mode: 'raw',
+      raw: JSON.stringify(
+        {
+          channel: 'whatsapp',
+          phone: '8552849180',
+          phoneCountryCode: '91',
+          phoneCountryIso: 'IN',
+          otp: '123456',
+          mode: 'login',
+        },
+        null,
+        2
+      ),
+      options: { raw: { language: 'json' } },
+    }
+    whatsappVerify.request.description = 'Verify WhatsApp login OTP and receive JWT.'
+    authFolder.splice(verifyOtpIdx + 1, 0, whatsappVerify)
+  }
+}
+
 // Second pass: add dedicated "Create support chat" under Chats
 const chatsFolder = byTag.get('Chats')
 if (chatsFolder) {
@@ -291,11 +476,14 @@ const collection = {
     name: 'Preelly / Marketplace API',
     description:
       'Generated from `server/swagger/allPaths.js` and route handlers. Default **baseUrl** is `http://localhost:5002` (see server `PORT`).\n\n' +
-      'Set **token** after `POST /api/auth/login` or `POST /api/auth/verify-email-otp`.\n\n' +
+      'Set **token** after `POST /api/auth/verify-otp` (email or WhatsApp), `POST /api/auth/verify-email-otp`, or signup verification.\n\n' +
       'Path variables like `{{id}}`, `{{productId}}` are placeholders — replace with real MongoDB ObjectIds.',
     schema: 'https://schema.getpostman.com/json/collection/v2.1.0/collection.json',
   },
   variable: [
+    { key: 'protocol', value: 'http' },
+    { key: 'host', value: 'localhost' },
+    { key: 'port', value: '5002' },
     { key: 'baseUrl', value: 'http://localhost:5002' },
     { key: 'token', value: '' },
     { key: 'id', value: '507f1f77bcf86cd799439011' },

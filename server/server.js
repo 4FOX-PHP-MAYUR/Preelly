@@ -1,247 +1,213 @@
-// Server entrypoint (combined single-file server)
+const path        = require('path')
+const fs          = require('fs')
+const dotenv      = require('dotenv')
 
-const express = require('express')
-const mongoose = require('mongoose')
-const cors = require('cors')
-const dotenv = require('dotenv')
-const path = require('path')
-const fs = require('fs')
-const http = require('http')
-const { Server } = require('socket.io')
-const ffmpeg = require('fluent-ffmpeg');
+// ── Load the single root-level .env ──────────────────────────────────────────
+dotenv.config({ path: path.join(__dirname, '../.env') })
+
+const express     = require('express')
+const http        = require('http')
+const { Server }  = require('socket.io')
+const mongoose    = require('mongoose')
+const cors        = require('cors')
 const cookieParser = require('cookie-parser')
-const session = require('express-session')
-const passport = require('passport')
+const session     = require('express-session')
+const passport    = require('passport')
+const jwt         = require('jsonwebtoken')
+const ffmpeg      = require('fluent-ffmpeg')
+const { configureFfmpeg } = require('./services/ffmpegConfig')
 
-// Load environment variables
-dotenv.config()
+const connectDB   = require('./config/db')
 
-const app = express()
+// ── Config from .env ──────────────────────────────────────────────────────────
+const PORT         = Number(process.env.PORT)         || 5002
+const BASE_URL     = process.env.BASE_URL             || `http://localhost:${PORT}`
+const FRONTEND_URL = process.env.FRONTEND_URL         || 'http://localhost:3002'
+
+// ── Express + HTTP server ─────────────────────────────────────────────────────
+const app    = express()
 const server = http.createServer(app)
 
-// Fail fast when MongoDB is down: do not buffer commands
-mongoose.set('bufferCommands', false)
-mongoose.set('strictQuery', true)
-
-// Socket.io setup
+// ── Socket.IO ────────────────────────────────────────────────────────────────
 const io = new Server(server, {
   cors: {
-    origin: process.env.NODE_ENV === 'production' 
-      ? ['http://117.254.196.100:3002', 'http://127.0.0.1:3000']
+    origin: process.env.NODE_ENV === 'production'
+      ? FRONTEND_URL
       : true,
     credentials: true,
     methods: ['GET', 'POST'],
   },
 })
 
-ffmpeg.setFfmpegPath('/usr/local/bin/ffmpeg');
-
-// Make io available to routes
+// Make io available to route handlers
 app.set('io', io)
 
-// CORS Configuration
-// In development, allow all origins for easier debugging
-const corsOptions = process.env.NODE_ENV === 'production' 
+// ── ffmpeg (compression + adaptive HLS/DASH) ─────────────────────────────────
+configureFfmpeg()
+if (process.env.FFMPEG_PATH) {
+  try { ffmpeg.setFfmpegPath(process.env.FFMPEG_PATH) } catch {}
+}
+
+// ── CORS ──────────────────────────────────────────────────────────────────────
+const corsOptions = process.env.NODE_ENV === 'production'
   ? {
-      origin: ['http://117.254.196.100:3002', 'http://127.0.0.1:3000'],
+      origin: FRONTEND_URL,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     }
   : {
-      origin: true, // Allow all origins in development
+      origin: true,
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
       allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     }
 
-// Middleware
+// Disable ETag — prevents browsers returning stale 304 for API calls
+app.set('etag', false)
+
 app.use(cors(corsOptions))
 
-// Cookie + session support
-// - Needed for Passport OAuth state handling.
-// - Also enables JWT auth from an HTTP-only cookie.
-app.use(cookieParser())
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || 'dev-session-secret-change-me',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.SESSION_COOKIE_SAME_SITE || 'lax',
-      maxAge: Number(process.env.SESSION_COOKIE_MAX_AGE_MS || 10 * 60 * 1000), // 10 minutes
-    },
-  }),
-)
+// No-cache header for all /api responses
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store')
+  next()
+})
 
-// Passport initialization + strategy registration
+// ── Session + Passport (OAuth) ────────────────────────────────────────────────
+app.use(cookieParser())
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'dev-session-secret',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: process.env.SESSION_COOKIE_SAME_SITE || 'lax',
+    maxAge: Number(process.env.SESSION_COOKIE_MAX_AGE_MS || 600000),
+  },
+}))
 app.use(passport.initialize())
 app.use(passport.session())
 require('./auth/passport')
 
-// Logging middleware for debugging (only in development)
+// ── Request logger (dev only) ─────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, res, next) => {
-    console.log(`${req.method} ${req.path} - Origin: ${req.headers.origin || 'none'}`)
+    console.log(`${req.method} ${req.path}`)
     next()
   })
 }
 
-// Handle preflight requests
-// No explicit app.options wildcard necessary — app.use(cors) handles preflight.
-
-// Increase body parser limits for large file uploads
+// ── Body parsers + static files ───────────────────────────────────────────────
 app.use(express.json({ limit: '500mb' }))
 app.use(express.urlencoded({ extended: true, limit: '500mb' }))
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')))
+const uploadsDir = path.join(__dirname, 'uploads')
+const streamingDir = path.join(uploadsDir, 'streaming')
+if (!fs.existsSync(streamingDir)) fs.mkdirSync(streamingDir, { recursive: true })
+
+app.use('/uploads', express.static(uploadsDir, {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.m3u8')) {
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl')
+      res.setHeader('Cache-Control', 'public, max-age=60')
+    } else if (filePath.endsWith('.mpd')) {
+      res.setHeader('Content-Type', 'application/dash+xml')
+      res.setHeader('Cache-Control', 'public, max-age=60')
+    } else if (filePath.endsWith('.ts')) {
+      res.setHeader('Content-Type', 'video/mp2t')
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    } else if (filePath.endsWith('.m4s')) {
+      res.setHeader('Content-Type', 'video/iso.segment')
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    }
+  },
+}))
+
 // Ensure screenshots directory exists
 const screenshotsDir = path.join(__dirname, 'uploads', 'videos', 'screenshots')
-if (!fs.existsSync(screenshotsDir)) {
-  fs.mkdirSync(screenshotsDir, { recursive: true })
-}
+if (!fs.existsSync(screenshotsDir)) fs.mkdirSync(screenshotsDir, { recursive: true })
 
-// If DB is disconnected, respond before any route runs Mongoose queries (bufferCommands = false)
+// ── DB availability guard ─────────────────────────────────────────────────────
 app.use('/api', (req, res, next) => {
   if (req.path === '/health') return next()
-  // 0 = disconnected, 1 = connected, 2 = connecting, 3 = disconnecting
   if (mongoose.connection.readyState !== 1) {
-    return res.status(503).json({
-      message: 'Database unavailable',
-      details: 'MongoDB is not connected. Check MONGO_URI and network access.',
-    })
+    return res.status(503).json({ message: 'Database unavailable. Check MONGO_URI.' })
   }
   next()
 })
 
-// Routes
-// IMPORTANT: Mount interactions routes BEFORE products routes
-// to ensure /api/products/:id/saved matches before /api/products/:id
-app.use('/api/auth/oauth', require('./routes/oauth'))
-app.use('/api/auth', require('./routes/auth'))
-app.use('/api', require('./routes/profile')) // GET /api/profile (protected example)
-app.use('/api/categories', require('./routes/categories'))
-app.use('/api/filters', require('./routes/filters'))
-app.use('/api/category-filters', require('./routes/categoryFilters'))
-app.use('/api/user', require('./routes/user'))
-app.use('/api/chats', require('./routes/chats'))
-app.use('/api', require('./routes/feedData')) // GET /api/feed-data (optimized fan-out)
-app.use('/api', require('./routes/interactions')) // Must come before /api/products
-app.use('/api/products', require('./routes/products'))
-app.use('/api/admin', require('./routes/admin'))
-app.use('/api', require('./routes/ai'))
-app.use('/api/video', require('./routes/video'))
+// ── API v1 (mobile + web) ─────────────────────────────────────────────────────
+const v1ErrorHandler = require('./core/errors/v1ErrorHandler')
+app.use('/api/v1', require('./api/v1'))
+app.use('/api/v1', v1ErrorHandler)
 
-// Health check endpoint
+// ── Legacy routes (backward compatible — deprecation headers added below) ─────
+const { legacyDeprecationHeaders } = require('./api/legacy/compat')
+app.use('/api', legacyDeprecationHeaders)
+
+app.use('/api/auth/oauth',    require('./routes/oauth'))
+app.use('/api/auth',          require('./routes/auth'))
+app.use('/api',               require('./routes/profile'))
+app.use('/api/categories',    require('./routes/categories'))
+app.use('/api/filters',       require('./routes/filters'))
+app.use('/api/category-filters', require('./routes/categoryFilters'))
+app.use('/api/vehicle-filters', require('./routes/vehicleFilters'))
+app.use('/api/user',          require('./routes/user'))
+app.use('/api/chats',         require('./routes/chats'))
+app.use('/api',               require('./routes/feedData'))
+app.use('/api',               require('./routes/interactions'))  // before /products
+app.use('/api/products',      require('./routes/products'))
+app.use('/api',               require('./routes/dynamicForm'))
+app.use('/api/admin',         require('./routes/admin'))
+app.use('/api',               require('./routes/ai'))
+app.use('/api/video',         require('./routes/video'))
+app.use('/api/streaming',     require('./routes/streaming'))
+
+// ── Health check ──────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     message: 'Server is running',
     timestamp: new Date().toISOString(),
-    uptime: process.uptime()
+    uptime: process.uptime(),
   })
 })
 
-// Error handling middleware
+// ── Swagger docs ──────────────────────────────────────────────────────────────
+app.locals.baseUrl = BASE_URL
+const { mountSwagger } = require('./swagger/setup')
+mountSwagger(app, { baseUrl: BASE_URL })
+
+// ── Global error handler ──────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack)
   res.status(err.status || 500).json({
     message: err.message || 'Internal server error',
-    error: process.env.NODE_ENV === 'development' ? err : {},
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack }),
   })
 })
 
-// Runtime configuration from environment variables
-const PORT = Number(process.env.PORT) || 5002
-const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`
-const MONGO_URI =
-  process.env.MONGO_URI ||
-  process.env.MONGODB_URI ||
-  'mongodb+srv://mankarmayur4fox_db_user:Mayur%40321@cluster0.pgtcaoj.mongodb.net/preelly'
-
-// Make base URL available to routes/services that need public API links.
-app.locals.baseUrl = BASE_URL
-
-const { mountSwagger } = require('./swagger/setup')
-mountSwagger(app, { baseUrl: BASE_URL })
-
-mongoose
-  .connect(MONGO_URI, {
-    // Keep initial connect & command selection fast in dev
-    serverSelectionTimeoutMS: 5000,
-    connectTimeoutMS: 5000,
-    socketTimeoutMS: 20000,
-  })
-  .then(async () => {
-    console.log('✅ Connected to MongoDB')
-    try {
-      const Category = require('./models/Category')
-      await Category.fixIndexes()
-    } catch (err) {
-      console.error('⚠️  fixIndexes failed (non-fatal):', err.message)
-    }
-
-    try {
-      const Filter = require('./models/Filter')
-      if (typeof Filter.fixIndexes === 'function') {
-        await Filter.fixIndexes()
-      }
-    } catch (err) {
-      console.error('⚠️  Filter.fixIndexes failed (non-fatal):', err.message)
-    }
-
-    // Ensure required indexes exist for faster feed / interactions queries.
-    // syncIndexes() is safe (idempotent) and will only create missing ones.
-    try {
-      const Product = require('./models/Product')
-      const User = require('./models/User')
-      const Chat = require('./models/Chat')
-      await Promise.all([Product.syncIndexes(), User.syncIndexes(), Chat.syncIndexes()])
-    } catch (err) {
-      console.error('⚠️  syncIndexes failed (non-fatal):', err.message)
-    }
-  })
-  .catch((error) => {
-    console.error('❌ MongoDB connection error:', error.message)
-    console.log('⚠️  Server will start but database operations will fail')
-    const uri = process.env.MONGO_URI || process.env.MONGODB_URI || ''
-    const isAtlas = /mongodb\.net|mongodb\+srv/i.test(uri)
-    if (isAtlas) {
-      console.log(
-        '💡 Atlas: check internet/VPN, firewall, and Atlas Network Access (IP allowlist). ' +
-          'querySrv ETIMEOUT usually means DNS or outbound 27017 blocked.'
-      )
-    } else {
-      console.log('💡 Local MongoDB: ensure it is running, e.g. brew services start mongodb-community')
-    }
-  })
-
-// Socket.io: optional auth from token for admin room
+// ── Socket.IO auth + rooms ────────────────────────────────────────────────────
 const User = require('./models/User')
-const jwt = require('jsonwebtoken')
 
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token
-  if (token) {
-    try {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key')
-      socket.userId = decoded.userId
-      User.findById(decoded.userId).select('role').then((user) => {
-        socket.role = user?.role
-        next()
-      }).catch(() => next())
-    } catch {
+  if (!token) return next()
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET)
+    socket.userId = decoded.userId
+    User.findById(decoded.userId).select('role').then((user) => {
+      socket.role = user?.role
       next()
-    }
-  } else {
+    }).catch(() => next())
+  } catch {
     next()
-    return
   }
 })
 
 io.on('connection', (socket) => {
-  console.log('🔌 User connected:', socket.id)
+  console.log('🔌 Socket connected:', socket.id)
 
   if (socket.userId) {
     socket.join(`user-${socket.userId}`)
@@ -252,43 +218,68 @@ io.on('connection', (socket) => {
   }
 
   socket.on('join-user', (userId) => {
-    if (userId) {
-      socket.join(`user-${userId}`)
-      socket.userId = userId
-      console.log(`👤 User ${userId} joined their room`)
-    }
+    if (userId) { socket.join(`user-${userId}`); socket.userId = userId }
   })
 
-  // Join a specific chat room
-  socket.on('join-room', (roomId) => {
-    if (roomId) {
-      socket.join(roomId)
-      console.log(`📨 Socket ${socket.id} joined room: ${roomId}`)
-    }
+  socket.on('join-room',  (roomId) => { if (roomId) socket.join(roomId) })
+  socket.on('leave-room', (roomId) => { if (roomId) socket.leave(roomId) })
+
+  // ── WebRTC call signaling ─────────────────────────────────────────────────
+  socket.on('call:offer', ({ to, threadId, type, offer, callerName }) => {
+    if (!to) return
+    socket.to(`user-${to}`).emit('call:incoming', {
+      from: socket.userId, fromName: callerName, threadId, type, offer,
+    })
   })
 
-  // Leave a specific chat room
-  socket.on('leave-room', (roomId) => {
-    if (roomId) {
-      socket.leave(roomId)
-      console.log(`📨 Socket ${socket.id} left room: ${roomId}`)
-    }
+  socket.on('call:answer', ({ to, threadId, answer }) => {
+    if (!to) return
+    socket.to(`user-${to}`).emit('call:answered', { answer, threadId })
   })
 
-  // Handle disconnection
+  socket.on('call:ice-candidate', ({ to, candidate }) => {
+    if (!to) return
+    socket.to(`user-${to}`).emit('call:ice-candidate', { from: socket.userId, candidate })
+  })
+
+  socket.on('call:end', ({ to, threadId }) => {
+    if (!to) return
+    socket.to(`user-${to}`).emit('call:end', { from: socket.userId, threadId })
+  })
+
+  socket.on('call:reject', ({ to, threadId }) => {
+    if (!to) return
+    socket.to(`user-${to}`).emit('call:rejected', { from: socket.userId, threadId })
+  })
+
   socket.on('disconnect', () => {
-    console.log('❌ User disconnected:', socket.id)
+    console.log('❌ Socket disconnected:', socket.id)
   })
 })
 
-// Start server
-server.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`)
-  console.log(`📡 API available at ${BASE_URL}/api`)
-  console.log(`🏥 Health check: ${BASE_URL}/api/health`)
-  console.log(`📚 API docs (Swagger): ${BASE_URL}/api-docs`)
-  console.log(`🔌 Socket.io server ready`)
+// ── Connect DB then start server ──────────────────────────────────────────────
+connectDB().then(() => {
+  // Fix/sync indexes after connection
+  Promise.allSettled([
+    require('./models/Category').fixIndexes(),
+    require('./models/Filter').fixIndexes?.() ?? Promise.resolve(),
+    require('./models/FormField').fixIndexes?.() ?? Promise.resolve(),
+    require('./models/Product').syncIndexes(),
+    require('./models/User').syncIndexes(),
+    require('./models/Chat').syncIndexes(),
+  ]).then((results) => {
+    results.forEach((r) => {
+      if (r.status === 'rejected') console.warn('⚠️  Index sync warning:', r.reason?.message)
+    })
+  })
+
+  server.listen(PORT, () => {
+    console.log(`🚀 Server running on port ${PORT}`)
+    console.log(`📡 API: ${BASE_URL}/api`)
+    console.log(`🏥 Health: ${BASE_URL}/api/health`)
+    console.log(`📚 Docs: ${BASE_URL}/api-docs`)
+    console.log(`🌐 Frontend: ${FRONTEND_URL}`)
+  })
 })
 
 module.exports = { app, io }
-

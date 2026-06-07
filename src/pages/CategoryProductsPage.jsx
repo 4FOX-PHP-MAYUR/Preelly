@@ -1,17 +1,19 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
-import { useParams, useNavigate, Link, useLocation } from 'react-router-dom'
+import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchProducts, clearProducts } from '../store/slices/productSlice'
 import { fetchRootCategories } from '../store/slices/categorySlice'
 import { productService } from '../services/api'
 import { categoryService } from '../services/api'
-import { getMediaUrl } from '../utils/helpers'
-import VehicleFiltersBar from '../components/Filters/VehicleFiltersBar'
-import CategoryNavBar from '../components/Filters/CategoryNavBar'
+import CategoryBrowseLayout from '../components/Categories/CategoryBrowseLayout'
+import CategoryFilterChips from '../components/Categories/CategoryFilterChips'
+import CategoryListingCard from '../components/Categories/CategoryListingCard'
+import CategoryDynamicFilters from '../components/Categories/CategoryDynamicFilters'
+import { CategoryBadge, matchesListingChip } from '../components/Categories/categoryBrowseShared'
 import MotorsCategoryCascadingDropdowns from '../components/Filters/MotorsCategoryCascadingDropdowns'
 import MotorsFiltersBar from '../components/Filters/MotorsFiltersBar'
 import CategoryHierarchyFiltersBar from '../components/Filters/CategoryHierarchyFiltersBar'
-import { ArrowLeft, ChevronRight, MapPin, Calendar, X, Gauge, ArrowLeftRight, Globe } from 'lucide-react'
+import { X } from 'lucide-react'
 
 const VEHICLE_CATEGORY_NAMES = ['Motors', 'Motor', 'Vehicles', 'Vehicle', 'Cars', 'Auto']
 
@@ -102,7 +104,9 @@ function CategoryProductsPage() {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const { products, loading, hasMore, page } = useSelector((state) => state.products)
-  const { rootCategories, loading: categoriesLoading, error: categoriesError } = useSelector((state) => state.categories)
+  const { rootCategories, rootLoading: categoriesLoading, rootError: categoriesError } = useSelector(
+    (state) => state.categories
+  )
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [categoryLoading, setCategoryLoading] = useState(false)
   const [categoryError, setCategoryError] = useState('')
@@ -149,6 +153,11 @@ function CategoryProductsPage() {
   const [transmission, setTransmission] = useState('')
   const [fuelType, setFuelType] = useState('')
   const [keywords, setKeywords] = useState('')
+  const [activeChip, setActiveChip] = useState('all')
+  const [selectedFilterIds, setSelectedFilterIds] = useState([])
+
+  const filterChildCategoryId =
+    selectedHierarchy.trim || selectedHierarchy.model || selectedHierarchy.brand || ''
 
   const isVehicleCategory =
     selectedCategory &&
@@ -261,6 +270,10 @@ function CategoryProductsPage() {
       trim: q.get('trim') || '',
     })
   }, [categoryId, location.search, routeSubcategoryId])
+
+  useEffect(() => {
+    setSelectedFilterIds([])
+  }, [categoryId, subcategoryFilterId, filterChildCategoryId])
 
   // NOTE: removed automatic URL sync to avoid navigation loops that could trigger
   // repeated fetches. Subcategory is read from either query string or route param.
@@ -389,6 +402,9 @@ function CategoryProductsPage() {
         if (transmission && transmission.trim()) params.transmission = transmission.trim()
         if (fuelType && fuelType.trim()) params.fuelType = fuelType.trim()
       }
+      if (selectedFilterIds.length) {
+        params.filterIds = selectedFilterIds.join(',')
+      }
 
       dispatch(fetchProducts(params))
     },
@@ -412,6 +428,7 @@ function CategoryProductsPage() {
       selectedHierarchy.brand,
       selectedHierarchy.model,
       selectedHierarchy.trim,
+      selectedFilterIds,
       dispatch,
     ]
   )
@@ -439,6 +456,7 @@ function CategoryProductsPage() {
     selectedHierarchy.brand,
     selectedHierarchy.model,
     selectedHierarchy.trim,
+    selectedFilterIds,
     fetchWithFilters,
   ])
 
@@ -497,6 +515,7 @@ function CategoryProductsPage() {
     setTransmission('')
     setFuelType('')
     setKeywords('')
+    setSelectedFilterIds([])
     setShowAdvancedFilters(false)
     fetchWithFilters(1, false)
   }
@@ -506,89 +525,22 @@ function CategoryProductsPage() {
     fetchWithFilters(1, false)
   }
 
-  const formatPrice = (price, currency) =>
-    new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency || 'USD',
-      minimumFractionDigits: 0,
-    }).format(price)
+  const filteredProducts = useMemo(
+    () => products.filter((p) => matchesListingChip(p, activeChip)),
+    [products, activeChip],
+  )
 
-  const readAdditionalField = (product, key) => {
-    const af = product?.additionalFields
-    if (!af) return null
-    try {
-      if (typeof af?.get === 'function') return af.get(key)
-    } catch {}
-    return af[key]
-  }
-
-  const buildVehicleLine = (product) => {
-    const make = String(product?.make || product?.brand || '').trim()
-    const model = String(product?.model || '').trim()
-    const variant =
-      String(
-        readAdditionalField(product, 'trim') ||
-          readAdditionalField(product, 'variant') ||
-          readAdditionalField(product, 'version') ||
-          readAdditionalField(product, 'subModel') ||
-          ''
-      ).trim()
-
-    const parts = [make, model, variant].filter((p) => p)
-    return parts.join(' • ')
-  }
-
-  const buildSpecsRow = (product) => {
-    const year = product?.year != null ? String(product.year) : ''
-    const mileage = product?.mileage != null ? `${Number(product.mileage).toLocaleString()} km` : ''
-
-    const steering =
-      String(
-        readAdditionalField(product, 'steering') ||
-          readAdditionalField(product, 'steeringPosition') ||
-          readAdditionalField(product, 'hand') ||
-          readAdditionalField(product, 'driveSide') ||
-          ''
-      ).trim()
-
-    const specs =
-      String(
-        readAdditionalField(product, 'specs') ||
-          readAdditionalField(product, 'gccSpecs') ||
-          readAdditionalField(product, 'market') ||
-          product?.specifications ||
-          ''
-      ).trim()
-
-    return [year, mileage, steering, specs].filter((p) => p).join('  •  ')
-  }
-
-  const buildSpecsChips = (product) => {
-    const year = product?.year != null ? String(product.year) : ''
-    const mileage = product?.mileage != null ? `${Number(product.mileage).toLocaleString()} km` : ''
-
-    const steering = String(
-      readAdditionalField(product, 'steering') ||
-        readAdditionalField(product, 'steeringPosition') ||
-        readAdditionalField(product, 'hand') ||
-        readAdditionalField(product, 'driveSide') ||
-        ''
-    ).trim()
-
-    const specs = String(
-      readAdditionalField(product, 'specs') ||
-        readAdditionalField(product, 'gccSpecs') ||
-        readAdditionalField(product, 'market') ||
-        ''
-    ).trim()
-
-    return [
-      year ? { key: 'year', icon: Calendar, text: year } : null,
-      mileage ? { key: 'mileage', icon: Gauge, text: mileage } : null,
-      steering ? { key: 'steering', icon: ArrowLeftRight, text: steering } : null,
-      specs ? { key: 'specs', icon: Globe, text: specs } : null,
-    ].filter(Boolean)
-  }
+  const featuredProducts = useMemo(
+    () =>
+      [...products]
+        .sort((a, b) => {
+          if (a.adType === 'premium' && b.adType !== 'premium') return -1
+          if (b.adType === 'premium' && a.adType !== 'premium') return 1
+          return new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+        })
+        .slice(0, 3),
+    [products],
+  )
 
   const categoryForUi =
     selectedCategory ||
@@ -599,47 +551,52 @@ function CategoryProductsPage() {
       emoji: '📦',
     })
 
+  const listingCountLabel =
+    loading && products.length === 0
+      ? 'Loading listings…'
+      : `${filteredProducts.length} listing${filteredProducts.length !== 1 ? 's' : ''} found`
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Top category nav (Motors [NEW], Property, Jobs, etc.) */}
-        {rootCategories.length > 0 && (
-          <div className="mb-4 border-b border-gray-200 pb-3">
-            <CategoryNavBar categories={rootCategories} showNewBadgeForMotors />
-          </div>
-        )}
-
-        {/* Breadcrumb */}
-        <div className="mb-4 flex items-center gap-2 text-sm text-gray-600">
-          <button
-            onClick={() => navigate('/categories')}
-            className="flex items-center gap-1 hover:text-primary-600"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Categories
-          </button>
-          <ChevronRight className="h-4 w-4 text-gray-400" />
-          <span className="text-gray-900 font-medium">{categoryForUi.name}</span>
+    <CategoryBrowseLayout activeCategoryId={categoryId} featuredProducts={featuredProducts}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-5">
+          <CategoryFilterChips activeChip={activeChip} onChange={setActiveChip} />
         </div>
 
-        {/* Category header */}
-        <div className="mb-6 flex items-center gap-4">
-          <div className="w-16 h-16 bg-primary-100 rounded-full flex items-center justify-center text-3xl">
-            {categoryForUi.emoji || '📦'}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+          <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex items-center gap-3">
+              <CategoryBadge category={categoryForUi} />
+              <div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/categories')}
+                  className="text-xs font-medium text-slate-400 transition hover:text-primary-700"
+                >
+                  ← Categories
+                </button>
+                <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">{categoryForUi.name}</h1>
+                <p className="text-sm text-slate-500">{listingCountLabel}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-start sm:self-auto">
+              <span className="text-sm text-slate-500">Sort by</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-primary-400"
+              >
+                <option value="newest">Newest</option>
+                <option value="price_asc">Price: Low to High</option>
+                <option value="price_desc">Price: High to Low</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">{categoryForUi.name}</h1>
-            <p className="text-gray-600 text-sm">
-              {products.length > 0 && !loading ? `${products.length} listing${products.length !== 1 ? 's' : ''}` : ''}
-            </p>
-          </div>
-        </div>
 
-        {/* Vehicle filter bar (dubizzle-style: single rounded strip below nav) */}
-        {(isVehicleCategory || categoryLoading) && (
-          <div className="mb-6">
-            {isVehicleCategory ? (
-              <MotorsFiltersBar
+          {(isVehicleCategory || categoryLoading) && (
+            <div className="mb-5">
+              {isVehicleCategory ? (
+                <MotorsFiltersBar
                 city={city}
                 subcategories={subcategories}
                 selectedHierarchy={selectedHierarchy}
@@ -790,116 +747,59 @@ function CategoryProductsPage() {
                 onOpenAdvancedFilters={handleOpenAdvancedFilters}
               />
             )}
-          </div>
-        )}
+            </div>
+          )}
 
-        {/* Sort (for all categories) */}
-        <div className="mb-4 flex items-center justify-between">
-          <span className="text-sm text-gray-600">Sort by</span>
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 bg-white"
-          >
-            <option value="newest">Newest</option>
-            <option value="price_asc">Price: Low to High</option>
-            <option value="price_desc">Price: High to Low</option>
-          </select>
-        </div>
-
-        {/* Results grid */}
-        {loading && products.length === 0 ? (
-          <div className="flex justify-center items-center h-64 bg-white rounded-xl shadow-sm">
-            <div className="animate-spin rounded-full h-12 w-12 border-2 border-primary-600 border-t-transparent" />
-          </div>
-        ) : products.length === 0 ? (
-          <div className="bg-white rounded-xl shadow-sm p-12 text-center">
-            <h3 className="text-xl font-bold text-gray-900 mb-2">No listings found</h3>
-            <p className="text-gray-600 mb-4">Try adjusting filters or search.</p>
-          </div>
-        ) : (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {products.map((product) => (
-                <Link
-                  key={product._id}
-                  to={`/products/${product._id}`}
-                  className="bg-white rounded-xl shadow-sm overflow-hidden hover:shadow-md transition-shadow"
-                >
-                  <div className="relative h-48 bg-gray-200">
-                    {product.video ? (
-                      <video
-                        src={getMediaUrl(product.video)}
-                        className="w-full h-full object-cover"
-                        muted
-                        loop
-                        autoPlay
-                        playsInline
-                      />
-                    ) : (
-                      <img
-                        src={getMediaUrl(product.images?.[0]) || '/placeholder.jpg'}
-                        alt={product.title}
-                        className="w-full h-full object-cover"
-                      />
-                    )}
+          {loading && products.length === 0 ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="overflow-hidden rounded-3xl border border-slate-200 bg-white animate-pulse">
+                  <div className="h-52 bg-slate-100" />
+                  <div className="space-y-3 p-4">
+                    <div className="h-4 rounded bg-slate-100 w-3/4" />
+                    <div className="h-3 rounded bg-slate-100 w-1/2" />
+                    <div className="h-6 rounded bg-slate-100 w-1/3" />
                   </div>
-                  <div className="p-4">
-                    <p className="text-gray-900 font-bold text-lg mb-1">
-                      {formatPrice(product.price, product.currency)}
-                    </p>
-
-                    {(product.make || product.model || product.brand || product?.additionalFields) && (
-                      <div className="text-sm text-gray-700 mb-1">
-                        {buildVehicleLine(product) || (product.brand ? String(product.brand) : '')}
-                      </div>
-                    )}
-
-                    <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 text-sm">
-                      {product.title}
-                    </h3>
-
-                    {buildSpecsChips(product).length > 0 && (
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 mb-2">
-                        {buildSpecsChips(product).map((chip) => {
-                          const Icon = chip.icon
-                          return (
-                            <div key={chip.key} className="flex items-center gap-1 min-w-0">
-                              <Icon className="h-3.5 w-3.5 text-gray-500 flex-shrink-0" />
-                              <span className="truncate">{chip.text}</span>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-
-                    <div className="flex items-center text-xs text-gray-600 gap-2">
-                      <MapPin className="h-3 w-3 flex-shrink-0" />
-                      <span className="truncate">{product.location}</span>
-                    </div>
-                    {product.createdAt && (
-                      <div className="flex items-center text-xs text-gray-500 mt-1 gap-1">
-                        <Calendar className="h-3 w-3" />
-                        <span>{new Date(product.createdAt).toLocaleDateString()}</span>
-                      </div>
-                    )}
-                  </div>
-                </Link>
+                </div>
               ))}
             </div>
-            {hasMore && (
-              <div className="text-center mt-8">
+          ) : filteredProducts.length === 0 ? (
+            <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-sm">
+              <h3 className="text-xl font-bold text-slate-900 mb-2">No listings found</h3>
+              <p className="text-slate-500 mb-4">Try adjusting filters or choose another category chip.</p>
+              {activeChip !== 'all' ? (
                 <button
-                  onClick={loadMore}
-                  disabled={loading}
-                  className="px-6 py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="button"
+                  onClick={() => setActiveChip('all')}
+                  className="rounded-full bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700"
                 >
-                  {loading ? 'Loading...' : 'Load More'}
+                  Show all items
                 </button>
+              ) : null}
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {filteredProducts.map((product) => (
+                  <CategoryListingCard key={product._id} product={product} />
+                ))}
               </div>
-            )}
-          </>
-        )}
+              {hasMore && (
+                <div className="mt-8 text-center">
+                  <button
+                    type="button"
+                    onClick={loadMore}
+                    disabled={loading}
+                    className="rounded-full bg-primary-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {loading ? 'Loading...' : 'Load More'}
+                  </button>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
 
         {/* Advanced filters drawer (condition, transmission, fuel type, keywords) — responsive */}
         {showAdvancedFilters && (
@@ -920,10 +820,14 @@ function CategoryProductsPage() {
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <p className="text-sm text-gray-500 mb-4">Select category hierarchy to refine results.</p>
+              <p className="text-sm text-slate-500 mb-4">
+                Refine by subcategory, brand, and admin-managed filters for this category.
+              </p>
 
-              <div className="space-y-4 flex-1">
-                <MotorsCategoryCascadingDropdowns
+              <div className="flex-1 space-y-6">
+                <div>
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Category tree</p>
+                  <MotorsCategoryCascadingDropdowns
                   rootLabel="Subcategory"
                   subcategories={subcategories}
                   selectedHierarchy={selectedHierarchy}
@@ -986,9 +890,18 @@ function CategoryProductsPage() {
                     })
                   }}
                 />
+                </div>
+
+                <CategoryDynamicFilters
+                  categoryId={categoryId}
+                  subcategoryId={subcategoryFilterId}
+                  childCategoryId={filterChildCategoryId}
+                  selectedFilterIds={selectedFilterIds}
+                  onChange={setSelectedFilterIds}
+                />
               </div>
 
-              <div className="mt-6 flex flex-col sm:flex-row gap-3 pt-4 border-t border-gray-200">
+              <div className="mt-6 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row">
                 <button
                   type="button"
                   onClick={applyAdvancedFilters}
@@ -1007,8 +920,7 @@ function CategoryProductsPage() {
             </div>
           </>
         )}
-      </div>
-    </div>
+    </CategoryBrowseLayout>
   )
 }
 

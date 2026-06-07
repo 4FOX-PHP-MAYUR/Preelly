@@ -8,7 +8,7 @@ async function makeAllProductsActive() {
     const mongoURI =
       process.env.MONGO_URI ||
       process.env.MONGODB_URI ||
-      'mongodb+srv://mankarmayur4fox_db_user:Mayur%40321@cluster0.pgtcaoj.mongodb.net/preelly'
+      'mongodb://adminUser:admin1234@117.254.196.100:27017/reelsmarket?authSource=admin'
     await mongoose.connect(mongoURI)
     console.log('✅ Connected to MongoDB')
 

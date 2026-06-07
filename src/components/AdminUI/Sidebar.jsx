@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useSelector } from 'react-redux'
-import { Home, Box, Layers, Users, FileText, ChevronLeft, ChevronRight, TrendingUp, MessageCircle, Store, Settings, Shield, ChevronDown } from 'lucide-react'
+import { Home, Box, Layers, Users, FileText, ChevronLeft, ChevronRight, TrendingUp, MessageCircle, Store, Settings, Shield, ChevronDown, ShieldCheck, Tag, LayoutList } from 'lucide-react'
 import { selectPermissions } from '../../store/slices/authSlice'
+import BrandLogo from '../BrandLogo'
 
 const MENU = [
   { key: 'dashboard', label: 'Dashboard', to: '/admin', icon: Home },
@@ -13,7 +14,10 @@ const MENU = [
   { key: 'sold', label: 'Sold', to: '/admin?tab=sold', icon: TrendingUp },
   { key: 'contacts', label: 'Contacts', to: '/admin?tab=contacts', icon: MessageCircle },
   { key: 'users', label: 'Users', to: '/admin?tab=users', icon: Users },
+  { key: 'identity-verification', label: 'Verification', to: '/admin/identity-verification', icon: ShieldCheck },
   { key: 'reports', label: 'Reports', to: '/admin?tab=comments', icon: FileText },
+  { key: 'field-types', label: 'Field Types', to: '/admin/field-types', icon: Tag },
+  { key: 'form-fields', label: 'Form Fields', to: '/admin/form-fields', icon: LayoutList },
   {
     key: 'settings',
     label: 'Settings',
@@ -32,9 +36,10 @@ const MENU_PERMISSION_MAP = {
   products: 'Listings',
   sold: 'Listings',
   users: 'Users',
+  'identity-verification': 'Users',
 }
 
-function Sidebar() {
+function Sidebar({ mobileOpen = false, onMobileClose }) {
   const [open, setOpen] = useState(true)
   const [expandedSections, setExpandedSections] = useState({ settings: true })
   const location = useLocation()
@@ -74,18 +79,31 @@ function Sidebar() {
   }
 
   return (
-    <aside className={`h-screen sticky top-0 bg-slate-900 text-slate-200 flex-shrink-0 ${open ? 'w-64' : 'w-20'} transition-all duration-200`}>
+    <>
+      {/* Mobile overlay backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-40 md:hidden"
+          onClick={onMobileClose}
+        />
+      )}
+      <aside className={`
+        h-screen bg-slate-900 text-slate-200 flex-shrink-0 transition-all duration-200 z-50
+        ${open ? 'w-64' : 'w-20'}
+        fixed md:sticky top-0
+        ${mobileOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+      `}>
       <div className="h-full flex flex-col">
         <div className={`flex items-center ${open ? 'justify-between' : 'justify-center'} p-4 border-b border-slate-800`}>
           <div className={`flex items-center ${open ? 'gap-3' : ''}`}>
             {!open && (
-              <div className="bg-indigo-600 w-9 h-9 rounded flex items-center justify-center text-white font-bold">
-                P
+              <div className="overflow-hidden rounded-md">
+                <BrandLogo variant="dark" className="h-9 w-auto" />
               </div>
             )}
             {open && (
-              <div>
-                <div className="font-semibold text-lg text-center">Preelly</div>
+              <div className="overflow-hidden">
+                <BrandLogo variant="dark" className="h-11 w-auto" />
               </div>
             )}
           </div>
@@ -179,6 +197,7 @@ function Sidebar() {
         </nav>
       </div>
     </aside>
+    </>
   )
 }
 

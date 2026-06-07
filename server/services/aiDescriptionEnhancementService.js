@@ -1,12 +1,7 @@
 const axios = require('axios')
 
-// Backward-compatible fallback key (existing code used a hardcoded key).
-// Prefer setting OPENAI_API_KEY in your environment for production use.
-const FALLBACK_OPENAI_API_KEY =
-  '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'
-
 function getOpenAiKey() {
-  return process.env.OPENAI_API_KEY || FALLBACK_OPENAI_API_KEY
+  return process.env.OPENAI_API_KEY || ''
 }
 
 async function enhanceListingDescription({ title, description, category } = {}) {

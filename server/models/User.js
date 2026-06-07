@@ -42,6 +42,19 @@ const userSchema = new mongoose.Schema(
       required: false,
       trim: true,
     },
+    phoneCountryCode: {
+      type: String,
+      required: false,
+      trim: true,
+      default: null,
+    },
+    phoneCountryIso: {
+      type: String,
+      required: false,
+      trim: true,
+      uppercase: true,
+      default: null,
+    },
     password: {
       type: String,
       required: false,
@@ -85,6 +98,20 @@ const userSchema = new mongoose.Schema(
         default: null,
       },
     },
+    savedLocations: [
+      {
+        label: { type: String, default: 'Home', trim: true, maxlength: 50 },
+        city: { type: String, default: '', trim: true, maxlength: 120 },
+        building: { type: String, default: '', trim: true, maxlength: 200 },
+        apartment: { type: String, default: '', trim: true, maxlength: 100 },
+        coordinates: {
+          type: { type: String, enum: ['Point'], default: undefined },
+          coordinates: { type: [Number], default: undefined }, // [lng, lat]
+          _id: false,
+        },
+        isDefault: { type: Boolean, default: false },
+      },
+    ],
     rating: {
       type: Number,
       default: 0,
@@ -98,6 +125,42 @@ const userSchema = new mongoose.Schema(
     isVerified: {
       type: Boolean,
       default: false,
+    },
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    isPhoneVerified: {
+      type: Boolean,
+      default: false,
+    },
+    emiratesIdFront: {
+      type: String,
+      default: null,
+    },
+    emiratesIdBack: {
+      type: String,
+      default: null,
+    },
+    identityVerificationStatus: {
+      type: String,
+      enum: ['none', 'pending', 'approved', 'rejected'],
+      default: 'none',
+      index: true,
+    },
+    identityVerificationRejectionReason: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: 500,
+    },
+    identityVerificationSubmittedAt: {
+      type: Date,
+      default: null,
+    },
+    identityVerifiedAt: {
+      type: Date,
+      default: null,
     },
     role: {
       type: String,
@@ -115,18 +178,6 @@ const userSchema = new mongoose.Schema(
         ref: 'Product',
       },
     ],
-    following: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-      },
-    ],
-    followers: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: 'User',
-      },
-    ],
     status: {
       type: String,
       enum: ['active', 'inactive'],
@@ -139,14 +190,29 @@ const userSchema = new mongoose.Schema(
       default: undefined,
       trim: true,
     },
+    appleProviderId: {
+      type: String,
+      default: undefined,
+      trim: true,
+    },
     facebookProviderId: {
+      type: String,
+      default: undefined,
+      trim: true,
+    },
+    instagramProviderId: {
+      type: String,
+      default: undefined,
+      trim: true,
+    },
+    instagramUsername: {
       type: String,
       default: undefined,
       trim: true,
     },
     lastOauthProvider: {
       type: String,
-      enum: ['google', 'facebook'],
+      enum: ['google', 'apple', 'facebook', 'instagram'],
       default: null,
     },
     moderationWarnings: {
@@ -176,9 +242,18 @@ userSchema.pre('save', async function () {
 // Auto-verify admins (no next)
 userSchema.pre('save', async function () {
   // If user is admin, automatically verify them
-  if (this.role === 'admin' && !this.isVerified) {
+  if (this.role === 'admin') {
+    this.isEmailVerified = true
+    this.isPhoneVerified = true
     this.isVerified = true
   }
+})
+
+// Keep the aggregate verification flag in sync for newly created users and explicit verification updates.
+userSchema.pre('save', function () {
+  if (this.role === 'admin') return
+  if (!this.isNew && !this.isModified('isEmailVerified') && !this.isModified('isPhoneVerified')) return
+  this.isVerified = Boolean(this.isEmailVerified && this.isPhoneVerified)
 })
 
 // Keep optional geo field valid for 2dsphere index:
@@ -216,8 +291,16 @@ userSchema.index(
   { unique: true, partialFilterExpression: { googleProviderId: { $type: 'string' } } }
 )
 userSchema.index(
+  { appleProviderId: 1 },
+  { unique: true, partialFilterExpression: { appleProviderId: { $type: 'string' } } }
+)
+userSchema.index(
   { facebookProviderId: 1 },
   { unique: true, partialFilterExpression: { facebookProviderId: { $type: 'string' } } }
+)
+userSchema.index(
+  { instagramProviderId: 1 },
+  { unique: true, partialFilterExpression: { instagramProviderId: { $type: 'string' } } }
 )
 
 // Compare password method

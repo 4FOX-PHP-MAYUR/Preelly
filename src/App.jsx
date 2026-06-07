@@ -1,12 +1,19 @@
-import { Suspense, lazy, useMemo } from 'react'
+import { Suspense, lazy, useMemo, useEffect, useRef } from 'react'
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
-import { useEffect } from 'react'
 import Layout from './components/Layout/Layout'
-import { initializeAuth, selectAuthHydrating, selectIsAuthenticated, selectIsAdmin, selectUser } from './store/slices/authSlice'
+import { useSyncRouteApiScope } from './hooks/useSyncRouteApiScope'
+import {
+  initializeAuth,
+  selectAuthHydrating,
+  selectIsAuthenticated,
+  selectIsAdmin,
+  selectUser,
+} from './store/slices/authSlice'
 
 const CategoriesPage = lazy(() => import('./pages/CategoriesPage'))
 const SubcategoriesPage = lazy(() => import('./pages/SubcategoriesPage'))
+const HomePage = lazy(() => import('./pages/HomePage'))
 const ReelsFeedPage = lazy(() => import('./pages/ReelsFeedPage'))
 const ProductDetailPage = lazy(() => import('./pages/ProductDetailPage'))
 const PostAdPage = lazy(() => import('./pages/PostAdPage'))
@@ -20,6 +27,7 @@ const DashboardOrdersPage = lazy(() => import('./pages/dashboard/DashboardOrders
 const DashboardWishlistPage = lazy(() => import('./pages/dashboard/DashboardWishlistPage'))
 const DashboardMessagesPage = lazy(() => import('./pages/dashboard/DashboardMessagesPage'))
 const DashboardNotificationsPage = lazy(() => import('./pages/dashboard/DashboardNotificationsPage'))
+const DashboardFollowRequestsPage = lazy(() => import('./pages/dashboard/DashboardFollowRequestsPage'))
 const DashboardSettingsPage = lazy(() => import('./pages/dashboard/DashboardSettingsPage'))
 const UserProfilePage = lazy(() => import('./pages/UserProfilePage'))
 const FollowersFollowingPage = lazy(() => import('./pages/FollowersFollowingPage'))
@@ -29,26 +37,44 @@ const AdminFiltersPage = lazy(() => import('./pages/AdminFiltersPage'))
 const AdminDealersPage = lazy(() => import('./pages/AdminDealersPage'))
 const AdminRolesPage = lazy(() => import('./pages/AdminRolesPage'))
 const AdminRolePermissionsPage = lazy(() => import('./pages/AdminRolePermissionsPage'))
+const AdminIdentityVerificationPage = lazy(() => import('./pages/AdminIdentityVerificationPage'))
+const AdminFieldTypesPage = lazy(() => import('./pages/AdminFieldTypesPage'))
+const AdminFormFieldsPage = lazy(() => import('./pages/AdminFormFieldsPage'))
 const SearchResultsPage = lazy(() => import('./pages/SearchResultsPage'))
 const CategoryProductsPage = lazy(() => import('./pages/CategoryProductsPage'))
 const ChatInboxPage = lazy(() => import('./pages/ChatInboxPage'))
 const ChatThreadPage = lazy(() => import('./pages/ChatThreadPage'))
 const PostAdDynamicFormPage = lazy(() => import('./pages/PostAdDynamicFormPage'))
 const VerifyEmailOtpPage = lazy(() => import('./pages/VerifyEmailOtpPage'))
+const VerifyPhoneOtpPage = lazy(() => import('./pages/VerifyPhoneOtpPage'))
 const ProfileSetupPage = lazy(() => import('./pages/ProfileSetupPage'))
 const OAuthSuccessPage = lazy(() => import('./pages/OAuthSuccessPage'))
 const WelcomePage = lazy(() => import('./pages/WelcomePage'))
+const BookmarkPage = lazy(() => import('./pages/BookmarkPage'))
+
+function readCachedUserFlag() {
+  try {
+    return Boolean(localStorage.getItem('user'))
+  } catch {
+    return false
+  }
+}
 
 function PrivateRoute({ children }) {
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const user = useSelector(selectUser)
   const hydrating = useSelector(selectAuthHydrating)
   const location = useLocation()
-  if (hydrating) return null
   const isSellerIntent =
     location.pathname === '/post-ad' || location.pathname === '/post-ad-dynamic'
   const target = isSellerIntent ? 'seller' : 'buyer'
+  const hasOptimisticSession = Boolean(user) || readCachedUserFlag()
+  const hasSession = hydrating ? hasOptimisticSession || isAuthenticated : isAuthenticated
 
-  return isAuthenticated ? children : <Navigate to={`/login?target=${target}`} />
+  if (hydrating && !hasOptimisticSession && !isAuthenticated) return null
+  if (!hasSession) return <Navigate to={`/login?target=${target}`} replace />
+
+  return children
 }
 
 function AdminRoute({ children }) {
@@ -75,8 +101,15 @@ function App() {
     return isSellerIntent ? 'seller' : 'buyer'
   }, [location.pathname])
 
-  // Hydrate auth state from cookie/JWT so protected routes work after OAuth login.
+  // Cancel previous page's scoped API calls BEFORE child useEffects (see useSyncRouteApiScope).
+  useSyncRouteApiScope()
+
+  const authBootstrappedRef = useRef(false)
+
+  // Hydrate auth once per full page load.
   useEffect(() => {
+    if (authBootstrappedRef.current) return
+    authBootstrappedRef.current = true
     dispatch(initializeAuth())
   }, [dispatch])
 
@@ -87,6 +120,7 @@ function App() {
     if (!user || user.role === 'admin') return
     if (user.isProfileComplete) return
     if (location.pathname === '/profile-setup') return
+    if (location.pathname === '/post-ad' || location.pathname === '/post-ad-dynamic') return
     navigate(`/profile-setup?target=${inferredTarget}`, { replace: true })
   }, [hydrating, isAuthenticated, user, location.pathname, navigate, inferredTarget])
 
@@ -94,7 +128,7 @@ function App() {
     <Layout>
       <Suspense fallback={null}>
         <Routes>
-          <Route path="/" element={<ReelsFeedPage />} />
+          <Route path="/" element={<HomePage />} />
           <Route path="/reels" element={<ReelsFeedPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/categories/:categoryId" element={<SubcategoriesPage />} />
@@ -114,6 +148,7 @@ function App() {
           <Route path="/admin/login" element={<AdminLoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/verify-email-otp" element={<VerifyEmailOtpPage />} />
+          <Route path="/verify-phone-otp" element={<VerifyPhoneOtpPage />} />
           <Route path="/oauth-success" element={<OAuthSuccessPage />} />
           <Route
             path="/welcome"
@@ -132,6 +167,14 @@ function App() {
             }
           />
           <Route
+            path="/bookmarks"
+            element={
+              <PrivateRoute>
+                <BookmarkPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/chat"
             element={
               <PrivateRoute>
@@ -143,7 +186,7 @@ function App() {
             path="/chat/:threadId"
             element={
               <PrivateRoute>
-                <ChatThreadPage />
+                <ChatInboxPage />
               </PrivateRoute>
             }
           />
@@ -185,6 +228,7 @@ function App() {
             <Route path="wishlist" element={<DashboardWishlistPage />} />
             <Route path="messages" element={<DashboardMessagesPage />} />
             <Route path="notifications" element={<DashboardNotificationsPage />} />
+            <Route path="notifications/follow-requests" element={<DashboardFollowRequestsPage />} />
             <Route path="settings" element={<DashboardSettingsPage />} />
           </Route>
           <Route path="/user/:id/:type" element={<FollowersFollowingPage />} />
@@ -242,6 +286,30 @@ function App() {
             element={
               <AdminRoute>
                 <AdminRolePermissionsPage />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/identity-verification"
+            element={
+              <AdminRoute>
+                <AdminIdentityVerificationPage />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/field-types"
+            element={
+              <AdminRoute>
+                <AdminFieldTypesPage />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/form-fields"
+            element={
+              <AdminRoute>
+                <AdminFormFieldsPage />
               </AdminRoute>
             }
           />

@@ -1,10 +1,47 @@
 import { useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { useNavigate, Link, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
-import { login, clearError } from '../store/slices/authSlice'
+import { sendOtp, clearError } from '../store/slices/authSlice'
 import toast from 'react-hot-toast'
-import { Mail, Lock, LogIn } from 'lucide-react'
+import { Mail } from 'lucide-react'
+import AuthSplitLayout, {
+  AuthField,
+  AuthPhoneField,
+  AuthSocialButton,
+} from '../components/Auth/AuthSplitLayout'
+import { DEFAULT_COUNTRY_ISO, getCountryByIso } from '../data/countryCodes'
+
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+      <path
+        fill="#EA4335"
+        d="M12 10.2v3.9h5.42c-.24 1.26-.96 2.32-2.04 3.03l3.3 2.56c1.92-1.77 3.02-4.38 3.02-7.48 0-.71-.06-1.39-.19-2.02H12Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 22c2.73 0 5.02-.9 6.68-2.43l-3.3-2.56c-.91.61-2.08.97-3.38.97-2.6 0-4.8-1.76-5.59-4.12H3.01v2.64A10.08 10.08 0 0 0 12 22Z"
+      />
+      <path
+        fill="#4A90E2"
+        d="M6.41 13.86a6.08 6.08 0 0 1 0-3.72V7.5H3.01a10.01 10.01 0 0 0 0 9l3.4-2.64Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M12 6.02c1.49 0 2.82.51 3.86 1.51l2.89-2.89C17.01 2.98 14.72 2 12 2 8.09 2 4.72 4.24 3.01 7.5l3.4 2.64C7.2 7.78 9.4 6.02 12 6.02Z"
+      />
+    </svg>
+  )
+}
+
+function AppleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current text-slate-900" aria-hidden="true">
+      <path d="M16.37 12.64c.02 2.34 2.05 3.11 2.07 3.12-.02.05-.32 1.12-1.06 2.22-.64.95-1.31 1.9-2.36 1.92-1.03.02-1.37-.61-2.56-.61-1.19 0-1.56.59-2.54.63-1.02.04-1.79-1.02-2.44-1.96-1.33-1.92-2.34-5.42-.98-7.78.68-1.17 1.89-1.92 3.2-1.94 1-.02 1.94.68 2.56.68.62 0 1.79-.84 3.02-.72.51.02 1.95.21 2.87 1.56-.07.04-1.72 1-1.7 2.88Zm-2.01-5.57c.54-.66.91-1.58.81-2.49-.78.03-1.72.52-2.28 1.18-.5.58-.94 1.51-.82 2.4.87.07 1.75-.44 2.29-1.09Z" />
+    </svg>
+  )
+}
 
 function LoginPage() {
   const dispatch = useDispatch()
@@ -13,6 +50,8 @@ function LoginPage() {
   const { loading, error, isAuthenticated } = useSelector((state) => state.auth)
   const { register, handleSubmit, formState: { errors } } = useForm()
   const [oauthLoading, setOauthLoading] = useState(null)
+  const [channel, setChannel] = useState('email')
+  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO)
 
   const params = new URLSearchParams(location.search)
   const target = params.get('target') === 'seller' ? 'seller' : 'buyer'
@@ -26,7 +65,8 @@ function LoginPage() {
 
   useEffect(() => {
     if (error) {
-      toast.error(error)
+      const message = typeof error === 'string' ? error : error?.message
+      if (message) toast.error(message)
       dispatch(clearError())
     }
   }, [error, dispatch])
@@ -41,10 +81,43 @@ function LoginPage() {
 
   const onSubmit = async (data) => {
     try {
-      await dispatch(login(data)).unwrap()
-      toast.success('Login successful!')
-      navigate(target === 'seller' ? '/post-ad' : '/')
-    } catch (error) {
+      if (channel === 'whatsapp') {
+        const phoneDigits = String(data.phone || '').replace(/\D/g, '')
+        const dialCode = getCountryByIso(countryIso).code
+        const fullPhone = phoneDigits ? `${dialCode}${phoneDigits}` : ''
+
+        if (!phoneDigits) {
+          toast.error('Mobile number is required')
+          return
+        }
+
+        await dispatch(
+          sendOtp({
+            phone: fullPhone.replace(/\D/g, ''),
+            phoneCountryCode: dialCode,
+            phoneCountryIso: countryIso,
+            mode: 'login',
+            channel: 'whatsapp',
+          })
+        ).unwrap()
+        toast.success('Sign-in code sent to your WhatsApp')
+
+        const query = new URLSearchParams({
+          phone: fullPhone.replace(/\D/g, ''),
+          countryIso,
+          mode: 'login',
+          channel: 'whatsapp',
+        })
+        navigate(`/verify-phone-otp?${query.toString()}`)
+        return
+      }
+
+      await dispatch(sendOtp({ email: data.email.trim(), mode: 'login', channel: 'email' })).unwrap()
+      toast.success('Sign-in code sent to your email')
+      navigate(
+        `/verify-email-otp?email=${encodeURIComponent(data.email.trim())}&mode=login&channel=email`
+      )
+    } catch {
       // Error handled by useEffect
     }
   }
@@ -56,128 +129,125 @@ function LoginPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
-      <div className="max-w-md w-full">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Welcome Back</h1>
-            <p className="text-gray-600">Sign in to your account</p>
-          </div>
+    <AuthSplitLayout
+      modeLabel="Login"
+      title="Sign In"
+      subtitle={
+        target === 'seller'
+          ? 'Access your seller dashboard, manage listings, and reply to buyers without missing a step.'
+          : 'Explore listings your way, discover the best deals, and pick up where you left off.'
+      }
+      switchPrompt="Do not have an account?"
+      switchLabel="Sign Up"
+      switchTo={target === 'seller' ? '/signup?target=seller' : '/signup'}
+      quote="I found my perfect car in minutes. Scrolling through Preelly made the whole process effortless."
+      quoteAuthor="Aarav Mehta"
+      quoteRole="Car Buyer"
+    >
+      <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-[#e7e9f2] bg-[#f8f9fc] p-1">
+        <button
+          type="button"
+          onClick={() => setChannel('email')}
+          className={`rounded-xl px-4 py-3 text-sm font-medium transition ${
+            channel === 'email'
+              ? 'bg-white text-[#1400ff] shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Email
+        </button>
+        <button
+          type="button"
+          onClick={() => setChannel('whatsapp')}
+          className={`rounded-xl px-4 py-3 text-sm font-medium transition ${
+            channel === 'whatsapp'
+              ? 'bg-white text-[#1400ff] shadow-sm'
+              : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          WhatsApp
+        </button>
+      </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email or Phone
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="text"
-                  {...register('email', {
-                    required: 'Email or phone is required',
-                  })}
-                  className="input-field pl-10"
-                  placeholder="Enter email or phone"
-                />
-              </div>
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
-              )}
-            </div>
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
+        {channel === 'email' ? (
+          <AuthField
+            label="Email"
+            type="email"
+            icon={Mail}
+            placeholder="Enter your email"
+            error={errors.email?.message}
+            {...register('email', {
+              required: channel === 'email' ? 'Email is required' : false,
+              pattern: {
+                value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                message: 'Invalid email address',
+              },
+            })}
+          />
+        ) : (
+          <AuthPhoneField
+            label="WhatsApp Number"
+            countryIso={countryIso}
+            onCountryIsoChange={setCountryIso}
+            placeholder="Enter your mobile number"
+            error={errors.phone?.message}
+            {...register('phone', {
+              required: channel === 'whatsapp' ? 'Mobile number is required' : false,
+              validate: (value) => {
+                if (channel !== 'whatsapp') return true
+                const digits = String(value || '').replace(/\D/g, '')
+                return digits.length >= 6 || 'Please enter a valid mobile number'
+              },
+            })}
+          />
+        )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="password"
-                  {...register('password', {
-                    required: 'Password is required',
-                    minLength: {
-                      value: 6,
-                      message: 'Password must be at least 6 characters',
-                    },
-                  })}
-                  className="input-field pl-10"
-                  placeholder="Enter password"
-                />
-              </div>
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
-              )}
-            </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="flex h-14 w-full items-center justify-center rounded-full bg-[#1400ff] px-6 text-base font-medium text-white shadow-[0_18px_40px_rgba(20,0,255,0.25)] transition hover:bg-[#1000d6] disabled:cursor-not-allowed disabled:opacity-70"
+        >
+          {loading ? (
+            <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          ) : channel === 'whatsapp' ? (
+            'Continue with WhatsApp'
+          ) : (
+            'Continue with Email'
+          )}
+        </button>
+      </form>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center">
-                <input type="checkbox" className="rounded border-gray-300 text-primary-600 focus:ring-primary-500" />
-                <span className="ml-2 text-sm text-gray-600">Remember me</span>
-              </label>
-              <Link
-                to="#"
-                className="text-sm text-primary-600 hover:text-primary-700"
-              >
-                Forgot password?
-              </Link>
-            </div>
+      <div className="mt-8">
+        <div className="flex items-center gap-4">
+          <div className="h-px flex-1 bg-[#e7e9f2]" />
+          <span className="text-sm font-medium uppercase tracking-[0.24em] text-slate-400">
+            Or
+          </span>
+          <div className="h-px flex-1 bg-[#e7e9f2]" />
+        </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full btn-primary flex items-center justify-center space-x-2"
-            >
-              {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  <span>Signing in...</span>
-                </>
-              ) : (
-                <>
-                  <LogIn className="h-5 w-5" />
-                  <span>Sign In</span>
-                </>
-              )}
-            </button>
-          </form>
-
-          <div className="mt-6">
-            <div className="text-center text-sm text-gray-500 mb-3">
-              Or continue with
-            </div>
-            <div className="space-y-3">
-              <button
-                type="button"
-                onClick={() => startSocialLogin('google')}
-                disabled={!!oauthLoading}
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-60 flex items-center justify-center space-x-2"
-              >
-                <span className="font-semibold">Continue with Google</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => startSocialLogin('facebook')}
-                disabled={!!oauthLoading}
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-60 flex items-center justify-center space-x-2"
-              >
-                <span className="font-semibold">Continue with Facebook</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Don't have an account?{' '}
-              <Link to="/signup" className="text-primary-600 hover:text-primary-700 font-medium">
-                Sign up
-              </Link>
-            </p>
-          </div>
+        <div className="mt-6 grid grid-cols-2 gap-4">
+          <AuthSocialButton
+            label="Continue with Google"
+            onClick={() => startSocialLogin('google')}
+            disabled={!!oauthLoading}
+            active={oauthLoading === 'google'}
+          >
+            <GoogleIcon />
+          </AuthSocialButton>
+          <AuthSocialButton
+            label="Continue with Apple"
+            onClick={() => startSocialLogin('apple')}
+            disabled={!!oauthLoading}
+            active={oauthLoading === 'apple'}
+          >
+            <AppleIcon />
+          </AuthSocialButton>
         </div>
       </div>
-    </div>
+    </AuthSplitLayout>
   )
 }
 
 export default LoginPage
-

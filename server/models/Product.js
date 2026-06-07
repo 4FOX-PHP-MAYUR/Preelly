@@ -47,6 +47,49 @@ const productSchema = new mongoose.Schema(
       type: String,
       default: null,
     },
+    // Adaptive streaming outputs (HLS) — populated async after upload.
+    videoStream: {
+      type: new mongoose.Schema(
+        {
+          status: {
+            type: String,
+            enum: ['pending', 'processing', 'completed', 'ready', 'failed'],
+            default: null,
+          },
+          processingStage: {
+            type: String,
+            enum: ['pending', 'processing', 'generating_thumbnail', 'generating_streams', 'completed', 'failed'],
+            default: null,
+          },
+          jobId: { type: mongoose.Schema.Types.ObjectId, ref: 'VideoAsset', default: null },
+          originalUrl: { type: String, default: null },
+          hlsUrl: { type: String, default: null },
+          masterPlaylistUrl: { type: String, default: null },
+          dashUrl: { type: String, default: null },
+          thumbnailUrl: { type: String, default: null },
+          mp4Url: { type: String, default: null },
+          duration: { type: Number, default: 0 },
+          width: { type: Number, default: 0 },
+          height: { type: Number, default: 0 },
+          fileSize: { type: Number, default: 0 },
+          availableQualities: [{ type: String }],
+          progress: { type: Number, default: 0, min: 0, max: 100 },
+          processingStartedAt: { type: Date, default: null },
+          processingCompletedAt: { type: Date, default: null },
+          renditions: [
+            {
+              id: String,
+              height: Number,
+              width: Number,
+              bandwidth: Number,
+            },
+          ],
+          error: { type: String, default: null },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
     // Keyframe-based screenshots extracted from the uploaded video.
     // `image` points to a file stored under `/uploads/videos/screenshots/...`
     // `timestamp` is the moment in seconds in the original (compressed) video.
@@ -119,6 +162,46 @@ const productSchema = new mongoose.Schema(
     // - Electronics: can store a string
     // - Vehicles (AI): can store structured JSON (engine_cc, horsepower, etc.)
     specifications: { type: mongoose.Schema.Types.Mixed, default: null },
+    // Structured OEM specs from AI enrichment (indexed for marketplace filters).
+    vehicleSpecifications: {
+      type: new mongoose.Schema(
+        {
+          brand: { type: String, trim: true },
+          model: { type: String, trim: true },
+          variant: { type: String, trim: true, default: null },
+          year: { type: Number, default: null },
+          region: { type: String, trim: true, default: null },
+          engineCapacity: { type: String, trim: true, default: null },
+          fuelType: { type: String, trim: true, default: null },
+          transmission: { type: String, trim: true, default: null },
+          driveType: { type: String, trim: true, default: null },
+          horsepower: { type: String, trim: true, default: null },
+          torque: { type: String, trim: true, default: null },
+          bodyType: { type: String, trim: true, default: null },
+          seatingCapacity: { type: Number, default: null },
+          doors: { type: Number, default: null },
+          cylinders: { type: Number, default: null },
+          topSpeed: { type: String, trim: true, default: null },
+          fuelTankCapacity: { type: String, trim: true, default: null },
+          kerbWeight: { type: String, trim: true, default: null },
+          airbags: { type: String, trim: true, default: null },
+          generation: { type: String, trim: true, default: null },
+          dimensions: {
+            length: { type: String, trim: true, default: null },
+            width: { type: String, trim: true, default: null },
+            height: { type: String, trim: true, default: null },
+            wheelbase: { type: String, trim: true, default: null },
+            groundClearance: { type: String, trim: true, default: null },
+          },
+          safetyFeatures: [{ type: String, trim: true }],
+          features: [{ type: String, trim: true }],
+          enrichmentSource: { type: String, trim: true, default: null },
+          enrichmentConfidence: { type: Number, default: null },
+        },
+        { _id: false },
+      ),
+      default: null,
+    },
     storageCapacity: { type: String, trim: true }, // For electronics
     ram: { type: String, trim: true },
     screenSize: { type: String, trim: true },
@@ -309,6 +392,35 @@ const productSchema = new mongoose.Schema(
       sellerDelivery: { type: Boolean, default: false },
       deliveryCharges: { type: Number, default: 0 },
     },
+    // Optional vehicle listing fields (dropdown IDs + free-text / numeric attributes)
+    cityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    modelId: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', default: null },
+    trimId: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', default: null },
+    regionalSpecsId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    yearId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    kilometers: { type: Number, default: null, min: 0 },
+    bodyTypeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    seatId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    isInsuredId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    productPrice: { type: Number, default: null, min: 0 },
+    phoneNumber: { type: String, trim: true, default: null },
+    exteriorColorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    interiorColor: { type: String, trim: true, default: null },
+    warrantyId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    fuelTypeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    doorsId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    numberOfCylenderId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    transmissionTypeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    horsepowerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    steeringSideId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    engineCapacityId: { type: mongoose.Schema.Types.ObjectId, ref: 'Filter', default: null },
+    driverAssistanceSafetyId: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Filter' }],
+    entertainmentTechnologyId: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Filter' }],
+    comfortConvenienceId: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Filter' }],
+    exteriorId: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Filter' }],
+    locateYourItem: { type: String, trim: true, default: null },
+    buildingStreetName: { type: String, trim: true, default: null },
+
     // Contact preferences
     contactName: {
       type: String,
@@ -415,6 +527,15 @@ productSchema.index({ createdAt: -1 })
 productSchema.index({ likes: 1 })
 productSchema.index({ selectedFilters: 1 })
 productSchema.index({ categoryPath: 1 })
+productSchema.index({ cityId: 1 })
+productSchema.index({ modelId: 1 })
+productSchema.index({ trimId: 1 })
+productSchema.index({ yearId: 1 })
+productSchema.index({ bodyTypeId: 1 })
+productSchema.index({ fuelTypeId: 1 })
+productSchema.index({ transmissionTypeId: 1 })
+productSchema.index({ kilometers: 1 })
+productSchema.index({ productPrice: 1 })
 
 // AI listing extraction indexes (nested fields in `filter_data`)
 productSchema.index({ 'filter_data.price': 1 })
@@ -432,6 +553,21 @@ productSchema.index({ 'filter_data.condition': 1 })
 productSchema.index({ 'filter_data.accident_free': 1 })
 
 productSchema.index({ 'filter_data.brand': 1, 'filter_data.model': 1 })
+
+// Vehicle specification filters (structured enrichment document)
+productSchema.index({ 'vehicleSpecifications.brand': 1, 'vehicleSpecifications.model': 1 })
+productSchema.index({ 'vehicleSpecifications.year': 1 })
+productSchema.index({ 'vehicleSpecifications.fuelType': 1 })
+productSchema.index({ 'vehicleSpecifications.transmission': 1 })
+productSchema.index({ 'vehicleSpecifications.bodyType': 1 })
+productSchema.index({ 'vehicleSpecifications.driveType': 1 })
+productSchema.index({ 'vehicleSpecifications.seatingCapacity': 1 })
+productSchema.index({
+  'vehicleSpecifications.brand': 1,
+  'vehicleSpecifications.model': 1,
+  'vehicleSpecifications.year': 1,
+  'vehicleSpecifications.variant': 1,
+})
 
 // Increment views
 productSchema.methods.incrementViews = function () {

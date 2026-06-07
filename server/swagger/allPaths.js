@@ -1,5 +1,7 @@
 'use strict'
 
+const { getVehicleFieldSwaggerProperties } = require('../utils/productVehicleFields')
+
 /**
  * Full route table → OpenAPI 3.0 `paths`.
  * Path templates use Express-style :param; they are converted to {param} for OpenAPI.
@@ -18,12 +20,18 @@ const ROUTES = [
   ['get', '/api/auth/oauth/google/callback', 'OAuth', 'Google OAuth callback', false],
   ['get', '/api/auth/oauth/facebook', 'OAuth', 'Start Facebook OAuth', false],
   ['get', '/api/auth/oauth/facebook/callback', 'OAuth', 'Facebook OAuth callback', false],
+  ['get', '/api/auth/oauth/instagram', 'OAuth', 'Start Instagram OAuth (link or login)', false],
+  ['get', '/api/auth/oauth/instagram/callback', 'OAuth', 'Instagram OAuth callback', false],
 
   // Auth
-  ['post', '/api/auth/register', 'Auth', 'Register; sends email OTP', false],
+  ['post', '/api/auth/register', 'Auth', 'Register; sends email OTP (+ WhatsApp OTP when mobile OTP enabled)', false],
   ['post', '/api/auth/send-email-otp', 'Auth', 'Resend email verification OTP', false],
+  ['post', '/api/auth/send-phone-otp', 'Auth', 'Send signup mobile verification OTP via WhatsApp', false],
   ['post', '/api/auth/verify-email-otp', 'Auth', 'Verify email with OTP; returns JWT', false],
-  ['post', '/api/auth/login', 'Auth', 'Login; JWT in body + optional HTTP-only cookie', false],
+  ['post', '/api/auth/verify-phone-otp', 'Auth', 'Verify signup mobile OTP (WhatsApp); returns JWT when fully verified', false],
+  ['post', '/api/auth/send-otp', 'Auth', 'Send login/signup OTP via email or WhatsApp (login only for WhatsApp)', false],
+  ['post', '/api/auth/verify-otp', 'Auth', 'Verify OTP and sign in (email or WhatsApp channel)', false],
+  ['post', '/api/auth/login', 'Auth', 'Deprecated — use send-otp + verify-otp', false],
   ['post', '/api/auth/logout', 'Auth', 'Logout; clears auth cookie', false],
 
   ['get', '/api/profile', 'Profile', 'Current user profile (JWT)', true],
@@ -184,7 +192,7 @@ const TAG_DESCRIPTIONS = [
   { name: 'Health', description: 'Liveness and readiness' },
   { name: 'Meta', description: 'API documentation endpoints' },
   { name: 'OAuth', description: 'Google / Facebook sign-in' },
-  { name: 'Auth', description: 'Registration, login, JWT cookies' },
+  { name: 'Auth', description: 'Registration, email/WhatsApp OTP login, JWT cookies' },
   { name: 'Profile', description: 'Authenticated profile shortcut' },
   { name: 'Categories', description: 'Public category tree' },
   { name: 'Filters', description: 'Public filters and category filters' },
@@ -230,6 +238,74 @@ function pathParamsFor (openApiPath) {
   return out.length ? out : undefined
 }
 
+function buildProductMultipartRequestBody(isUpdate = false) {
+  const vehicleProps = getVehicleFieldSwaggerProperties()
+  const baseProps = {
+    title: { type: 'string' },
+    description: { type: 'string' },
+    price: { type: 'number' },
+    currency: { type: 'string' },
+    category: { type: 'string', description: 'Category ObjectId' },
+    subcategory: { type: 'string', description: 'Subcategory ObjectId' },
+    location: { type: 'string' },
+    country: { type: 'string' },
+    city: { type: 'string' },
+    area: { type: 'string' },
+    brand: { type: 'string' },
+    condition: { type: 'string' },
+    contactPhone: { type: 'string' },
+    categoryPath: { type: 'string', description: 'JSON array of category ObjectIds' },
+    video: { type: 'string', format: 'binary', description: isUpdate ? 'Optional replacement video' : 'Required on create' },
+    images: { type: 'array', items: { type: 'string', format: 'binary' } },
+    ...vehicleProps,
+  }
+  if (isUpdate) {
+    baseProps.status = { type: 'string', description: 'Admin or owner status update' }
+  }
+  return {
+    required: true,
+    content: {
+      'multipart/form-data': {
+        schema: {
+          type: 'object',
+          properties: baseProps,
+        },
+      },
+    },
+  }
+}
+
+function routeExtensions(method, openApiPath) {
+  if (openApiPath === '/api/products' && method === 'post') {
+    return {
+      requestBody: buildProductMultipartRequestBody(false),
+      description:
+        'Create a listing. All vehicle listing fields (cityId, modelId, trimId, etc.) are optional. ' +
+        'Dropdown fields ending in Id store Filter or Category ObjectIds — not display text. ' +
+        'Lowercase aliases (cityid, modelid, …) are also accepted.',
+    }
+  }
+  if (openApiPath === '/api/products/{id}' && method === 'put') {
+    return {
+      requestBody: buildProductMultipartRequestBody(true),
+      description:
+        'Update a listing. Partial updates supported — send only fields to change. ' +
+        'Optional vehicle listing fields use the same schema as create.',
+    }
+  }
+  if (openApiPath === '/api/products/{id}' && method === 'get') {
+    return {
+      description: 'Product detail includes optional vehicle listing fields when set (cityId, modelId, kilometers, etc.).',
+    }
+  }
+  if (openApiPath === '/api/products' && method === 'get') {
+    return {
+      description: 'Product listing includes optional vehicle listing fields on each item when set.',
+    }
+  }
+  return {}
+}
+
 function buildPaths () {
   /** @type {Record<string, Record<string, unknown>>} */
   const paths = {}
@@ -246,6 +322,7 @@ function buildPaths () {
       summary,
       ...(secure ? { security: [{ bearerAuth: [] }] } : {}),
       ...(parameters ? { parameters } : {}),
+      ...routeExtensions(m, openApiPath),
       responses: {
         200: { description: 'Success' },
         400: { description: 'Bad request' },

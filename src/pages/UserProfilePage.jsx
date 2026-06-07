@@ -1,75 +1,127 @@
-import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { useSelector } from 'react-redux'
-import { userService, productService } from '../services/api'
-import { isValidObjectId } from '../utils/helpers'
-import { User, MapPin, Calendar, Package, Eye, Heart, Phone, Mail, Users, UserPlus } from 'lucide-react'
-import { VERIFIED_BADGE_IMAGES } from '../utils/verifiedBadge'
+import { useEffect, useMemo, useState } from 'react'
+import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
+import { useDispatch, useSelector } from 'react-redux'
+import {
+  BadgeCheck,
+  FilePlus,
+  MessageCircle,
+  MoreHorizontal,
+  Pencil,
+  Star,
+  User,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
-import { selectIsAuthenticated, selectUser } from '../store/slices/authSlice'
-import { getMediaUrl, isUserVerified } from '../utils/helpers'
+import { userService, productService, chatService } from '../services/api'
+import { isValidObjectId, getMediaUrl, isIdentityVerified } from '../utils/helpers'
+import { VERIFIED_BADGE_IMAGES } from '../utils/verifiedBadge'
+import { refreshUser, selectIsAuthenticated, selectIsAdmin, selectUser } from '../store/slices/authSlice'
+import VerificationFlow, { OtpVerificationCard } from '../components/VerificationFlow'
+import IdentityVerificationFlow, { IdentityVerificationCard } from '../components/IdentityVerificationFlow'
+import AdminUserIdentityPanel from '../components/AdminUI/AdminUserIdentityPanel'
+import CategoryBrowseLayout from '../components/Categories/CategoryBrowseLayout'
+import ListingVideoPreview from '../components/Video/ListingVideoPreview'
+import ProfileReelsViewer from '../components/Profile/ProfileReelsViewer'
+import { productHasVideo } from '../utils/videoHelpers'
+
+function formatCompact(n) {
+  const num = Number(n || 0)
+  if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
+  if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+  return String(num)
+}
+
+function ProfileProductThumb({ product, onClick }) {
+  const currency = product?.currency?.toUpperCase() || 'AED'
+  const price = Number(product?.price || 0)
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="relative group aspect-square overflow-hidden rounded-xl bg-gray-100 text-left"
+    >
+      <ListingVideoPreview
+        product={product}
+        className="h-full w-full object-cover transition group-hover:scale-105"
+        alt={product.title}
+        interactive={false}
+        autoPlayOnHover
+      />
+      <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/60 to-transparent p-2.5">
+        <p className="line-clamp-2 text-[11px] font-medium leading-tight text-white">{product.title}</p>
+      </div>
+      <div className="pointer-events-none absolute bottom-2 right-2 rounded-lg bg-black/55 px-2 py-1">
+        <p className="text-xs font-bold text-white">
+          {currency} {price.toLocaleString()}
+        </p>
+      </div>
+    </button>
+  )
+}
 
 function UserProfilePage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
+  const dispatch = useDispatch()
   const currentUser = useSelector(selectUser)
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const isAdmin = useSelector(selectIsAdmin)
   const [profileUser, setProfileUser] = useState(null)
   const [products, setProducts] = useState([])
-  const [isFollowing, setIsFollowing] = useState(false)
+  const [followStatus, setFollowStatus] = useState('none')
   const [loading, setLoading] = useState(true)
   const [followersCount, setFollowersCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
-  const [stats, setStats] = useState({
-    totalProducts: 0,
-    totalViews: 0,
-    totalLikes: 0,
-  })
+  const [showOtpVerification, setShowOtpVerification] = useState(false)
+  const [showIdentityVerification, setShowIdentityVerification] = useState(false)
+  const [activeReelsIndex, setActiveReelsIndex] = useState(null)
+  const [stats, setStats] = useState({ totalProducts: 0, totalViews: 0, totalLikes: 0 })
+
+  const profileUserId = id
+  const currentUserId = currentUser?._id
+  const isOwnProfile = Boolean(
+    currentUserId && profileUserId && String(currentUserId) === String(profileUserId),
+  )
+  const isAdminUserDetail = isAdmin && location.pathname.startsWith('/admin/users/') && !isOwnProfile
 
   useEffect(() => {
     const fetchUserProfile = async () => {
       try {
         setLoading(true)
-        // Fetch user profile
-        const userRes = await userService.getUserProfile(id)
+        const [userRes, followersRes, followingRes, productsRes] = await Promise.all([
+          userService.getUserProfile(id),
+          userService.getFollowers(id),
+          userService.getFollowing(id),
+          productService.getProducts({ userId: id, limit: 100 }),
+        ])
         setProfileUser(userRes.data)
-        
-        // Fetch followers and following counts
-        try {
-          const followersRes = await userService.getFollowers(id)
-          const followingRes = await userService.getFollowing(id)
-          setFollowersCount(followersRes.data.count || 0)
-          setFollowingCount(followingRes.data.count || 0)
-        } catch (error) {
-          console.error('Error fetching followers/following:', error)
-        }
-        
-        // Fetch user's products
-        const productsRes = await productService.getProducts({ userId: id, limit: 50 })
+        setFollowersCount(followersRes.data.count || 0)
+        setFollowingCount(followingRes.data.count || 0)
         setProducts(productsRes.data.products || [])
-        
-        // Calculate stats
-        const totalViews = productsRes.data.products?.reduce((sum, p) => sum + (p.views || 0), 0) || 0
-        const totalLikes = productsRes.data.products?.reduce((sum, p) => sum + (p.likes?.length || 0), 0) || 0
-        setStats({
-          totalProducts: productsRes.data.products?.length || 0,
-          totalViews,
-          totalLikes,
-        })
-        
-        // Check if current user is following this user
-        if (isAuthenticated && currentUser?._id && currentUser._id !== id) {
+
+        const apiStats = userRes.data?.stats
+        if (apiStats) {
+          setStats(apiStats)
+        } else {
+          const list = productsRes.data.products || []
+          setStats({
+            totalProducts: list.length,
+            totalViews: list.reduce((sum, p) => sum + (p.views || 0), 0),
+            totalLikes: list.reduce((sum, p) => sum + (p.likes?.length || 0), 0),
+          })
+        }
+
+        if (isAuthenticated && currentUserId && String(currentUserId) !== String(profileUserId)) {
           try {
-            const currentUserProfile = await userService.getCurrentUserProfile()
-            const followingIds = (currentUserProfile.data.following || []).map((u) => u._id || u.toString())
-            setIsFollowing(followingIds.includes(id))
-          } catch (error) {
-            console.error('Error checking follow status:', error)
+            const statusRes = await userService.getFollowStatus(id)
+            setFollowStatus(statusRes.data.status || 'none')
+          } catch {
+            setFollowStatus('none')
           }
         }
       } catch (error) {
         console.error('Error fetching user profile:', error)
-        // Only redirect to home when the API explicitly says user not found (404).
         const status = error?.response?.status
         if (status === 404) {
           navigate('/')
@@ -85,10 +137,9 @@ function UserProfilePage() {
       fetchUserProfile()
     } else {
       setLoading(false)
-      // invalid id - show not found
       setProfileUser(null)
     }
-  }, [id, isAuthenticated, currentUser, navigate])
+  }, [profileUserId, isAuthenticated, currentUserId, navigate])
 
   const handleFollow = async () => {
     if (!isAuthenticated) {
@@ -99,232 +150,356 @@ function UserProfilePage() {
 
     try {
       const res = await userService.followUser(id)
-      setIsFollowing(res.data.following)
-      setFollowersCount(res.data.followerCount || followersCount)
-      toast.success(
-        res.data.following
-          ? `Following ${profileUser?.name || 'user'}`
-          : `Unfollowed ${profileUser?.name || 'user'}`
-      )
+      const newStatus = res.data.status || 'none'
+      setFollowStatus(newStatus)
+      if (typeof res.data.followerCount === 'number') {
+        setFollowersCount(res.data.followerCount)
+      }
+      if (newStatus === 'pending') {
+        toast.success(`Follow request sent to ${profileUser?.displayName || profileUser?.name || 'user'}`)
+      } else if (newStatus === 'none') {
+        toast.success(
+          followStatus === 'pending'
+            ? 'Follow request cancelled'
+            : `Unfollowed ${profileUser?.displayName || profileUser?.name || 'user'}`,
+        )
+      }
     } catch (error) {
-      toast.error('Failed to follow user')
+      if (error?.response?.status === 403) {
+        toast.error('You cannot follow this user')
+      } else {
+        toast.error('Failed to send follow request')
+      }
     }
   }
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-    }).format(price)
+  const handleMessage = async () => {
+    if (!isAuthenticated) {
+      toast.error('Please login to send messages')
+      navigate('/login')
+      return
+    }
+    if (isOwnProfile) {
+      navigate('/chat')
+      return
+    }
+    try {
+      const chatRes = await chatService.getChats()
+      const chats = chatRes?.data?.chats || chatRes?.data || []
+      const existing = chats.find((c) => {
+        const buyerId = c.buyer?._id || c.buyer?.id
+        const sellerId = c.seller?._id || c.seller?.id
+        const otherId = String(buyerId) === String(currentUser._id) ? sellerId : buyerId
+        return String(otherId) === String(id)
+      })
+      if (existing) {
+        navigate(`/chat/${existing._id || existing.id}`)
+        return
+      }
+      if (products.length > 0) {
+        const res = await chatService.createOrGetChat(products[0]._id, id)
+        navigate(`/chat/${res.data.chat._id}`)
+        return
+      }
+      navigate('/chat')
+    } catch {
+      toast.error('Could not open chat')
+    }
   }
 
+  const refreshProfileUser = async () => {
+    try {
+      const userRes = await userService.getUserProfile(id)
+      setProfileUser(userRes.data)
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const featuredProducts = useMemo(
+    () => products.filter((p) => p.status === 'active' || !p.status).slice(0, 3),
+    [products],
+  )
+
+  const videoProducts = useMemo(() => products.filter(productHasVideo), [products])
+
+  const displayProducts = useMemo(
+    () => [
+      ...products.filter(productHasVideo),
+      ...products.filter((p) => !productHasVideo(p)),
+    ],
+    [products],
+  )
+
   if (loading) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="animate-pulse">
-          <div className="h-32 bg-gray-200 rounded-lg mb-4"></div>
-          <div className="h-24 bg-gray-200 rounded-lg"></div>
+    const skeleton = (
+      <div className="space-y-4 animate-pulse">
+        <div className="rounded-2xl border border-gray-200 bg-white p-6">
+          <div className="mx-auto h-24 w-24 rounded-full bg-gray-200" />
+          <div className="mx-auto mt-4 h-5 w-40 rounded bg-gray-200" />
+          <div className="mx-auto mt-2 h-4 w-28 rounded bg-gray-200" />
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="aspect-square rounded-xl bg-gray-200" />
+          ))}
         </div>
       </div>
+    )
+
+    if (isAdminUserDetail) {
+      return <div className="max-w-7xl mx-auto px-4 py-8">{skeleton}</div>
+    }
+
+    return (
+      <CategoryBrowseLayout featuredProducts={[]}>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5">{skeleton}</div>
+      </CategoryBrowseLayout>
     )
   }
 
   if (!profileUser) {
-    return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">User not found</h2>
-        <p className="text-gray-600">The user you're looking for doesn't exist.</p>
+    const notFound = (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">User not found</h2>
+        <p className="text-gray-600">The user you&apos;re looking for doesn&apos;t exist.</p>
       </div>
+    )
+
+    if (isAdminUserDetail) {
+      return <div className="max-w-7xl mx-auto px-4 py-8">{notFound}</div>
+    }
+
+    return (
+      <CategoryBrowseLayout featuredProducts={[]}>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5">{notFound}</div>
+      </CategoryBrowseLayout>
     )
   }
 
-  const isOwnProfile = currentUser?._id === id
+  const avatarSrc = profileUser.avatar ? getMediaUrl(profileUser.avatar) || profileUser.avatar : null
+  const displayName = profileUser.displayName || profileUser.name || 'User'
+  const rating = Number(profileUser.rating || 0).toFixed(1)
+  const hasRating = Number(profileUser.rating || 0) > 0
+  const bio = profileUser.bio || profileUser.description || ''
+  const verified = isIdentityVerified(profileUser) || profileUser.isVerified
 
-  return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Profile Header */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-        <div className="flex flex-col md:flex-row items-start md:items-center space-y-4 md:space-y-0 md:space-x-6">
-          {/* Avatar */}
-          <div className="flex-shrink-0">
-            {profileUser.avatar ? (
-              <img
-                src={getMediaUrl(profileUser.avatar) || profileUser.avatar}
-                alt={profileUser.name}
-                className="w-24 h-24 rounded-full object-cover"
-              />
-            ) : (
-              <div className="w-24 h-24 rounded-full bg-primary-100 flex items-center justify-center">
-                <User className="h-12 w-12 text-primary-600" />
-              </div>
+  const profileBody = (
+    <div className="mx-auto w-full min-w-0 space-y-4">
+      {/* Profile card */}
+      <div className="rounded-2xl border border-gray-200 bg-white p-6">
+        <div className="flex flex-col items-center text-center">
+          <div className="relative mb-3">
+            <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-gray-100 ring-4 ring-primary-100">
+              {avatarSrc ? (
+                <img src={avatarSrc} alt={displayName} className="h-full w-full object-cover" />
+              ) : (
+                <User className="h-10 w-10 text-gray-400" />
+              )}
+            </div>
+            {verified && (
+              <span className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-primary-600">
+                <BadgeCheck className="h-3.5 w-3.5 text-white" />
+              </span>
             )}
           </div>
 
-          {/* User Info */}
-          <div className="flex-1">
-            <div className="flex items-center space-x-4 mb-2">
-              <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-                {profileUser.name}
-                {isUserVerified(profileUser) ? (
-                  <img 
-                    src={VERIFIED_BADGE_IMAGES.large} 
-                    alt="Verified" 
-                    className="h-6 w-6"
-                    title="Verified Account"
-                  />
-                ) : null}
-              </h1>
-              {!isOwnProfile && isAuthenticated && (
-                <button
-                  onClick={handleFollow}
-                  className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                    isFollowing
-                      ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                      : 'bg-primary-600 text-white hover:bg-primary-700'
-                  }`}
+          <div className="mb-1 flex items-center gap-2">
+            <h1 className="text-lg font-bold text-gray-900">{displayName}</h1>
+            {verified && (
+              isIdentityVerified(profileUser) ? (
+                <img src={VERIFIED_BADGE_IMAGES.large} alt="Verified" className="h-5 w-5" title="Identity Verified" />
+              ) : (
+                <BadgeCheck className="h-5 w-5 text-primary-600" />
+              )
+            )}
+          </div>
+
+          {hasRating && (
+            <div className="mb-3 flex items-center gap-1 text-sm text-amber-500">
+              <Star className="h-4 w-4 fill-amber-400 stroke-amber-500" />
+              <span className="font-semibold">{rating}</span>
+              <span className="text-gray-400">| rating</span>
+            </div>
+          )}
+
+          <div className="mb-4 flex w-full items-center justify-center divide-x divide-gray-200">
+            <div className="px-5 text-center">
+              <p className="text-lg font-bold text-gray-900">{formatCompact(stats.totalProducts)}</p>
+              <p className="text-xs text-gray-500">ads Posted</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate(`/user/${id}/followers`)}
+              className="px-5 text-center transition hover:opacity-80"
+            >
+              <p className="text-lg font-bold text-gray-900">{formatCompact(followersCount)}</p>
+              <p className="text-xs text-gray-500">Followers</p>
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate(`/user/${id}/following`)}
+              className="px-5 text-center transition hover:opacity-80"
+            >
+              <p className="text-lg font-bold text-gray-900">{formatCompact(followingCount)}</p>
+              <p className="text-xs text-gray-500">Following</p>
+            </button>
+          </div>
+
+          <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
+            {isOwnProfile ? (
+              <>
+                <Link
+                  to="/dashboard/settings"
+                  className="flex items-center gap-1.5 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700 sm:px-5"
                 >
-                  {isFollowing ? 'Following' : 'Follow'}
+                  <Pencil className="h-3.5 w-3.5" />
+                  Edit Profile
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => navigate('/chat')}
+                  className="flex items-center gap-1.5 rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 sm:px-5"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  Messages
                 </button>
-              )}
-            </div>
-            
-            <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
-              {profileUser.email && (
-                <div className="flex items-center space-x-1">
-                  <Mail className="h-4 w-4" />
-                  <span>{profileUser.email}</span>
-                </div>
-              )}
-              {profileUser.phone && (
-                <div className="flex items-center space-x-1">
-                  <Phone className="h-4 w-4" />
-                  <span>{profileUser.phone}</span>
-                </div>
-              )}
-              {profileUser.memberSince && (
-                <div className="flex items-center space-x-1">
-                  <Calendar className="h-4 w-4" />
-                  <span>Member since {new Date(profileUser.memberSince).getFullYear()}</span>
-                </div>
-              )}
-            </div>
-
-            {profileUser.rating > 0 && (
-              <div className="mt-2">
-                <span className="text-yellow-500">⭐ {profileUser.rating.toFixed(1)}</span>
-              </div>
+              </>
+            ) : (
+              <>
+                {isAuthenticated && (
+                  <button
+                    type="button"
+                    onClick={handleFollow}
+                    className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
+                      followStatus === 'active'
+                        ? 'border border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        : followStatus === 'pending'
+                          ? 'border border-yellow-300 bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
+                          : 'bg-primary-600 text-white hover:bg-primary-700'
+                    }`}
+                  >
+                    {followStatus === 'active' ? 'Following' : followStatus === 'pending' ? 'Requested' : 'Follow'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={handleMessage}
+                  className="flex items-center gap-1.5 rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 sm:px-5"
+                >
+                  <MessageCircle className="h-3.5 w-3.5" />
+                  Message
+                </button>
+              </>
             )}
-
-            {/* Followers/Following Counts */}
-            <div className="flex items-center space-x-4 mt-4">
-              <button
-                onClick={() => navigate(`/user/${id}/followers`)}
-                className="flex items-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer border border-gray-200"
-              >
-                <Users className="h-5 w-5 text-primary-600" />
-                <span className="font-bold text-gray-900">{followersCount}</span>
-                <span className="text-gray-600">Followers</span>
-              </button>
-              <button
-                onClick={() => navigate(`/user/${id}/following`)}
-                className="flex items-center space-x-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer border border-gray-200"
-              >
-                <UserPlus className="h-5 w-5 text-primary-600" />
-                <span className="font-bold text-gray-900">{followingCount}</span>
-                <span className="text-gray-600">Following</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => toast('More options coming soon')}
+              className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition hover:bg-gray-50"
+              aria-label="More options"
+            >
+              <MoreHorizontal className="h-4 w-4" />
+            </button>
           </div>
+
+          {bio && (
+            <p className="max-w-sm text-center text-sm leading-relaxed text-gray-600">{bio}</p>
+          )}
         </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Total Products</p>
-              <p className="text-3xl font-bold text-gray-900">{stats.totalProducts}</p>
-            </div>
-            <Package className="h-12 w-12 text-primary-600" />
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Total Views</p>
-              <p className="text-3xl font-bold text-gray-900">{stats.totalViews}</p>
-            </div>
-            <Eye className="h-12 w-12 text-blue-600" />
-          </div>
-        </div>
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Total Likes</p>
-              <p className="text-3xl font-bold text-gray-900">{stats.totalLikes}</p>
-            </div>
-            <Heart className="h-12 w-12 text-red-600" />
-          </div>
-        </div>
-      </div>
+      {isAdminUserDetail && (
+        <AdminUserIdentityPanel
+          userId={id}
+          userName={displayName}
+          onStatusChange={refreshProfileUser}
+        />
+      )}
 
-      {/* Products */}
-      <div className="bg-white rounded-lg shadow-md">
-        <div className="p-6 border-b">
-          <h2 className="text-xl font-semibold text-gray-900">Products</h2>
+      {isOwnProfile && (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <OtpVerificationCard onOpenFlow={() => setShowOtpVerification(true)} />
+          <IdentityVerificationCard onOpenFlow={() => setShowIdentityVerification(true)} />
         </div>
-        {products.length === 0 ? (
-          <div className="p-12 text-center">
-            <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No products yet</h3>
-            <p className="text-gray-600">This user hasn't posted any products.</p>
+      )}
+
+      {/* Listings & videos */}
+      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white p-4">
+        {displayProducts.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+            <FilePlus className="mb-3 h-10 w-10 opacity-30" />
+            <p className="text-sm">No posts yet</p>
+            {isOwnProfile && (
+              <Link to="/post-ad" className="mt-3 text-sm font-medium text-primary-600 hover:underline">
+                Post your first ad
+              </Link>
+            )}
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-            {products.map((product) => (
-              <div
-                key={product._id}
-                onClick={() => navigate(`/products/${product._id}`)}
-                className="bg-gray-50 rounded-lg overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
-              >
-                {product.video ? (
-                  <video
-                    src={getMediaUrl(product.video)}
-                    className="w-full h-48 object-cover"
-                    autoPlay
-                    loop
-                    muted
-                    playsInline
-                  />
-                ) : (
-                  <img
-                    src={getMediaUrl(product.images?.[0]) || '/placeholder.jpg'}
-                    alt={product.title}
-                    className="w-full h-48 object-cover"
-                  />
-                )}
-                <div className="p-4">
-                  <h3 className="font-semibold text-gray-900 mb-1 line-clamp-2">
-                    {product.title}
-                  </h3>
-                  <p className="text-primary-600 font-bold text-lg mb-2">
-                    {formatPrice(product.price)}
-                  </p>
-                  <div className="flex items-center text-sm text-gray-600">
-                    <MapPin className="h-4 w-4 mr-1" />
-                    <span>{product.location}</span>
-                  </div>
-                </div>
+          <div className="space-y-4">
+            {videoProducts.length > 0 && (
+              <div className="flex items-center justify-between gap-2">
+                <h2 className="text-sm font-semibold text-gray-900">
+                  Videos
+                  <span className="ml-1.5 font-normal text-gray-500">({videoProducts.length})</span>
+                </h2>
+                <p className="text-xs text-gray-500">Tap to open in reels</p>
               </div>
-            ))}
+            )}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {displayProducts.map((product, idx) => (
+                <ProfileProductThumb
+                  key={product._id}
+                  product={product}
+                  onClick={() => setActiveReelsIndex(idx)}
+                />
+              ))}
+            </div>
           </div>
         )}
       </div>
     </div>
   )
+
+  return (
+    <>
+      {isAdminUserDetail ? (
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">{profileBody}</div>
+      ) : (
+        <CategoryBrowseLayout featuredProducts={featuredProducts}>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5">{profileBody}</div>
+          </div>
+        </CategoryBrowseLayout>
+      )}
+
+      {showOtpVerification && (
+        <VerificationFlow
+          onClose={() => {
+            setShowOtpVerification(false)
+            dispatch(refreshUser()).catch(() => {})
+          }}
+        />
+      )}
+      {showIdentityVerification && (
+        <IdentityVerificationFlow
+          onClose={() => {
+            setShowIdentityVerification(false)
+            refreshProfileUser()
+          }}
+        />
+      )}
+
+      {activeReelsIndex !== null && (
+        <ProfileReelsViewer
+          products={displayProducts}
+          initialIndex={activeReelsIndex}
+          profileUser={profileUser}
+          onClose={() => setActiveReelsIndex(null)}
+        />
+      )}
+    </>
+  )
 }
 
 export default UserProfilePage
-

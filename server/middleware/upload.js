@@ -1,20 +1,15 @@
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const ffmpeg = require('fluent-ffmpeg');
-// Detect ffmpeg/ffprobe binaries and configure fluent-ffmpeg if available.
-let ffmpegAvailable = true;
-try {
-  const which = require('which');
-  const ffmpegPath = which.sync('ffmpeg');
-  const ffprobePath = which.sync('ffprobe');
-  ffmpeg.setFfmpegPath(ffmpegPath);
-  ffmpeg.setFfprobePath(ffprobePath);
-  console.log('ffmpeg detected at:', ffmpegPath);
-} catch (err) {
-  ffmpegAvailable = false;
-  console.warn('ffmpeg/ffprobe not detected. Video compression and thumbnail generation will be skipped. Install ffmpeg to enable these features.');
-}
+const { ffmpeg, configureFfmpeg, isFfmpegAvailable, VIDEOS_HLS_ROOT } = require('../services/ffmpegConfig');
+const { validateUploadedVideo, sanitizeFilename } = require('../services/videoValidationService');
+
+configureFfmpeg();
+const ffmpegAvailable = isFfmpegAvailable();
+
+// Configurable max upload size (default 2GB for production, 20MB legacy cap for compression target)
+const MAX_UPLOAD_BYTES = Number(process.env.MAX_VIDEO_UPLOAD_MB || 2048) * 1024 * 1024;
+const MAX_COMPRESSED_BYTES = Number(process.env.MAX_COMPRESSED_VIDEO_MB || 20) * 1024 * 1024;
 
 // ---------------------------
 //  Create Required Folders
@@ -24,9 +19,10 @@ const videosDir = path.join(uploadDir, 'videos');
 const imagesDir = path.join(uploadDir, 'images');
 const thumbsDir = path.join(videosDir, 'thumbnails');
 const screenshotsDir = path.join(videosDir, 'screenshots');
+const chatsDir = path.join(uploadDir, 'chats');
 
 // Ensure all upload folders exist
-[uploadDir, videosDir, imagesDir, thumbsDir, screenshotsDir].forEach((dir) => {
+[uploadDir, videosDir, imagesDir, thumbsDir, screenshotsDir, chatsDir].forEach((dir) => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -45,7 +41,7 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname) || '.mp4';
+    const ext = path.extname(sanitizeFilename(file.originalname)) || '.mp4';
     cb(null, file.fieldname + '-' + unique + ext);
   },
 });
@@ -69,8 +65,14 @@ const genericStorage = multer.diskStorage({
 // ---------------------------
 const fileFilter = (req, file, cb) => {
   if (file.fieldname === 'video') {
-    if (file.mimetype.startsWith('video/')) cb(null, true);
-    else cb(new Error('Only video files allowed'), false);
+    const allowedMimes = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska', 'video/webm', 'video/x-m4v'];
+    const allowedExts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.m4v'];
+    const ext = path.extname(file.originalname || '').toLowerCase();
+    if (file.mimetype.startsWith('video/') && allowedMimes.includes(file.mimetype.toLowerCase()) && allowedExts.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only valid video files are allowed (MP4, MOV, AVI, MKV, WebM)'), false);
+    }
   } else {
     if (file.mimetype.startsWith('image/')) cb(null, true);
     else cb(new Error('Only image files allowed'), false);
@@ -84,7 +86,7 @@ const upload = multer({
   storage,
   fileFilter,
   limits: { 
-    fileSize: 20 * 1024 * 1024, // 20MB max upload size
+    fileSize: MAX_UPLOAD_BYTES,
     files: 21 // 1 video + 20 images max
   },
 });
@@ -118,7 +120,7 @@ const compressVideo = (req, res, next) => {
 
   const baseName = path.basename(inputPath, path.extname(inputPath))
   const MIN_DURATION_SECONDS = 15
-  const MAX_VIDEO_BYTES = 20 * 1024 * 1024
+  const MAX_VIDEO_BYTES = MAX_COMPRESSED_BYTES
   const ANGLE_SCREENSHOT_COUNT = 5
 
   const safeUnlink = (p) => {
@@ -178,6 +180,15 @@ const compressVideo = (req, res, next) => {
     })
 
   const run = async () => {
+    // Security: validate MIME, extension, magic bytes
+    const validation = validateUploadedVideo(file, { allowedRoot: videosDir })
+    if (!validation.valid) {
+      safeUnlink(inputPath)
+      return res.status(400).json({ message: validation.error })
+    }
+
+    console.log('[upload] video upload started:', file.originalname, `(${(file.size / 1024 / 1024).toFixed(2)} MB)`)
+
     // Duration validation
     const durationSeconds = await ffprobeDurationSeconds(inputPath)
     if (durationSeconds < MIN_DURATION_SECONDS) {
@@ -296,10 +307,38 @@ const compressVideo = (req, res, next) => {
 
   run().catch((e) => {
     console.error('Video processing error:', e)
-    // Clean up temp file best-effort.
     safeUnlink(inputPath)
-    next()
+    // Still allow listing creation if the raw upload is valid — product route accepts user images without auto angles.
+    if (req.files?.video?.[0]) {
+      const file = req.files.video[0]
+      if (fs.existsSync(file.path)) {
+        file.compressedFilename = path.basename(file.path)
+        req.videoScreenshots = []
+        return next()
+      }
+    }
+    return res.status(400).json({
+      message: 'Video processing failed. Try a shorter clip or upload photos in the images step.',
+      details: e?.message,
+    })
   })
 };
 
-module.exports = { upload, uploadAny, compressVideo };
+// ---------------------------
+//  Chat Attachment Upload
+// ---------------------------
+const chatStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, chatsDir),
+  filename: (req, file, cb) => {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname) || '';
+    cb(null, 'chat-' + unique + ext);
+  },
+});
+
+const chatUpload = multer({
+  storage: chatStorage,
+  limits: { fileSize: 25 * 1024 * 1024, files: 10 },
+});
+
+module.exports = { upload, uploadAny, compressVideo, chatUpload };

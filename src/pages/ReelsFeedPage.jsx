@@ -3,12 +3,13 @@ import { useDispatch, useSelector } from 'react-redux'
 import { Link, useNavigate, useLocation, useParams } from 'react-router-dom'
 import { selectUser, selectIsAuthenticated, selectIsAdmin } from '../store/slices/authSlice'
 import { productService, userService } from '../services/api'
-import { clearReels, fetchFeedPage, fetchFeedShell, setCurrentFeedType } from '../store/slices/feedSlice'
+import { clearReels, fetchFeedPage, fetchFeedShell, pinReelAtTop, setCurrentFeedType } from '../store/slices/feedSlice'
 import { getReelsStorageKey, getLocalReelsIndex, getSavedReelIndex, saveReelIndex } from '../utils/reelsProgress'
+import { getMediaUrl, isValidObjectId } from '../utils/helpers'
 import ReelsFeed from '../components/Reels/ReelsFeed'
 import ReelsSkeleton from '../components/Reels/ReelsSkeleton'
-import { Search, X, ArrowLeft, Filter, MapPin, DollarSign, Package, TrendingUp, Calendar, Home, Grid3x3, Bell, User, Plus, Shield, MessageCircle, Bookmark, ExternalLink, ShoppingBag, LogOut } from 'lucide-react'
-import { getMediaUrl } from '../utils/helpers'
+import { Search, X, ArrowLeft, Filter, MapPin, DollarSign, Package, TrendingUp, Calendar, Home, Grid3x3, Bell, User, Plus, Shield, MessageCircle, Bookmark, ExternalLink, LogOut } from 'lucide-react'
+import BrandLogo from '../components/BrandLogo'
 import { chatService } from '../services/api'
 import toast from 'react-hot-toast'
 import React from 'react'
@@ -78,6 +79,12 @@ function ReelsFeedPage() {
   const lastReelsQueryKeyRef = useRef(null)
   const didRequestPriceRangeRef = useRef(false)
   const [savedReelIndex, setSavedReelIndex] = useState(null)
+  const sharedReelFetchRef = useRef(null)
+
+  const sharedReelId = (() => {
+    const id = new URLSearchParams(location.search).get('reel')
+    return id && isValidObjectId(id) ? String(id) : null
+  })()
 
   // Feed key for last watched reel (localStorage + backend for logged-in users)
   const reelsStorageKey = getReelsStorageKey(categoryId, subcategoryId)
@@ -270,8 +277,40 @@ function ReelsFeedPage() {
     ? (reelsTab === 'following' ? baseProducts : byCondition)
     : []
 
+  // Open a specific shared reel from ?reel=PRODUCT_ID
+  useEffect(() => {
+    if (!sharedReelId) return
+    hasReadSavedIndexRef.current = true
+
+    const idx = reelsFilteredProducts.findIndex((p) => String(p?._id) === sharedReelId)
+    if (idx >= 0) {
+      setSavedReelIndex(idx)
+      return
+    }
+
+    if (sharedReelFetchRef.current === sharedReelId) return
+    sharedReelFetchRef.current = sharedReelId
+
+    let cancelled = false
+    productService
+      .getProductById(sharedReelId)
+      .then((res) => {
+        if (cancelled || !res?.data) return
+        dispatch(pinReelAtTop(res.data))
+        setSavedReelIndex(0)
+      })
+      .catch(() => {
+        if (!cancelled) toast.error('Shared reel not found')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [sharedReelId, reelsFilteredProducts, dispatch])
+
   // Restore last watched reel when feed has products (localStorage + backend for logged-in users)
   useEffect(() => {
+    if (sharedReelId) return
     if (!Array.isArray(reelsFilteredProducts) || reelsFilteredProducts.length === 0 || hasReadSavedIndexRef.current) return
     hasReadSavedIndexRef.current = true
     const len = reelsFilteredProducts.length
@@ -475,9 +514,8 @@ function ReelsFeedPage() {
           <nav className="flex flex-col gap-3 mt-2">
             {/* Logo above search */}
             <div className="px-2 mb-4 mt-0">
-              <Link to="/" className="flex items-center gap-3">
-                <ShoppingBag className="h-12 w-12 text-primary-600" />
-                <span className="text-primary-600 font-extrabold text-2xl">Preelly</span>
+              <Link to="/" className="flex items-center">
+                <BrandLogo variant="dark" className="h-12 w-auto" />
               </Link>
             </div>
 
@@ -547,7 +585,7 @@ function ReelsFeedPage() {
                       key={c._id}
                       onClick={() => {
                         // Show products in this category and all child categories
-                        navigate(`/?category=${c._id}`)
+                        navigate(`/reels?category=${c._id}`)
                         setShowCategoriesDropdown(false)
                       }}
                       className="w-full text-left px-2 py-1 text-sm text-white hover:bg-gray-800 rounded"
@@ -627,7 +665,7 @@ function ReelsFeedPage() {
                     </button>
                   )}
                   <button
-                    onClick={() => { dispatch(logout()); navigate('/'); }}
+                    onClick={() => { dispatch(logout('user-click')); navigate('/'); }}
                     className="flex items-center gap-3 text-sm font-medium text-white hover:text-red-400 transition-colors px-3 py-2 rounded-md"
                   >
                     <LogOut className="h-5 w-5" />
@@ -691,6 +729,7 @@ function ReelsFeedPage() {
               </div>
 
               <ReelsFeed
+                key={sharedReelId ? `shared-${sharedReelId}-${savedReelIndex ?? 0}` : `feed-${savedReelIndex ?? 0}`}
                 products={reelsFilteredProducts}
                 onLoadMore={loadMore}
                 hasMore={hasMore}

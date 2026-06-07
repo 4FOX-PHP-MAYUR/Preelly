@@ -1,16 +1,18 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { useSelector } from 'react-redux'
+import { useDispatch, useSelector } from 'react-redux'
 import { userService } from '../services/api'
 import { User, ArrowLeft, Users, UserPlus } from 'lucide-react'
 import { VERIFIED_BADGE_IMAGES } from '../utils/verifiedBadge'
 import toast from 'react-hot-toast'
-import { selectIsAuthenticated, selectUser } from '../store/slices/authSlice'
+import { refreshUser, selectIsAuthenticated, selectUser } from '../store/slices/authSlice'
+import { getMediaUrl } from '../utils/helpers'
 import { isUserVerified } from '../utils/helpers'
 
 function FollowersFollowingPage() {
   const { id, type } = useParams() // type is 'followers' or 'following'
   const navigate = useNavigate()
+  const dispatch = useDispatch()
   const currentUser = useSelector(selectUser)
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const [users, setUsers] = useState([])
@@ -18,31 +20,33 @@ function FollowersFollowingPage() {
   const [loading, setLoading] = useState(true)
   const [followingMap, setFollowingMap] = useState({}) // Track who current user is following
 
+  const normalizeId = (value) => String(value?._id || value || '')
+
   useEffect(() => {
     const fetchData = async () => {
       try {
         setLoading(true)
-        
-        // Fetch profile user info
-        const profileRes = await userService.getUserProfile(id)
+        const [profileRes, usersRes] = await Promise.all([
+          userService.getUserProfile(id),
+          type === 'followers' ? userService.getFollowers(id) : userService.getFollowing(id),
+        ])
         setProfileUser(profileRes.data)
-
-        // Fetch followers or following list
-        let usersRes
-        if (type === 'followers') {
-          usersRes = await userService.getFollowers(id)
-          setUsers(usersRes.data.followers || [])
-        } else {
-          usersRes = await userService.getFollowing(id)
-          setUsers(usersRes.data.following || [])
-        }
+        setUsers(type === 'followers' ? usersRes.data.followers || [] : usersRes.data.following || [])
 
         // If current user is authenticated, check which users they're following
         if (isAuthenticated && currentUser?._id) {
+          const localFollowing = Array.isArray(currentUser.following) ? currentUser.following : []
+          const optimisticMap = {}
+          localFollowing.forEach((followedUser) => {
+            const followedId = normalizeId(followedUser)
+            if (followedId) optimisticMap[followedId] = true
+          })
+          setFollowingMap(optimisticMap)
+
           const currentUserProfile = await userService.getCurrentUserProfile()
-          const followingIds = (currentUserProfile.data.following || []).map((u) => u._id || u.toString())
+          const followingIds = (currentUserProfile.data.following || []).map((u) => normalizeId(u))
           const followingMapObj = {}
-          followingIds.forEach((userId) => {
+          followingIds.filter(Boolean).forEach((userId) => {
             followingMapObj[userId] = true
           })
           setFollowingMap(followingMapObj)
@@ -61,7 +65,7 @@ function FollowersFollowingPage() {
     } else {
       navigate(`/user/${id}`)
     }
-  }, [id, type, navigate, isAuthenticated, currentUser])
+  }, [id, type, navigate, isAuthenticated, currentUser?._id])
 
   const handleFollow = async (targetUserId) => {
     if (!isAuthenticated) {
@@ -71,11 +75,16 @@ function FollowersFollowingPage() {
     }
 
     try {
+      const normalizedTargetId = normalizeId(targetUserId)
       const res = await userService.followUser(targetUserId)
       setFollowingMap((prev) => ({
         ...prev,
-        [targetUserId]: res.data.following,
+        [normalizedTargetId]: res.data.following,
       }))
+      if (type === 'following' && String(currentUser?._id) === String(id) && !res.data.following) {
+        setUsers((prev) => prev.filter((item) => String(item?._id) !== normalizedTargetId))
+      }
+      dispatch(refreshUser())
       toast.success(res.data.following ? 'Following user' : 'Unfollowed user')
     } catch (error) {
       toast.error('Failed to follow user')
@@ -159,7 +168,7 @@ function FollowersFollowingPage() {
                       {/* Avatar */}
                       {user.avatar ? (
                         <img
-                          src={getMediaUrl ? getMediaUrl(user.avatar) : user.avatar}
+                          src={getMediaUrl(user.avatar) || user.avatar}
                           alt={user.name}
                           className="w-12 h-12 rounded-full object-cover"
                         />

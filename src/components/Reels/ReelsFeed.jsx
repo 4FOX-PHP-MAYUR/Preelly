@@ -2,7 +2,23 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useInView } from 'react-intersection-observer'
 import ProductReelCard from './ProductReelCard'
 
-function ReelsFeed({ products, onLoadMore, hasMore, loading, hasCategoryHeader = false, onVisibleIndexChange, initialIndex, onRefreshFeed, isCategoryFeed = false, onExploreCategories }) {
+function ReelsFeed({
+  products,
+  onLoadMore,
+  hasMore,
+  loading,
+  hasCategoryHeader = false,
+  onVisibleIndexChange,
+  initialIndex,
+  onRefreshFeed,
+  isCategoryFeed = false,
+  onExploreCategories,
+  heightOverride = null,
+  embedded = false,
+}) {
+  const containerBgClass = embedded ? 'bg-transparent' : 'bg-black'
+  const itemBgClass = embedded ? 'bg-transparent' : 'bg-black'
+
   const containerRef = useRef(null)
   const hasRestoredRef = useRef(false)
   const lastLoadMoreAtRef = useRef(0)
@@ -11,13 +27,30 @@ function ReelsFeed({ products, onLoadMore, hasMore, loading, hasCategoryHeader =
   // Use visualViewport when available (better for mobile/keyboard); fallback to innerHeight
   // Subtract header offset so fixed header doesn't overlap reels
   const HEADER_OFFSET = 64
-  const getDefaultHeight = () => {
-    const vh = typeof window !== 'undefined' && window.visualViewport?.height
-      ? window.visualViewport.height
-      : typeof window !== 'undefined' ? window.innerHeight : 600
+  const measureContainerHeight = useCallback(() => {
+    if (typeof heightOverride === 'number') {
+      return Math.max(200, heightOverride)
+    }
+    if (heightOverride === '100%') {
+      const parent = containerRef.current?.parentElement
+      if (parent) {
+        const parentH = parent.clientHeight
+        if (parentH > 0) return Math.max(200, parentH)
+      }
+    }
+    if (containerRef.current?.clientHeight > 0) {
+      return Math.max(200, containerRef.current.clientHeight)
+    }
+    const vh =
+      typeof window !== 'undefined' && window.visualViewport?.height
+        ? window.visualViewport.height
+        : typeof window !== 'undefined'
+          ? window.innerHeight
+          : 600
     return Math.max(200, Math.floor(vh - HEADER_OFFSET))
-  }
-  const [containerHeight, setContainerHeight] = useState(getDefaultHeight())
+  }, [heightOverride])
+
+  const [containerHeight, setContainerHeight] = useState(() => measureContainerHeight())
   const touchStartY = useRef(0)
   const touchEndY = useRef(0)
   const isScrolling = useRef(false)
@@ -31,24 +64,29 @@ function ReelsFeed({ products, onLoadMore, hasMore, loading, hasCategoryHeader =
 
   useEffect(() => {
     const updateHeight = () => {
-      if (containerRef.current) {
-        // container may have paddingTop applied; use clientHeight to match available space
-        setContainerHeight(containerRef.current.clientHeight)
-      } else {
-        const vh = window.visualViewport?.height ?? window.innerHeight
-        setContainerHeight(Math.max(200, Math.floor(vh - HEADER_OFFSET)))
-      }
+      setContainerHeight(measureContainerHeight())
     }
 
     updateHeight()
+    const raf = requestAnimationFrame(updateHeight)
+
+    const parent = containerRef.current?.parentElement
+    let resizeObserver
+    if (parent && typeof ResizeObserver !== 'undefined') {
+      resizeObserver = new ResizeObserver(updateHeight)
+      resizeObserver.observe(parent)
+    }
+
     window.addEventListener('resize', updateHeight)
     const vv = window.visualViewport
     if (vv) vv.addEventListener('resize', updateHeight)
     return () => {
+      cancelAnimationFrame(raf)
+      resizeObserver?.disconnect()
       window.removeEventListener('resize', updateHeight)
       if (vv) vv.removeEventListener('resize', updateHeight)
     }
-  }, [])
+  }, [measureContainerHeight, products.length])
 
   useEffect(() => {
     if (inView && hasMore && !loading) {
@@ -254,9 +292,16 @@ function ReelsFeed({ products, onLoadMore, hasMore, loading, hasCategoryHeader =
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
-      className="reels-container overflow-y-auto snap-y snap-mandatory scroll-smooth bg-black w-full"
+      className={`reels-container overflow-y-auto snap-y snap-mandatory scroll-smooth w-full ${containerBgClass}`}
       tabIndex={0}
-      style={{ outline: 'none', scrollSnapType: 'y mandatory', height: `calc(100vh - ${HEADER_OFFSET}px)` }}
+      style={{
+        outline: 'none',
+        scrollSnapType: 'y mandatory',
+        height:
+          heightOverride === '100%'
+            ? `${containerHeight}px`
+            : heightOverride || `calc(100vh - ${HEADER_OFFSET}px)`,
+      }}
     >
       {products.map((product, index) => {
         const isLastReel = index === products.length - 1
@@ -264,13 +309,14 @@ function ReelsFeed({ products, onLoadMore, hasMore, loading, hasCategoryHeader =
         return (
           <div
             key={product._id}
-            className="snap-start snap-always bg-black relative w-full flex items-center justify-center"
+            className={`snap-start snap-always relative w-full flex items-center justify-center ${itemBgClass}`}
             style={{ height: `${containerHeight}px`, minHeight: `${containerHeight}px` }}
           >
-            <div className="w-full flex items-center justify-center">
+            <div className="w-full h-full min-h-0 flex items-center justify-center">
               <ProductReelCard
                 product={product}
                 isVisible={index === visibleIndex}
+                embedded={embedded}
               />
             </div>
             {/* End-of-feed overlay on last reel so reels always stay visible when data is finished */}
@@ -317,7 +363,7 @@ function ReelsFeed({ products, onLoadMore, hasMore, loading, hasCategoryHeader =
       {hasMore && (
         <div 
           ref={loadMoreRef} 
-          className="snap-start snap-always bg-black flex items-center justify-center"
+          className={`snap-start snap-always flex items-center justify-center ${itemBgClass}`}
           style={{ height: `${containerHeight}px`, minHeight: `${containerHeight}px` }}
         >
           {loading && (

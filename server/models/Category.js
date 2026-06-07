@@ -22,6 +22,7 @@ const CategorySchema = new Schema(
     sortOrder: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
     isDeleted: { type: Boolean, default: false, index: true },
+    image: { type: String, default: null },
     icon: { type: String, default: null },
     emoji: { type: String, default: '📦' },
     count: { type: Number, default: 0 },

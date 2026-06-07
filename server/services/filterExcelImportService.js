@@ -159,25 +159,28 @@ async function importFiltersFromExcel({ filePath, assignCategoryId, models, log 
     // If we mis-detect a 2-column legacy sheet as 3-column, we shift columns and end up
     // treating Properties as missing, which then looks like a "separator row" and gets skipped.
     const hasLegacyHeaders3 =
-      headerIndexByKey.has('type') && headerIndexByKey.has('filters') && headerIndexByKey.has('properties')
-    const hasLegacyHeaders2 = !hasLegacyHeaders3 && headerIndexByKey.has('filters') && headerIndexByKey.has('properties')
+      (headerIndexByKey.has('type') || headerIndexByKey.has('types')) &&
+      (headerIndexByKey.has('filters') || headerIndexByKey.has('filter')) &&
+      (headerIndexByKey.has('properties') || headerIndexByKey.has('property'))
+    const hasLegacyHeaders2 =
+      !hasLegacyHeaders3 &&
+      (headerIndexByKey.has('filters') || headerIndexByKey.has('filter')) &&
+      (headerIndexByKey.has('properties') || headerIndexByKey.has('property'))
 
     const legacyShape = hasLegacyHeaders3 ? 'type_filters_properties' : hasLegacyHeaders2 ? 'filters_properties' : null
 
     const typeIdx =
-      legacyShape === 'type_filters_properties' ? headerIndexByKey.get('type') : legacyShape ? null : 0
+      legacyShape === 'type_filters_properties'
+        ? (headerIndexByKey.get('type') ?? headerIndexByKey.get('types'))
+        : legacyShape ? null : 0
     const filtersIdx =
-      legacyShape === 'type_filters_properties'
-        ? headerIndexByKey.get('filters')
-        : legacyShape === 'filters_properties'
-          ? headerIndexByKey.get('filters')
-          : 1
+      legacyShape === 'type_filters_properties' || legacyShape === 'filters_properties'
+        ? (headerIndexByKey.get('filters') ?? headerIndexByKey.get('filter'))
+        : 1
     const propertiesIdx =
-      legacyShape === 'type_filters_properties'
-        ? headerIndexByKey.get('properties')
-        : legacyShape === 'filters_properties'
-          ? headerIndexByKey.get('properties')
-          : 2
+      legacyShape === 'type_filters_properties' || legacyShape === 'filters_properties'
+        ? (headerIndexByKey.get('properties') ?? headerIndexByKey.get('property'))
+        : 2
 
     let normalizedRows = []
 

@@ -159,7 +159,10 @@ export const createProduct = createAsyncThunk(
       const response = await productService.createProduct(productData)
       return response.data
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to create product')
+      const payload = error.response?.data
+      const message =
+        (typeof payload === 'string' ? payload : payload?.message) || 'Failed to create product'
+      return rejectWithValue({ message, angleChecklist: payload?.angleChecklist })
     }
   }
 )

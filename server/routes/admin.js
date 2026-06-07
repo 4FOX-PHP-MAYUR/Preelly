@@ -12,6 +12,8 @@ const CategoryFilter = require('../models/CategoryFilter')
 const Dealer = require('../models/Dealer')
 const AdminRole = require('../models/AdminRole')
 const AdminRolePermission = require('../models/AdminRolePermission')
+const FieldType = require('../models/FieldType')
+const FormField = require('../models/FormField')
 const { upload, uploadAny } = require('../middleware/upload')
 const { Types } = require('mongoose')
 const XLSX = require('xlsx')
@@ -20,6 +22,7 @@ const { buildNestedCategoryTreeForFilters } = require('../services/categoryNeste
 const { importFiltersFromExcel } = require('../services/filterExcelImportService')
 const { importCategoriesFromExcel } = require('../services/categoryExcelImportService')
 const { sendEmail } = require('../utils/mailer')
+const { sendIdentityApprovedEmail, sendIdentityRejectedEmail } = require('../utils/identityVerificationMail')
 const { REJECTION_REASON_CATEGORIES } = require('../constants/rejectionReasons')
 
 // @route   GET /api/admin/products/pending
@@ -539,6 +542,160 @@ router.put('/users/:id/verify', adminMiddleware, async (req, res) => {
   }
 })
 
+// @route   GET /api/admin/identity-verifications
+// @desc    List identity verification requests
+// @access  Private (Admin only)
+router.get('/identity-verifications', adminMiddleware, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, status = 'pending', search } = req.query
+    const skip = (Number(page) - 1) * Number(limit)
+
+    const query = {}
+    if (status && status !== 'all') {
+      query.identityVerificationStatus = status
+    } else if (status === 'all') {
+      query.identityVerificationStatus = { $in: ['pending', 'approved', 'rejected'] }
+    }
+
+    if (search) {
+      query.$or = [
+        { name: new RegExp(search, 'i') },
+        { email: new RegExp(search, 'i') },
+      ]
+    }
+
+    const users = await User.find(query)
+      .select('name email phone avatar identityVerificationStatus identityVerificationSubmittedAt identityVerifiedAt emiratesIdFront emiratesIdBack identityVerificationRejectionReason isVerified createdAt')
+      .sort({ identityVerificationSubmittedAt: -1, createdAt: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+
+    const total = await User.countDocuments(query)
+
+    res.json({
+      verifications: users,
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      hasMore: skip + users.length < total,
+    })
+  } catch (error) {
+    console.error('Error fetching identity verifications:', error)
+    res.status(500).json({ message: 'Error fetching identity verifications' })
+  }
+})
+
+// @route   GET /api/admin/identity-verifications/:id
+// @desc    Get single identity verification request
+// @access  Private (Admin only)
+router.get('/identity-verifications/:id', adminMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select(
+      '-password -savedProducts'
+    )
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    if (!user.emiratesIdFront && !user.emiratesIdBack && user.identityVerificationStatus === 'none') {
+      return res.status(404).json({ message: 'No verification request found for this user' })
+    }
+    res.json({ user })
+  } catch (error) {
+    console.error('Error fetching identity verification:', error)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid user ID' })
+    }
+    res.status(500).json({ message: 'Error fetching identity verification' })
+  }
+})
+
+// @route   PUT /api/admin/identity-verifications/:id/approve
+// @desc    Approve identity verification and mark user as verified
+// @access  Private (Admin only)
+router.put('/identity-verifications/:id/approve', adminMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+
+    if (user.identityVerificationStatus !== 'pending') {
+      return res.status(400).json({ message: 'Only pending verification requests can be approved' })
+    }
+
+    user.identityVerificationStatus = 'approved'
+    user.identityVerifiedAt = new Date()
+    user.identityVerificationRejectionReason = null
+    await user.save()
+
+    try {
+      await sendIdentityApprovedEmail(user)
+    } catch (mailError) {
+      console.error('Identity approved but failed to send email:', mailError.message)
+    }
+
+    res.json({
+      message: 'Identity verification approved successfully',
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        identityVerificationStatus: user.identityVerificationStatus,
+        identityVerifiedAt: user.identityVerifiedAt,
+      },
+    })
+  } catch (error) {
+    console.error('Error approving identity verification:', error)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid user ID' })
+    }
+    res.status(500).json({ message: 'Error approving identity verification' })
+  }
+})
+
+// @route   PUT /api/admin/identity-verifications/:id/reject
+// @desc    Reject identity verification request
+// @access  Private (Admin only)
+router.put('/identity-verifications/:id/reject', adminMiddleware, async (req, res) => {
+  try {
+    const { reason } = req.body
+    const user = await User.findById(req.params.id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+
+    if (user.identityVerificationStatus !== 'pending') {
+      return res.status(400).json({ message: 'Only pending verification requests can be rejected' })
+    }
+
+    const rejectionReason = reason ? String(reason).trim().slice(0, 500) : ''
+    if (!rejectionReason) {
+      return res.status(400).json({ message: 'Rejection reason is required' })
+    }
+
+    user.identityVerificationStatus = 'rejected'
+    user.identityVerificationRejectionReason = rejectionReason
+    await user.save()
+
+    try {
+      await sendIdentityRejectedEmail(user, rejectionReason)
+    } catch (mailError) {
+      console.error('Identity rejected but failed to send email:', mailError.message)
+    }
+
+    res.json({
+      message: 'Verification rejected',
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        identityVerificationStatus: user.identityVerificationStatus,
+        identityVerificationRejectionReason: user.identityVerificationRejectionReason,
+      },
+    })
+  } catch (error) {
+    console.error('Error rejecting identity verification:', error)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid user ID' })
+    }
+    res.status(500).json({ message: 'Error rejecting identity verification' })
+  }
+})
+
 // @route   PUT /api/admin/users/:id/role
 // @desc    Update a user's role (user/admin)
 // @access  Private (Admin only)
@@ -985,7 +1142,7 @@ function flattenCategoryTreeInOrder(nodes) {
 // Fetch all matching categories, build tree by parent_id, flatten in hierarchy order, then paginate
 router.get('/categories', adminMiddleware, async (req, res) => {
   try {
-    const { page = 1, limit = 100, search } = req.query
+    const { page = 1, limit = 100, search, parentId: filterParentId } = req.query
     const skip = Math.max(0, (Number(page) - 1) * Number(limit))
     const limitNum = Math.max(1, Math.min(500, Number(limit)))
     const query = { isDeleted: false }
@@ -1044,7 +1201,11 @@ router.get('/categories', adminMiddleware, async (req, res) => {
     }
     // Build tree from flat list (by parent_id), then flatten in hierarchy order
     const tree = buildCategoryTreeFromFlat(merged)
-    const ordered = flattenCategoryTreeInOrder(tree)
+    let ordered = flattenCategoryTreeInOrder(tree)
+    // Filter by parent category if requested
+    if (filterParentId && filterParentId !== 'all' && filterParentId !== '') {
+      ordered = ordered.filter((c) => c.parentId && String(c.parentId) === String(filterParentId))
+    }
     const total = ordered.length
     const categoriesPage = ordered.slice(skip, skip + limitNum)
     res.json({
@@ -1136,8 +1297,21 @@ router.get('/categories/debug-indexes', adminMiddleware, async (req, res) => {
   }
 })
 
+function resolveCategoryImage(req) {
+  if (req.file) return `/uploads/images/${req.file.filename}`
+  const raw = req.body?.image
+  if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
+    return String(raw).trim()
+  }
+  return null
+}
+
 // POST /api/admin/categories
-router.post('/categories', adminMiddleware, async (req, res) => {
+router.post(
+  '/categories',
+  adminMiddleware,
+  upload.single('category_image'),
+  async (req, res) => {
   try {
     const { name, slug, parentId, sortOrder = 0, isActive = true } = req.body
     if (!name) return res.status(400).json({ message: 'name is required' })
@@ -1146,7 +1320,15 @@ router.post('/categories', adminMiddleware, async (req, res) => {
       const parent = await Category.findById(parentId).select('_id isDeleted path')
       if (!parent || parent.isDeleted) return res.status(400).json({ message: 'Parent not found or deleted' })
     }
-    const category = new Category({ name, slug: slug || undefined, parentId: parentId || null, sortOrder, isActive })
+    const image = resolveCategoryImage(req)
+    const category = new Category({
+      name,
+      slug: slug || undefined,
+      parentId: parentId || null,
+      sortOrder,
+      isActive,
+      ...(image ? { image, icon: image } : {}),
+    })
     await category.save()
     res.status(201).json(category)
   } catch (error) {
@@ -1160,7 +1342,8 @@ router.post('/categories', adminMiddleware, async (req, res) => {
     }
     res.status(500).json({ message: 'Error creating category' })
   }
-})
+  }
+)
 
 // GET full tree
 router.get('/categories/tree', adminMiddleware, async (req, res) => {
@@ -1200,13 +1383,17 @@ router.get('/categories/:id/path', adminMiddleware, async (req, res) => {
 })
 
 // PATCH update
-router.patch('/categories/:id', adminMiddleware, async (req, res) => {
+router.patch(
+  '/categories/:id',
+  adminMiddleware,
+  upload.single('category_image'),
+  async (req, res) => {
   try {
     const { id } = req.params
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
     const category = await Category.findById(id)
     if (!category) return res.status(404).json({ message: 'Category not found' })
-    const { name, slug, parentId, sortOrder, isActive } = req.body
+    const { name, slug, parentId, sortOrder, isActive, clear_image } = req.body
     if (parentId !== undefined) {
       if (parentId) {
         if (!Types.ObjectId.isValid(parentId)) return res.status(400).json({ message: 'Invalid parentId' })
@@ -1223,6 +1410,18 @@ router.patch('/categories/:id', adminMiddleware, async (req, res) => {
     if (slug !== undefined) category.slug = slug
     if (sortOrder !== undefined) category.sortOrder = sortOrder
     if (isActive !== undefined) category.isActive = isActive
+    if (req.file) {
+      const image = resolveCategoryImage(req)
+      category.image = image
+      category.icon = image
+    } else if (clear_image === 'true' || clear_image === true) {
+      category.image = null
+      category.icon = null
+    } else if (req.body.image !== undefined) {
+      const image = resolveCategoryImage(req)
+      category.image = image
+      category.icon = image
+    }
     await category.save()
     res.json(category)
   } catch (error) {
@@ -1236,7 +1435,8 @@ router.patch('/categories/:id', adminMiddleware, async (req, res) => {
     }
     res.status(500).json({ message: 'Error updating category' })
   }
-})
+  }
+)
 
 // DELETE soft-delete and descendants
 router.delete('/categories/:id', adminMiddleware, async (req, res) => {
@@ -1466,8 +1666,58 @@ router.get('/filters', adminMiddleware, async (req, res) => {
 
 // GET /api/admin/filters/tree
 // Return full filter tree for parent dropdowns etc.
+// Optional ?subCategoryId=ID or ?mainCategoryId=ID to scope to a category.
 router.get('/filters/tree', adminMiddleware, async (req, res) => {
   try {
+    const { subCategoryId, mainCategoryId } = req.query
+    const scopeId = subCategoryId || mainCategoryId
+
+    if (scopeId && Types.ObjectId.isValid(String(scopeId))) {
+      const scopeObjId = new Types.ObjectId(String(scopeId))
+      const scopedCategories = await Category.find({
+        isDeleted: false,
+        $or: [{ _id: scopeObjId }, { path: scopeObjId }],
+      })
+        .select('_id')
+        .lean()
+      const scopedCategoryIds = scopedCategories.map((c) => c._id)
+
+      const links = await CategoryFilter.find({ categoryId: { $in: scopedCategoryIds } })
+        .select('filterId')
+        .lean()
+      const directFilters = await Filter.find({
+        isDeleted: false,
+        $or: [
+          { categoryId: { $in: scopedCategoryIds } },
+          { subcategoryId: { $in: scopedCategoryIds } },
+          { childCategoryId: { $in: scopedCategoryIds } },
+        ],
+      })
+        .select('_id')
+        .lean()
+
+      const allIds = [...new Set([
+        ...links.map((l) => String(l.filterId)),
+        ...directFilters.map((f) => String(f._id)),
+      ])].map((id) => new Types.ObjectId(id))
+
+      if (!allIds.length) return res.json([])
+
+      // Include full subtrees so children are available as parent options
+      const candidates = await Filter.find({
+        isDeleted: false,
+        $or: [{ _id: { $in: allIds } }, { path: { $in: allIds } }],
+      })
+        .select('_id path')
+        .lean()
+      const expandedSet = new Set(candidates.map((f) => String(f._id)))
+      candidates.forEach((f) => (f.path || []).forEach((p) => expandedSet.add(String(p))))
+      const expandedIds = [...expandedSet].map((id) => new Types.ObjectId(id))
+
+      const tree = await Filter.getTree({ _id: { $in: expandedIds }, isDeleted: false })
+      return res.json(tree)
+    }
+
     const tree = await Filter.getTree({ isDeleted: false })
     res.json(tree)
   } catch (error) {
@@ -1605,7 +1855,24 @@ router.post(
         // Always keep assignment at the selected level id.
         assignCategoryObjId = new Types.ObjectId(String(selected._id))
 
-        const chain = [...(selected.path || []), selected._id].map((id) => String(id))
+        // Build ancestor chain by traversing parentId — more reliable than `path`
+        // which can be stale/empty on older category documents.
+        const chainIds = []
+        {
+          let cur = selected
+          const seen = new Set()
+          while (cur && cur._id) {
+            const curIdStr = String(cur._id)
+            if (seen.has(curIdStr)) break
+            seen.add(curIdStr)
+            chainIds.push(curIdStr)
+            if (!cur.parentId) break
+            // eslint-disable-next-line no-await-in-loop
+            cur = await Category.findById(cur.parentId).select('_id parentId').lean()
+          }
+        }
+        const chain = chainIds.length ? chainIds.reverse() : [...(selected.path || []), selected._id].map((id) => String(id))
+
         if (chain[0]) filterCategoryObjId = new Types.ObjectId(chain[0])
         if (chain[1]) filterSubcategoryObjId = new Types.ObjectId(chain[1])
         if (chain[2]) filterChildCategoryObjId = new Types.ObjectId(chain[2])
@@ -2263,6 +2530,482 @@ router.put('/users/:id/admin-role', adminMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Error updating user admin role:', error)
     res.status(500).json({ message: 'Error updating admin role' })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Field Types - CRUD
+// ---------------------------------------------------------------------------
+
+// GET /api/admin/field-types - list with pagination, search, sort
+router.get('/field-types', adminMiddleware, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search, sortBy = 'sortOrder', sortDir = 'asc' } = req.query
+    const skip = (Number(page) - 1) * Number(limit)
+    const query = { isDeleted: false }
+    if (search && String(search).trim()) {
+      query.fieldValue = new RegExp(String(search).trim(), 'i')
+    }
+    const allowedSortFields = { sortOrder: 1, fieldValue: 1, createdAt: 1 }
+    const sortField = allowedSortFields[sortBy] !== undefined ? sortBy : 'sortOrder'
+    const sort = { [sortField]: sortDir === 'desc' ? -1 : 1 }
+    const [fieldTypes, total] = await Promise.all([
+      FieldType.find(query).sort(sort).skip(skip).limit(Number(limit)).lean(),
+      FieldType.countDocuments(query),
+    ])
+    res.json({
+      fieldTypes,
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      hasMore: skip + fieldTypes.length < total,
+    })
+  } catch (error) {
+    console.error('Error fetching field types:', error)
+    res.status(500).json({ message: 'Error fetching field types' })
+  }
+})
+
+// GET /api/admin/field-types/:id - get single field type
+router.get('/field-types/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
+    const fieldType = await FieldType.findOne({ _id: id, isDeleted: false }).lean()
+    if (!fieldType) return res.status(404).json({ message: 'Field type not found' })
+    res.json(fieldType)
+  } catch (error) {
+    console.error('Error fetching field type:', error)
+    res.status(500).json({ message: 'Error fetching field type' })
+  }
+})
+
+// POST /api/admin/field-types - create
+router.post('/field-types', adminMiddleware, async (req, res) => {
+  try {
+    const { fieldValue, sortOrder, isActive = true } = req.body
+    if (!fieldValue || !String(fieldValue).trim()) {
+      return res.status(400).json({ message: 'Field value is required' })
+    }
+    if (sortOrder === undefined || sortOrder === null || sortOrder === '') {
+      return res.status(400).json({ message: 'Sort order is required' })
+    }
+    const parsedSortOrder = Number(sortOrder)
+    if (Number.isNaN(parsedSortOrder)) {
+      return res.status(400).json({ message: 'Sort order must be a number' })
+    }
+    const fieldType = new FieldType({
+      fieldValue: String(fieldValue).trim(),
+      sortOrder: parsedSortOrder,
+      isActive: isActive !== false && isActive !== 'false',
+    })
+    await fieldType.save()
+    res.status(201).json(fieldType)
+  } catch (error) {
+    console.error('Error creating field type:', error)
+    res.status(500).json({ message: 'Error creating field type' })
+  }
+})
+
+// PATCH /api/admin/field-types/:id - update
+router.patch('/field-types/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
+    const fieldType = await FieldType.findOne({ _id: id, isDeleted: false })
+    if (!fieldType) return res.status(404).json({ message: 'Field type not found' })
+    const { fieldValue, sortOrder, isActive } = req.body
+    if (fieldValue !== undefined) {
+      const trimmed = String(fieldValue).trim()
+      if (!trimmed) return res.status(400).json({ message: 'Field value cannot be empty' })
+      fieldType.fieldValue = trimmed
+    }
+    if (sortOrder !== undefined) {
+      const parsed = Number(sortOrder)
+      if (Number.isNaN(parsed)) return res.status(400).json({ message: 'Sort order must be a number' })
+      fieldType.sortOrder = parsed
+    }
+    if (isActive !== undefined) {
+      fieldType.isActive = isActive !== false && isActive !== 'false'
+    }
+    await fieldType.save()
+    res.json(fieldType)
+  } catch (error) {
+    console.error('Error updating field type:', error)
+    res.status(500).json({ message: 'Error updating field type' })
+  }
+})
+
+// DELETE /api/admin/field-types/:id - soft delete
+router.delete('/field-types/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
+    const fieldType = await FieldType.findOne({ _id: id, isDeleted: false })
+    if (!fieldType) return res.status(404).json({ message: 'Field type not found' })
+    fieldType.isDeleted = true
+    fieldType.isActive = false
+    await fieldType.save()
+    res.json({ message: 'Field type deleted successfully' })
+  } catch (error) {
+    console.error('Error deleting field type:', error)
+    res.status(500).json({ message: 'Error deleting field type' })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Form Fields - CRUD
+// ---------------------------------------------------------------------------
+
+// Converts a human-readable title into snake_case field name
+function toFieldName(input) {
+  return String(input || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9\s_]/g, '')
+    .replace(/\s+/g, '_')
+    .replace(/_{2,}/g, '_')
+    .replace(/^_+|_+$/g, '')
+}
+
+async function findDuplicateFormFieldName(categoryId, fieldName, excludeId = null) {
+  const query = { categoryId, fieldName, isDeleted: false }
+  if (excludeId) query._id = { $ne: excludeId }
+  return FormField.findOne(query)
+}
+
+async function getRootFiltersForCategory(categoryId) {
+  const category = await Category.findById(categoryId).lean()
+  if (!category) return null
+
+  const selectedLevelObjId = new Types.ObjectId(String(categoryId))
+  let levelQuery = null
+  if (category.level >= 2) levelQuery = { childCategoryId: selectedLevelObjId }
+  else if (category.level === 1) levelQuery = { subcategoryId: selectedLevelObjId }
+  else levelQuery = { categoryId: selectedLevelObjId }
+
+  const directLevelFilters = await Filter.find({
+    ...levelQuery,
+    parentId: null,
+    isDeleted: { $ne: true },
+    isActive: { $ne: false },
+  })
+    .select('_id name slug sortOrder')
+    .sort({ sortOrder: 1, name: 1 })
+    .lean()
+
+  const scopedCategories = await Category.find({
+    isDeleted: false,
+    $or: [{ _id: selectedLevelObjId }, { path: selectedLevelObjId }],
+  })
+    .select('_id')
+    .lean()
+  const scopedCategoryIds = scopedCategories.map((c) => c._id)
+  const links = await CategoryFilter.find({ categoryId: { $in: scopedCategoryIds } })
+    .select('filterId')
+    .lean()
+  const linkedFilterIds = [...new Set(links.map((l) => String(l.filterId)))]
+
+  let linkedFilters = []
+  if (linkedFilterIds.length) {
+    linkedFilters = await Filter.find({
+      _id: { $in: linkedFilterIds.map((id) => new Types.ObjectId(id)) },
+      parentId: null,
+      isDeleted: { $ne: true },
+      isActive: { $ne: false },
+    })
+      .select('_id name slug sortOrder')
+      .sort({ sortOrder: 1, name: 1 })
+      .lean()
+  }
+
+  const byId = new Map()
+  for (const f of [...directLevelFilters, ...linkedFilters]) {
+    byId.set(String(f._id), f)
+  }
+
+  return [...byId.values()].sort(
+    (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || String(a.name).localeCompare(String(b.name))
+  )
+}
+
+// GET /api/admin/form-fields/filters?categoryId=...
+router.get('/form-fields/filters', adminMiddleware, async (req, res) => {
+  try {
+    const { categoryId } = req.query
+    if (!categoryId || !Types.ObjectId.isValid(String(categoryId))) {
+      return res.status(400).json({ message: 'Invalid or missing categoryId' })
+    }
+
+    const filters = await getRootFiltersForCategory(categoryId)
+    if (filters === null) return res.status(404).json({ message: 'Category not found' })
+
+    res.json({ filters: filters.map((f) => ({ _id: f._id, name: f.name, slug: f.slug })) })
+  } catch (error) {
+    console.error('Error fetching form-field filters:', error)
+    res.status(500).json({ message: 'Error fetching filters for category' })
+  }
+})
+
+// GET /api/admin/form-fields/dropdowns - fetch all dropdown data in one call
+router.get('/form-fields/dropdowns', adminMiddleware, async (req, res) => {
+  try {
+    const [roots, children, fieldTypes] = await Promise.all([
+      // Level 0 = root categories (shown as group headers + selectable "(root)" option)
+      Category.find({ level: 0, isDeleted: false, isActive: true })
+        .select('_id name sortOrder')
+        .sort({ sortOrder: 1, name: 1 })
+        .lean(),
+      // Level 1 = sub-categories (shown as indented children under their parent)
+      Category.find({ level: 1, isDeleted: false, isActive: true })
+        .select('_id name parentId sortOrder')
+        .sort({ sortOrder: 1, name: 1 })
+        .lean(),
+      FieldType.find({ isDeleted: false, isActive: true })
+        .select('_id fieldValue sortOrder')
+        .sort({ sortOrder: 1, fieldValue: 1 })
+        .lean(),
+    ])
+
+    // Build grouped structure: each root carries its level-1 children
+    const childrenByParent = {}
+    children.forEach((c) => {
+      const pid = String(c.parentId)
+      if (!childrenByParent[pid]) childrenByParent[pid] = []
+      childrenByParent[pid].push(c)
+    })
+    const categoryGroups = roots.map((root) => ({
+      _id: root._id,
+      name: root.name,
+      children: childrenByParent[String(root._id)] || [],
+    }))
+
+    res.json({ categoryGroups, fieldTypes })
+  } catch (error) {
+    console.error('Error fetching form-field dropdowns:', error)
+    res.status(500).json({ message: 'Error fetching dropdown data' })
+  }
+})
+
+// GET /api/admin/form-fields - paginated list
+router.get('/form-fields', adminMiddleware, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, search, sortBy = 'formStep', sortDir = 'asc' } = req.query
+    const skip = (Number(page) - 1) * Number(limit)
+    const query = { isDeleted: false }
+    if (search && String(search).trim()) {
+      const re = new RegExp(String(search).trim(), 'i')
+      query.$or = [{ fieldTitle: re }, { fieldName: re }]
+    }
+    const allowedSortFields = { formStep: 1, fieldOrder: 1, fieldTitle: 1, fieldName: 1, createdAt: 1 }
+    const sortField = allowedSortFields[sortBy] !== undefined ? sortBy : 'formStep'
+    const sort = { [sortField]: sortDir === 'desc' ? -1 : 1, fieldOrder: 1 }
+
+    const [formFields, total] = await Promise.all([
+      FormField.find(query)
+        .populate('categoryId', 'name slug')
+        .populate('fieldTypeId', 'fieldValue')
+        .populate('filterId', 'name')
+        .populate('categoryFilterId', 'name slug')
+        .sort(sort)
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      FormField.countDocuments(query),
+    ])
+    res.json({
+      formFields,
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      hasMore: skip + formFields.length < total,
+    })
+  } catch (error) {
+    console.error('Error fetching form fields:', error)
+    res.status(500).json({ message: 'Error fetching form fields' })
+  }
+})
+
+// GET /api/admin/form-fields/:id - single form field
+router.get('/form-fields/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
+    const formField = await FormField.findOne({ _id: id, isDeleted: false })
+      .populate('categoryId', 'name slug')
+      .populate('fieldTypeId', 'fieldValue')
+      .populate('filterId', 'name')
+      .populate('categoryFilterId', 'name slug')
+      .lean()
+    if (!formField) return res.status(404).json({ message: 'Form field not found' })
+    res.json(formField)
+  } catch (error) {
+    console.error('Error fetching form field:', error)
+    res.status(500).json({ message: 'Error fetching form field' })
+  }
+})
+
+// POST /api/admin/form-fields - create
+router.post('/form-fields', adminMiddleware, async (req, res) => {
+  try {
+    const {
+      categoryId, fieldTypeId, filterId, categoryFilterId,
+      fieldTitle, placeholder, fieldName,
+      fieldOrder, formStep, validation, tableName, functionName, isActive = true,
+    } = req.body
+
+    // Required field validation
+    if (!categoryId || !Types.ObjectId.isValid(categoryId)) {
+      return res.status(400).json({ message: 'Valid category is required' })
+    }
+    if (!fieldTypeId || !Types.ObjectId.isValid(fieldTypeId)) {
+      return res.status(400).json({ message: 'Valid field type is required' })
+    }
+    if (!fieldTitle || !String(fieldTitle).trim()) {
+      return res.status(400).json({ message: 'Field title is required' })
+    }
+
+    // Auto-generate or sanitize fieldName
+    const resolvedFieldName = fieldName && String(fieldName).trim()
+      ? toFieldName(String(fieldName).trim())
+      : toFieldName(fieldTitle)
+
+    if (!resolvedFieldName) {
+      return res.status(400).json({ message: 'Field name is required' })
+    }
+
+    // Unique fieldName check (scoped to category)
+    const existing = await findDuplicateFormFieldName(categoryId, resolvedFieldName)
+    if (existing) {
+      return res.status(400).json({
+        message: `Field name "${resolvedFieldName}" is already in use for this category`,
+      })
+    }
+
+    const formField = new FormField({
+      categoryId,
+      fieldTypeId,
+      filterId: filterId && Types.ObjectId.isValid(filterId) ? filterId : null,
+      categoryFilterId: categoryFilterId && Types.ObjectId.isValid(categoryFilterId) ? categoryFilterId : null,
+      fieldTitle: String(fieldTitle).trim(),
+      placeholder: placeholder ? String(placeholder).trim() : '',
+      fieldName: resolvedFieldName,
+      fieldOrder: Number.isNaN(Number(fieldOrder)) ? 0 : Number(fieldOrder),
+      formStep: Number.isNaN(Number(formStep)) ? 1 : Number(formStep),
+      validation: validation ? String(validation).trim() : '',
+      tableName: tableName ? String(tableName).trim() : '',
+      functionName: functionName ? String(functionName).trim() : '',
+      isActive: isActive !== false && isActive !== 'false',
+    })
+    await formField.save()
+
+    const populated = await FormField.findById(formField._id)
+      .populate('categoryId', 'name slug')
+      .populate('fieldTypeId', 'fieldValue')
+      .populate('filterId', 'name')
+      .populate('categoryFilterId', 'name slug')
+      .lean()
+
+    res.status(201).json(populated)
+  } catch (error) {
+    console.error('Error creating form field:', error)
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Field name already exists for this category' })
+    }
+    res.status(500).json({ message: 'Error creating form field' })
+  }
+})
+
+// PATCH /api/admin/form-fields/:id - update
+router.patch('/form-fields/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
+    const formField = await FormField.findOne({ _id: id, isDeleted: false })
+    if (!formField) return res.status(404).json({ message: 'Form field not found' })
+
+    const {
+      categoryId, fieldTypeId, filterId, categoryFilterId,
+      fieldTitle, placeholder, fieldName,
+      fieldOrder, formStep, validation, tableName, functionName, isActive,
+    } = req.body
+
+    if (categoryId !== undefined) {
+      if (!Types.ObjectId.isValid(categoryId)) {
+        return res.status(400).json({ message: 'Valid category is required' })
+      }
+      formField.categoryId = categoryId
+    }
+    if (fieldTypeId !== undefined) {
+      if (!Types.ObjectId.isValid(fieldTypeId)) {
+        return res.status(400).json({ message: 'Valid field type is required' })
+      }
+      formField.fieldTypeId = fieldTypeId
+    }
+    if (filterId !== undefined) {
+      formField.filterId = filterId && Types.ObjectId.isValid(filterId) ? filterId : null
+    }
+    if (categoryFilterId !== undefined) {
+      formField.categoryFilterId = categoryFilterId && Types.ObjectId.isValid(categoryFilterId) ? categoryFilterId : null
+    }
+    if (fieldTitle !== undefined) {
+      const trimmed = String(fieldTitle).trim()
+      if (!trimmed) return res.status(400).json({ message: 'Field title cannot be empty' })
+      formField.fieldTitle = trimmed
+    }
+    if (fieldName !== undefined) {
+      const sanitized = toFieldName(String(fieldName).trim())
+      if (!sanitized) return res.status(400).json({ message: 'Field name cannot be empty' })
+      formField.fieldName = sanitized
+    }
+    if (placeholder !== undefined) formField.placeholder = String(placeholder).trim()
+    if (fieldOrder !== undefined) formField.fieldOrder = Number.isNaN(Number(fieldOrder)) ? 0 : Number(fieldOrder)
+    if (formStep !== undefined) formField.formStep = Number.isNaN(Number(formStep)) ? 1 : Number(formStep)
+    if (validation !== undefined) formField.validation = String(validation).trim()
+    if (tableName !== undefined) formField.tableName = String(tableName).trim()
+    if (functionName !== undefined) formField.functionName = String(functionName).trim()
+    if (isActive !== undefined) formField.isActive = isActive !== false && isActive !== 'false'
+
+    const dup = await findDuplicateFormFieldName(formField.categoryId, formField.fieldName, id)
+    if (dup) {
+      return res.status(400).json({
+        message: `Field name "${formField.fieldName}" is already in use for this category`,
+      })
+    }
+
+    await formField.save()
+
+    const populated = await FormField.findById(formField._id)
+      .populate('categoryId', 'name slug')
+      .populate('fieldTypeId', 'fieldValue')
+      .populate('filterId', 'name')
+      .populate('categoryFilterId', 'name slug')
+      .lean()
+
+    res.json(populated)
+  } catch (error) {
+    console.error('Error updating form field:', error)
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Field name already exists for this category' })
+    }
+    res.status(500).json({ message: 'Error updating form field' })
+  }
+})
+
+// DELETE /api/admin/form-fields/:id - soft delete
+router.delete('/form-fields/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
+    const formField = await FormField.findOne({ _id: id, isDeleted: false })
+    if (!formField) return res.status(404).json({ message: 'Form field not found' })
+    formField.isDeleted = true
+    formField.isActive = false
+    await formField.save()
+    res.json({ message: 'Form field deleted successfully' })
+  } catch (error) {
+    console.error('Error deleting form field:', error)
+    res.status(500).json({ message: 'Error deleting form field' })
   }
 })
 

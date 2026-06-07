@@ -3,12 +3,38 @@ import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { createProduct, updateProduct, fetchProductById, fetchProducts } from '../store/slices/productSlice'
-import { fetchCategories } from '../store/slices/categorySlice'
-import { selectIsAdmin, refreshUser } from '../store/slices/authSlice'
+import { getRouteAbortSignal } from '../services/apiScope'
+import {
+  clearSession,
+  rehydrateSessionFromStorage,
+  selectIsAdmin,
+  selectIsAuthenticated,
+} from '../store/slices/authSlice'
 import { productService, videoService, listingService } from '../services/api'
 import toast from 'react-hot-toast'
-import { ChevronLeft, ChevronRight, CheckCircle, AlertCircle, Upload, X, Image as ImageIcon, Loader2, Camera } from 'lucide-react'
-import { getMediaUrl } from '../utils/helpers'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Home,
+  UploadCloud,
+  ChevronDown,
+  SwitchCamera,
+  CheckCircle,
+  AlertCircle,
+  Upload,
+  X,
+  Image as ImageIcon,
+  Loader2,
+  Camera,
+  Car,
+  Building2,
+  Shirt,
+  Sofa,
+  LayoutGrid,
+  Smartphone,
+  Newspaper,
+} from 'lucide-react'
+import { getCategoryImageUrl, getMediaUrl } from '../utils/helpers'
 import { 
   getFieldsForCategory, 
   getBrandOptionsForCategory, 
@@ -20,19 +46,33 @@ import {
   resolveCategoryKeyForFields,
 } from '../utils/categoryFields'
 import { categoryService } from '../services/api'
+import { applyTranscriptFilterSelections } from '../utils/applyTranscriptFilterSelections'
+import { applyAiVehicleFormPrefill, syncBrandChoiceFromMake } from '../utils/applyAiVehicleFormPrefill'
+import { toFilterArray, mergeFilterValues, scalarFromMultiSelect } from '../utils/filterValueUtils'
+import FilterMultiSelect from '../components/PostAd/FilterMultiSelect'
+import { buildFilterMultiselectOptions } from '../utils/flattenFilterOptions'
+import {
+  applyAdsPostedToFormData,
+  isAdsPostedFilterRoot,
+  omitAdsPostedFromSelections,
+  resolveAdsPostedSelectionForDate,
+} from '../utils/adsPostedFilter'
 
 const TOTAL_STEPS = 11
 
 /** All listings use UAE Dirham (Dubai / UAE marketplace). */
 const MARKETPLACE_CURRENCY = 'AED'
 
+/** Shared responsive step card title (steps 4–10). */
+const STEP_CARD_TITLE = 'text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6'
+
 // Step 1: Authentication Check
 function Step1Auth({ user, onNext }) {
   if (!user) {
     return (
-      <div className="card text-center py-12">
-        <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Authentication Required</h2>
+      <div className="card text-center py-8 sm:py-12 px-4">
+        <AlertCircle className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-500 mx-auto mb-4" />
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Authentication Required</h2>
         <p className="text-gray-600 mb-6">You must be logged in to post an ad</p>
         <button
           onClick={() => window.location.href = '/login'}
@@ -48,9 +88,9 @@ function Step1Auth({ user, onNext }) {
   const isAdmin = user.role === 'admin'
   if (!isAdmin && !user.isVerified) {
     return (
-      <div className="card text-center py-12">
-        <AlertCircle className="w-16 h-16 text-yellow-500 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Verification Required</h2>
+      <div className="card text-center py-8 sm:py-12 px-4">
+        <AlertCircle className="w-12 h-12 sm:w-16 sm:h-16 text-yellow-500 mx-auto mb-4" />
+        <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Verification Required</h2>
         <p className="text-gray-600 mb-6">Your account needs to be verified to post ads</p>
         <p className="text-sm text-gray-500">Please contact support to verify your account</p>
       </div>
@@ -58,79 +98,233 @@ function Step1Auth({ user, onNext }) {
   }
 
   return (
-    <div className="card text-center py-12">
-      <CheckCircle className="w-16 h-16 text-green-500 mx-auto mb-4" />
-      <h2 className="text-2xl font-bold text-gray-900 mb-2">
+    <div className="card text-center py-8 sm:py-12 px-4">
+      <CheckCircle className="w-12 h-12 sm:w-16 sm:h-16 text-green-500 mx-auto mb-4" />
+      <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
         Welcome{isAdmin ? ' Admin' : ''}, {user.name}!
       </h2>
       <p className="text-gray-600 mb-6">You're ready to post your ad</p>
-      <button onClick={onNext} className="btn-primary">
+      <button type="button" onClick={onNext} className="btn-primary">
         Continue
       </button>
     </div>
   )
 }
 
-// Step 2: Cascading Category Selection (hierarchical, dynamic labels)
+const CATEGORY_CARD_THEMES = [
+  { pattern: /\b(motor|vehicle|car|auto)\b/i, bg: '#FFF8E6', ring: 'ring-amber-300', iconClass: 'text-amber-500', Icon: Car },
+  { pattern: /\b(property|real estate|villa|apartment|home)\b/i, bg: '#EBF6FF', ring: 'ring-sky-300', iconClass: 'text-sky-500', Icon: Building2 },
+  { pattern: /\b(fashion|clothing|accessories)\b/i, bg: '#FFF0F6', ring: 'ring-pink-300', iconClass: 'text-pink-500', Icon: Shirt },
+  { pattern: /\b(furniture|garden|home decor)\b/i, bg: '#EDFAF3', ring: 'ring-emerald-300', iconClass: 'text-emerald-600', Icon: Sofa },
+  { pattern: /\b(classified|general|other)\b/i, bg: '#FFF3EB', ring: 'ring-orange-300', iconClass: 'text-orange-500', Icon: Newspaper },
+  { pattern: /\b(mobile|tablet)\b/i, bg: '#EEF2FF', ring: 'ring-indigo-300', iconClass: 'text-indigo-500', Icon: Smartphone },
+  { pattern: /\b(electronics|phone|laptop|gaming|computer)\b/i, bg: '#F0F1FA', ring: 'ring-violet-300', iconClass: 'text-violet-500', Icon: Smartphone },
+]
+
+function getCategoryCardTheme(name) {
+  const match = CATEGORY_CARD_THEMES.find((item) => item.pattern.test(name || ''))
+  return match || { bg: '#F4F6F8', ring: 'ring-slate-300', iconClass: 'text-slate-500', Icon: LayoutGrid }
+}
+
+function CategoryPickerCard({ category, selected, onSelect }) {
+  const theme = getCategoryCardTheme(category?.name)
+  const Icon = theme.Icon
+  const imageSrc = getCategoryImageUrl(category)
+  const [imageFailed, setImageFailed] = useState(false)
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(category._id)}
+      style={{ backgroundColor: theme.bg }}
+      className={`group relative flex aspect-[1.05/1] w-full min-w-0 flex-col justify-between rounded-xl p-4 text-left transition-all sm:rounded-2xl sm:p-5 md:p-6 ${
+        selected
+          ? `ring-2 ${theme.ring} shadow-sm scale-[1.02]`
+          : 'hover:shadow-md hover:scale-[1.01]'
+      }`}
+    >
+      <div className="flex items-start justify-start">
+        {imageSrc && !imageFailed ? (
+          <img
+            src={imageSrc}
+            alt=""
+            className="h-10 w-10 sm:h-11 sm:w-11 object-contain"
+            onError={() => setImageFailed(true)}
+          />
+        ) : (
+          <Icon className={`h-10 w-10 sm:h-11 sm:w-11 ${theme.iconClass}`} strokeWidth={2} />
+        )}
+      </div>
+      <span className="text-[15px] sm:text-base font-medium text-gray-800 leading-snug">
+        {category.name}
+      </span>
+    </button>
+  )
+}
+
+// Step 2: Category grid — tap a card to continue to the next step
 function Step2Category({
   levelOptions,
   selectedPath,
-  levelLabels,
-  onLevelChange,
+  onCategorySelect,
+  onContinue,
+  onBack,
   loadingLevels,
   register,
-  setValue,
   errors,
 }) {
-  const MAX_CATEGORY_LEVEL_INDEX = 1 // Two levels only: category (0) + subcategory (1)
-  const visibleLevelOptions = Array.isArray(levelOptions) ? levelOptions.slice(0, MAX_CATEGORY_LEVEL_INDEX + 1) : []
+  const rootOptions = levelOptions[0] || []
+  const rootId = selectedPath[0] || ''
 
   return (
-    <div className="card">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Select Category</h2>
-      <div className="space-y-4">
-        {visibleLevelOptions.map((options, levelIndex) => {
-          const label = levelLabels[levelIndex] ?? `Level ${levelIndex + 1}`
-          const value = selectedPath[levelIndex] || ''
-          const isFirst = levelIndex === 0
-          const optionList = options || []
-          return (
-            <div key={levelIndex}>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                {label} {isFirst ? <span className="text-red-500">*</span> : null}
-              </label>
-              <select
-                value={value}
-                onChange={(e) => {
-                  const id = e.target.value || ''
-                  onLevelChange(levelIndex, id)
-                }}
-                className="input-field"
-                disabled={isFirst && loadingLevels}
-              >
-                <option value="">
-                  {isFirst && loadingLevels ? 'Loading...' : `Select ${label.toLowerCase()}`}
-                </option>
-                {optionList.map((cat) => (
-                  <option key={cat._id} value={cat._id}>
-                    {cat.emoji ? `${cat.emoji} ` : ''}{cat.name}
-                  </option>
-                ))}
-              </select>
-              {isFirst && errors.category && (
-                <p className="mt-1 text-sm text-red-600">{errors.category.message}</p>
-              )}
-            </div>
-          )
-        })}
-        <p className="mt-2 text-xs text-gray-500">
-          ⚠️ Category cannot be changed after posting. Wrong category = rejection.
-        </p>
-        <input type="hidden" {...register('category', { required: 'Category is required' })} />
-        <input type="hidden" {...register('subcategory')} />
-        <input type="hidden" {...register('childCategory')} />
+    <div className="post-ad-step-shell-wide items-center justify-center">
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="self-start mb-6 inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-800"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Back
+        </button>
+      )}
+      <div className="text-center mb-8 sm:mb-10 md:mb-12 w-full">
+        <h2 className="post-ad-step-heading">Let&apos;s get started!</h2>
+        <p className="post-ad-step-subheading">Select the area that suits your ad best.</p>
       </div>
+
+      {loadingLevels && !rootOptions.length ? (
+        <div className="flex justify-center py-16 sm:py-20">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        </div>
+      ) : (
+        <div className="grid w-full max-w-[840px] grid-cols-1 min-[420px]:grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 md:gap-5 lg:gap-6">
+          {rootOptions.map((cat) => (
+            <CategoryPickerCard
+              key={cat._id}
+              category={cat}
+              selected={String(rootId) === String(cat._id)}
+              onSelect={onCategorySelect}
+            />
+          ))}
+        </div>
+      )}
+
+      {errors.category && (
+        <p className="mt-6 text-center text-sm text-red-600">{errors.category.message}</p>
+      )}
+
+      <input type="hidden" {...register('category', { required: 'Category is required' })} />
+      <input type="hidden" {...register('subcategory')} />
+      <input type="hidden" {...register('childCategory')} />
     </div>
+  )
+}
+
+function Step2Subcategory({
+  rootCategoryName,
+  subcategories,
+  selectedSubcategoryId,
+  onSubcategorySelect,
+  onBack,
+  loading,
+  register,
+  errors,
+}) {
+  return (
+    <div className="post-ad-step-shell-narrow">
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="self-start mb-8 inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-800"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Back
+        </button>
+      )}
+
+      <nav className="mb-6 flex items-center gap-2 text-sm text-gray-500" aria-label="Breadcrumb">
+        <Home className="h-4 w-4 shrink-0" aria-hidden />
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden />
+        <span className="font-medium text-gray-800">{rootCategoryName || 'Category'}</span>
+      </nav>
+
+      <div className="text-center mb-6 sm:mb-8 w-full">
+        <h2 className="post-ad-step-heading">Now choose the right category for your ad</h2>
+        <p className="post-ad-step-subheading">Select the area that suits your ad best.</p>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-primary-600" />
+        </div>
+      ) : subcategories.length === 0 ? (
+        <p className="text-center text-sm text-gray-500 py-8">No subcategories available. Go back and pick another category.</p>
+      ) : (
+        <ul className="w-full divide-y divide-gray-200 border-t border-gray-200">
+          {subcategories.map((sub) => {
+            const isSelected = String(selectedSubcategoryId) === String(sub._id)
+            return (
+              <li key={sub._id}>
+                <button
+                  type="button"
+                  onClick={() => onSubcategorySelect(sub._id)}
+                  className={`flex w-full items-center justify-between py-4 text-left transition ${
+                    isSelected ? 'text-primary-700 font-semibold' : 'text-gray-900 hover:text-primary-700'
+                  }`}
+                >
+                  <span className="text-base sm:text-[17px] md:text-lg pr-2">{sub.name}</span>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {errors.subcategory && (
+        <p className="mt-4 text-center text-sm text-red-600">{errors.subcategory.message}</p>
+      )}
+
+      <input type="hidden" {...register('subcategory')} />
+    </div>
+  )
+}
+
+const POST_AD_BLUE = '#2563eb'
+const POST_AD_NAVY = '#1e3a5f'
+const POST_AD_INPUT =
+  'w-full rounded-xl border-0 bg-[#eef0f6] px-4 py-3.5 text-[15px] text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563eb]/25 focus:outline-none'
+
+const VIDEO_TIPS = [
+  'Show the item from multiple angles',
+  'Zoom in on important details',
+  'Speak clearly and naturally',
+  'Keep it under 2 minutes',
+  'Use good lighting for a clear view',
+]
+
+function getListingDetailsHeading(categoryName = '', subcategoryName = '') {
+  const combined = `${categoryName} ${subcategoryName}`.toLowerCase()
+  if (/motor|vehicle|car|auto/.test(combined)) return 'Tell us about your car'
+  if (/property|apartment|villa|real estate|home/.test(combined)) return 'Tell us about your property'
+  return 'Tell us about your listing'
+}
+
+function PostAdListingBreadcrumb({ items = [] }) {
+  return (
+    <nav className="mb-6 sm:mb-8 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500" aria-label="Breadcrumb">
+      <Home className="h-4 w-4 shrink-0 text-gray-500" aria-hidden />
+      {items.map((name, i) => (
+        <span key={`${name}-${i}`} className="inline-flex items-center gap-2">
+          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden />
+          <span className={i === items.length - 1 ? 'font-medium text-gray-800' : 'text-gray-500'}>
+            {name}
+          </span>
+        </span>
+      ))}
+    </nav>
   )
 }
 
@@ -196,11 +390,15 @@ function Step3VideoUpload({
   videoFile,
   setVideoFile,
   setValue,
+  getValues,
   watch,
   register,
+  errors,
   selectedCategory,
   subcategories,
   categories,
+  breadcrumbItems = [],
+  onBack,
   onNext,
   imageFiles,
   setImageFiles,
@@ -213,18 +411,32 @@ function Step3VideoUpload({
   aiListingUserOverrides,
   setAiListingUserOverrides,
 }) {
+  const navigate = useNavigate()
+  const dispatch = useDispatch()
+  const isAuthenticated = useSelector(selectIsAuthenticated)
   const [isProcessing, setIsProcessing] = useState(false)
+  const [uploadStage, setUploadStage] = useState('idle') // idle | uploading | uploaded | transcribing | ready
   const [transcript, setTranscript] = useState('')
   const [extractedData, setExtractedData] = useState(null)
   const [screenshots, setScreenshots] = useState([])
   const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false)
+  const [tipIndex, setTipIndex] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => {
+      setTipIndex((i) => (i + 1) % VIDEO_TIPS.length)
+    }, 4500)
+    return () => clearInterval(id)
+  }, [])
   const videoRef = useRef(null)
+  const captureVideoInputRef = useRef(null)
   const savedVideoPositionRef = useRef(null)
   const videoPreviewSrc = useVideoPreviewSrc(videoFile)
 
-  // Get current category name to show vehicle-specific prompt
-  const selectedCategoryObjForPrompt = categories.find(cat => cat._id === selectedCategory)
+  const selectedCategoryObjForPrompt = categories.find((cat) => String(cat._id) === String(selectedCategory))
   const categoryNameForPrompt = selectedCategoryObjForPrompt?.name || ''
+  const subcategoryNameForPrompt =
+    subcategories?.find((sub) => String(sub._id) === String(watch('subcategory')))?.name || ''
+  const pageHeading = getListingDetailsHeading(categoryNameForPrompt, subcategoryNameForPrompt)
 
   const handleVideoUpload = async (e) => {
     const file = e.target.files[0]
@@ -245,6 +457,7 @@ function Step3VideoUpload({
         
         setVideoFile(file)
         setValue('video', file)
+        setUploadStage('uploading')
 
         // Enforce minimum duration client-side to provide fast feedback.
         // Backend will enforce too, but this prevents wasted uploads.
@@ -270,7 +483,12 @@ function Step3VideoUpload({
           }
         })
 
-        if (!durationValid) return
+        if (!durationValid) {
+          setUploadStage('idle')
+          return
+        }
+
+        setUploadStage('uploaded')
         
         // Automatically process video for transcription
         await processVideo(file)
@@ -281,7 +499,14 @@ function Step3VideoUpload({
   }
 
   const processVideo = async (file) => {
+    if (!isAuthenticated) {
+      toast.error('Please sign in to process your video with AI.')
+      navigate('/login?target=seller', { replace: true })
+      return
+    }
+
     setIsProcessing(true)
+    setUploadStage('transcribing')
     setTranscript('')
     setExtractedData(null)
     
@@ -306,41 +531,83 @@ function Step3VideoUpload({
         {
           categoryId: rootCategoryId || '',
           subcategoryId: subcategoryId || '',
-          childCategoryId: '',
+          childCategoryId,
         }
       )
       
       console.log('Video transcription response:', response.data)
       
-      const { transcript: videoTranscript, extractedData: data, suggestedFilters, categoryValidation, errors } = response.data
+      const {
+        transcript: videoTranscript,
+        extractedData: data,
+        suggestedFilters,
+        categoryValidation,
+        vehicleEnrichment: transcriptEnrichment,
+        colorDetection,
+        errors,
+      } = response.data
       
       setTranscript(videoTranscript || '')
       setExtractedData(data || null)
+      if (colorDetection?.source === 'video_vision' && colorDetection?.exteriorColor) {
+        toast.success(`Detected exterior color from video: ${colorDetection.exteriorColor}`, {
+          id: 'color-detect',
+          duration: 4000,
+        })
+      }
+      setValue('__transcript', videoTranscript || '', { shouldDirty: false, shouldTouch: false })
+      setValue('__extractedData', data || null, { shouldDirty: false, shouldTouch: false })
 
-      // Car-specific structured extraction (display_data + filter_data + missing_fields + confidence).
+      // Vehicle-specific structured extraction via centralized AI mapping service.
       let aiPayload = null
       const isVehicleCategory = /vehicles?|motors?|cars?|auto/i.test(String(categoryName || ''))
-      if (isVehicleCategory && videoTranscript && String(videoTranscript).trim()) {
+      if (isVehicleCategory && (videoTranscript || data)) {
         try {
-          toast.loading('Extracting car specs with AI...', { id: 'ai-extract' })
-          const aiRes = await listingService.aiExtract({ input_text: String(videoTranscript) })
+          toast.loading('Enriching vehicle specifications with AI...', { id: 'ai-extract' })
+          const vehicleType = /bicycle|bike/i.test(subcategoryName) && !/motor/i.test(subcategoryName)
+            ? 'bicycles'
+            : /motorcycle|motorbike|scooter/i.test(subcategoryName)
+              ? 'motorcycles'
+              : 'cars'
+
+          const aiRes = await listingService.aiExtract({
+            input_text: videoTranscript ? String(videoTranscript) : '',
+            extracted_data: data || undefined,
+            vehicle_type: vehicleType,
+            subcategory_name: subcategoryName,
+            category_name: categoryName,
+            category_filters: getValues('__categoryFilters') || [],
+          })
           aiPayload = aiRes?.data || null
+
+          // Reuse enrichment from transcribe step when present (avoids duplicate OpenAI via server cache).
+          if (transcriptEnrichment && aiPayload && !aiPayload.enrichment) {
+            aiPayload = {
+              ...aiPayload,
+              enrichment: {
+                source: transcriptEnrichment.source,
+                confidence: transcriptEnrichment.confidence,
+                profile: transcriptEnrichment.profile,
+                vehicleSpecifications: transcriptEnrichment.vehicleSpecifications,
+                specifications: transcriptEnrichment.specifications,
+                transcription_fields: transcriptEnrichment.transcription_fields,
+                enriched_fields: transcriptEnrichment.enriched_fields,
+                not_found_fields: transcriptEnrichment.not_found_fields,
+              },
+              vehicleSpecifications: transcriptEnrichment.vehicleSpecifications,
+            }
+          }
 
           if (aiPayload) {
             setAiListingExtraction(aiPayload)
+            setValue('__aiListingExtraction', aiPayload, { shouldDirty: false, shouldTouch: false })
+            setValue(
+              '__vehicleSpecifications',
+              aiPayload.vehicleSpecifications || transcriptEnrichment?.vehicleSpecifications || null,
+              { shouldDirty: false, shouldTouch: false },
+            )
             setAiListingConfidence(aiPayload?.confidence || {})
             setAiListingMissingFields(Array.isArray(aiPayload?.missing_fields) ? aiPayload.missing_fields : [])
-
-            // Pre-fill override-only fields.
-            setAiListingUserOverrides((prev) => ({
-              ...prev,
-              engine_cc:
-                aiPayload?.filter_data?.engine_cc ?? aiPayload?.display_data?.engine_cc ?? prev.engine_cc,
-              horsepower:
-                aiPayload?.filter_data?.horsepower ?? aiPayload?.display_data?.horsepower ?? prev.horsepower,
-              accident_free:
-                aiPayload?.filter_data?.accident_free ?? aiPayload?.display_data?.accident_free ?? prev.accident_free,
-            }))
           }
         } catch (e) {
           // eslint-disable-next-line no-console
@@ -361,14 +628,19 @@ function Step3VideoUpload({
       }
 
       if (suggestedFilters?.selections) {
-        setValue('__suggestedFilters', suggestedFilters.selections, { shouldDirty: false, shouldTouch: false })
-        console.log('[PostAd] Suggested filter selections from transcript:', suggestedFilters.selections)
+        const categoryFilterList = getValues('__categoryFilters') || []
+        const sanitizedSelections = omitAdsPostedFromSelections(
+          suggestedFilters.selections,
+          categoryFilterList,
+        )
+        setValue('__suggestedFilters', sanitizedSelections, { shouldDirty: false, shouldTouch: false })
+        console.log('[PostAd] Suggested filter selections from transcript:', sanitizedSelections)
 
         // Also pre-set filter values directly in the form so they're available at submission
         // even before the filter dropdowns load in Step 4.
-        Object.entries(suggestedFilters.selections).forEach(([key, value]) => {
+        Object.entries(sanitizedSelections).forEach(([key, value]) => {
           if (key.startsWith('filter_') && value) {
-            setValue(key, value, { shouldDirty: true, shouldTouch: true })
+            setValue(key, mergeFilterValues(getValues(key), value), { shouldDirty: true, shouldTouch: true })
           }
         })
 
@@ -386,6 +658,10 @@ function Step3VideoUpload({
         if (errors.extraction) {
           console.error('Extraction error:', errors.extraction)
           toast.error(`Data extraction failed: ${errors.extraction}`, { duration: 5000 })
+        }
+        if (errors.enrichment) {
+          console.warn('Vehicle enrichment error:', errors.enrichment)
+          toast.error(`Vehicle spec enrichment failed: ${errors.enrichment}`, { duration: 5000 })
         }
       }
       
@@ -479,7 +755,7 @@ function Step3VideoUpload({
           // Only set if it matches one of the valid options
           const validConditions = ['Brand New', 'Like New', 'Good', 'Fair', 'Poor']
           if (validConditions.includes(mappedCondition)) {
-            setValue('condition', mappedCondition)
+            setValue('condition', [mappedCondition])
           }
         }
         
@@ -489,16 +765,16 @@ function Step3VideoUpload({
         //   so also populate vehicle-specific `make`.
         if (data.brand) {
           const brandVal = String(data.brand).trim()
-          const options = getBrandOptionsForCategory(categoryName, subcategoryName) || []
+          const categoryFieldKey = resolveCategoryKeyForFields(categoryName)
+          const options = getBrandOptionsForCategory(categoryFieldKey, subcategoryName) || []
 
           // Generic brand (for all categories)
           setValue('brand', brandVal)
           if (options.length > 0) {
-            if (options.includes(brandVal)) setValue('brandChoice', brandVal)
-            else setValue('brandChoice', 'Other')
+            if (options.includes(brandVal)) setValue('brandChoice', [brandVal])
+            else setValue('brandChoice', ['Other'])
           } else {
-            // Keep brandChoice in sync even when options are empty (prevents UI mismatch later)
-            setValue('brandChoice', brandVal)
+            setValue('brandChoice', [brandVal])
           }
 
           // Vehicles: also set `make` when brand is present.
@@ -507,9 +783,15 @@ function Step3VideoUpload({
           }
         }
         
-        // Color
-        if (data.color) {
-          setValue('color', data.color)
+        // Color — prefer video vision when transcript did not mention color; do not overwrite user edits.
+        if (data.color && (!getValues('color') || data.colorSource === 'video_vision')) {
+          setValue('color', String(data.color).trim())
+        }
+        if (
+          data.interiorColor &&
+          (!getValues('interiorColor') || data.interiorColorSource === 'video_vision')
+        ) {
+          setValue('interiorColor', String(data.interiorColor).trim())
         }
         
         // Material
@@ -652,209 +934,124 @@ function Step3VideoUpload({
           }
         })
 
-        // Apply AI extractor (takes precedence over heuristic GPT transcript values).
+        // Apply centralized AI vehicle mapping (takes precedence over heuristic transcript values).
         if (aiPayload) {
-          const aiDisplay = aiPayload?.display_data || {}
-          const aiFilter = aiPayload?.filter_data || {}
+          applyAiVehicleFormPrefill({
+            setValue,
+            getValues,
+            mappingResult: aiPayload,
+            context: {
+              categoryName,
+              subcategoryName,
+              isVehicle,
+            },
+            onOverrides: (overrides) => {
+              setAiListingUserOverrides((prev) => ({ ...prev, ...overrides }))
+            },
+          })
 
-          const getAiField = (k) => (aiDisplay[k] !== undefined ? aiDisplay[k] : aiFilter[k]) ?? null
-
-          const normalizeToOption = (raw, options) => {
-            if (raw === null || raw === undefined) return null
-            const r = String(raw).trim().toLowerCase()
-            if (!r) return null
-            const match = options.find((opt) => String(opt).trim().toLowerCase() === r)
-            if (match) return match
-            // Handle normalized enum values like "semi_automatic"
-            const normalized = r.replace(/[\s\-_]+/g, '_')
-            const match2 = options.find((opt) => String(opt).trim().toLowerCase().replace(/[\s\-_]+/g, '_') === normalized)
-            return match2 || null
-          }
-
-          const transmissionOptions = ['Manual', 'Automatic', 'CVT', 'Semi-Automatic']
-          const fuelTypeOptions = ['Petrol', 'Diesel', 'Electric', 'Hybrid', 'CNG', 'LPG', 'Other']
-          const bodyTypeOptions = ['Sedan', 'SUV', 'Hatchback', 'Coupe', 'Convertible', 'Wagon', 'Pickup']
-          const currencyVal = getAiField('currency')
-
-          const brandVal = getAiField('brand')
-          if (brandVal) {
-            const brandStr = String(brandVal).trim()
-            setValue('brand', brandStr)
-            if (isVehicle) setValue('make', brandStr)
-
-            const brandOptions = getBrandOptionsForCategory(categoryName, subcategoryName) || []
-            if (brandOptions.includes(brandStr)) {
-              setValue('brandChoice', brandStr)
-            } else {
-              setValue('brandChoice', 'Other')
-            }
-          }
-
-          const modelVal = getAiField('model')
-          if (modelVal) setValue('model', String(modelVal).trim())
-
-          const yearVal = getAiField('year')
-          if (yearVal !== null && yearVal !== undefined && yearVal !== '') setValue('year', Number(yearVal))
-
-          const priceVal = getAiField('price')
-          if (priceVal !== null && priceVal !== undefined && priceVal !== '') setValue('price', Number(priceVal))
-
-          if (currencyVal) setValue('currency', String(currencyVal).trim().toUpperCase())
-
-          const locationCityVal = getAiField('location_city')
-          if (locationCityVal) setValue('city', String(locationCityVal).trim())
-
-          const mileageVal = getAiField('mileage_km')
-          if (mileageVal !== null && mileageVal !== undefined && mileageVal !== '') setValue('mileage', Number(mileageVal))
-
-          const engineCcVal = getAiField('engine_cc')
-          if (engineCcVal !== null && engineCcVal !== undefined && engineCcVal !== '') {
-            const n = Number(engineCcVal)
-            if (!Number.isNaN(n) && Number.isFinite(n)) {
-              setValue('engineSize', `${n}cc`)
-              setAiListingUserOverrides((prev) => ({ ...prev, engine_cc: n }))
-            } else {
-              setValue('engineSize', String(engineCcVal).trim())
-              setAiListingUserOverrides((prev) => ({ ...prev, engine_cc: engineCcVal }))
-            }
-          }
-
-          const txVal = getAiField('transmission')
-          const txOpt = normalizeToOption(txVal, transmissionOptions)
-          if (txOpt) setValue('transmission', txOpt)
-
-          const fuelVal = getAiField('fuel_type')
-          const fuelOpt = normalizeToOption(fuelVal, fuelTypeOptions)
-          if (fuelOpt) setValue('fuelType', fuelOpt)
-
-          const bodyVal = getAiField('body_type')
-          const bodyOpt = normalizeToOption(bodyVal, bodyTypeOptions)
-          if (bodyOpt) setValue('bodyType', bodyOpt)
-
-          const conditionVal = getAiField('condition')
-          const conditionOpt = normalizeToOption(conditionVal, CONDITION_OPTIONS)
-          if (conditionOpt) setValue('condition', conditionOpt)
-
-          const accidentFreeVal = getAiField('accident_free')
-          if (accidentFreeVal !== null && accidentFreeVal !== undefined) {
-            setAiListingUserOverrides((prev) => ({ ...prev, accident_free: accidentFreeVal }))
-          }
-
-          const horsepowerVal = getAiField('horsepower')
-          if (horsepowerVal !== null && horsepowerVal !== undefined && horsepowerVal !== '') {
-            const n = Number(horsepowerVal)
-            if (!Number.isNaN(n) && Number.isFinite(n)) {
-              setAiListingUserOverrides((prev) => ({ ...prev, horsepower: n }))
-            }
+          // Apply server-computed filter dropdown selections (exact DB option values).
+          if (aiPayload.filter_selections && typeof aiPayload.filter_selections === 'object') {
+            const sanitizedAiFilters = omitAdsPostedFromSelections(
+              aiPayload.filter_selections,
+              getValues('__categoryFilters') || [],
+            )
+            Object.entries(sanitizedAiFilters).forEach(([key, value]) => {
+              if (key.startsWith('filter_') && value) {
+                const incoming = Array.isArray(value) ? value : [value]
+                setValue(key, mergeFilterValues(getValues(key), incoming), {
+                  shouldDirty: true,
+                  shouldTouch: true,
+                })
+              }
+            })
           }
         }
-        
+
+        // Category filters load at Step 2, but transcription runs at Step 3 — apply filter values now.
+        applyTranscriptFilterSelections({
+          filters: getValues('__categoryFilters') || [],
+          getValues,
+          setValue,
+          suggestedFilters: omitAdsPostedFromSelections(
+            suggestedFilters?.selections || {},
+            getValues('__categoryFilters') || [],
+          ),
+          extractedData: data,
+          aiExtraction: aiPayload,
+          transcript: videoTranscript,
+        })
+
         toast.success('Video processed! Form fields have been auto-filled.', { id: 'transcribe' })
       } else {
-        // Apply AI extractor values even if heuristic transcript extraction didn't return `extractedData`.
+        // Apply AI mapping even if heuristic transcript extraction didn't return extractedData.
         if (aiPayload) {
-          const aiDisplay = aiPayload?.display_data || {}
-          const aiFilter = aiPayload?.filter_data || {}
+          applyAiVehicleFormPrefill({
+            setValue,
+            getValues,
+            mappingResult: aiPayload,
+            context: {
+              categoryName,
+              subcategoryName,
+              isVehicle: isVehicleCategory,
+            },
+            onOverrides: (overrides) => {
+              setAiListingUserOverrides((prev) => ({ ...prev, ...overrides }))
+            },
+          })
 
-          const getAiField = (k) => (aiDisplay[k] !== undefined ? aiDisplay[k] : aiFilter[k]) ?? null
-
-          const normalizeToOption = (raw, options) => {
-            if (raw === null || raw === undefined) return null
-            const r = String(raw).trim().toLowerCase()
-            if (!r) return null
-            const match = options.find((opt) => String(opt).trim().toLowerCase() === r)
-            if (match) return match
-            const normalized = r.replace(/[\s\-_]+/g, '_')
-            const match2 = options.find(
-              (opt) => String(opt).trim().toLowerCase().replace(/[\s\-_]+/g, '_') === normalized
+          if (aiPayload.filter_selections && typeof aiPayload.filter_selections === 'object') {
+            const sanitizedAiFilters = omitAdsPostedFromSelections(
+              aiPayload.filter_selections,
+              getValues('__categoryFilters') || [],
             )
-            return match2 || null
-          }
-
-          const transmissionOptions = ['Manual', 'Automatic', 'CVT', 'Semi-Automatic']
-          const fuelTypeOptions = ['Petrol', 'Diesel', 'Electric', 'Hybrid', 'CNG', 'LPG', 'Other']
-          const bodyTypeOptions = ['Sedan', 'SUV', 'Hatchback', 'Coupe', 'Convertible', 'Wagon', 'Pickup']
-          const currencyVal = getAiField('currency')
-
-          const brandVal = getAiField('brand')
-          if (brandVal) {
-            const brandStr = String(brandVal).trim()
-            setValue('brand', brandStr)
-            if (isVehicleCategory) setValue('make', brandStr)
-
-            const brandOptions = getBrandOptionsForCategory(categoryName, subcategoryName) || []
-            if (brandOptions.includes(brandStr)) {
-              setValue('brandChoice', brandStr)
-            } else {
-              setValue('brandChoice', 'Other')
-            }
-          }
-
-          const modelVal = getAiField('model')
-          if (modelVal) setValue('model', String(modelVal).trim())
-
-          const yearVal = getAiField('year')
-          if (yearVal !== null && yearVal !== undefined && yearVal !== '') setValue('year', Number(yearVal))
-
-          const priceVal = getAiField('price')
-          if (priceVal !== null && priceVal !== undefined && priceVal !== '') setValue('price', Number(priceVal))
-
-          if (currencyVal) setValue('currency', String(currencyVal).trim().toUpperCase())
-
-          const locationCityVal = getAiField('location_city')
-          if (locationCityVal) setValue('city', String(locationCityVal).trim())
-
-          const mileageVal = getAiField('mileage_km')
-          if (mileageVal !== null && mileageVal !== undefined && mileageVal !== '') setValue('mileage', Number(mileageVal))
-
-          const engineCcVal = getAiField('engine_cc')
-          if (engineCcVal !== null && engineCcVal !== undefined && engineCcVal !== '') {
-            const n = Number(engineCcVal)
-            if (!Number.isNaN(n) && Number.isFinite(n)) {
-              setValue('engineSize', `${n}cc`)
-              setAiListingUserOverrides((prev) => ({ ...prev, engine_cc: n }))
-            } else {
-              setValue('engineSize', String(engineCcVal).trim())
-              setAiListingUserOverrides((prev) => ({ ...prev, engine_cc: engineCcVal }))
-            }
-          }
-
-          const txVal = getAiField('transmission')
-          const txOpt = normalizeToOption(txVal, transmissionOptions)
-          if (txOpt) setValue('transmission', txOpt)
-
-          const fuelVal = getAiField('fuel_type')
-          const fuelOpt = normalizeToOption(fuelVal, fuelTypeOptions)
-          if (fuelOpt) setValue('fuelType', fuelOpt)
-
-          const bodyVal = getAiField('body_type')
-          const bodyOpt = normalizeToOption(bodyVal, bodyTypeOptions)
-          if (bodyOpt) setValue('bodyType', bodyOpt)
-
-          const conditionVal = getAiField('condition')
-          const conditionOpt = normalizeToOption(conditionVal, CONDITION_OPTIONS)
-          if (conditionOpt) setValue('condition', conditionOpt)
-
-          const accidentFreeVal = getAiField('accident_free')
-          if (accidentFreeVal !== null && accidentFreeVal !== undefined) {
-            setAiListingUserOverrides((prev) => ({ ...prev, accident_free: accidentFreeVal }))
-          }
-
-          const horsepowerVal = getAiField('horsepower')
-          if (horsepowerVal !== null && horsepowerVal !== undefined && horsepowerVal !== '') {
-            const n = Number(horsepowerVal)
-            if (!Number.isNaN(n) && Number.isFinite(n)) {
-              setAiListingUserOverrides((prev) => ({ ...prev, horsepower: n }))
-            }
+            Object.entries(sanitizedAiFilters).forEach(([key, value]) => {
+              if (key.startsWith('filter_') && value) {
+                const incoming = Array.isArray(value) ? value : [value]
+                setValue(key, mergeFilterValues(getValues(key), incoming), {
+                  shouldDirty: true,
+                  shouldTouch: true,
+                })
+              }
+            })
           }
         }
+
+        applyTranscriptFilterSelections({
+          filters: getValues('__categoryFilters') || [],
+          getValues,
+          setValue,
+          suggestedFilters: omitAdsPostedFromSelections(
+            suggestedFilters?.selections || {},
+            getValues('__categoryFilters') || [],
+          ),
+          extractedData: data,
+          aiExtraction: aiPayload,
+          transcript: videoTranscript,
+        })
+
         toast.success('Video transcribed successfully!', { id: 'transcribe' })
       }
+
+      setUploadStage('ready')
     } catch (error) {
       console.error('Error processing video:', error)
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to process video'
-      // Transcription is optional; failure should not block posting.
       toast.dismiss('transcribe')
+      toast.dismiss('ai-extract')
+
+      if (error.response?.status === 401) {
+        dispatch(clearSession())
+        localStorage.removeItem('token')
+        localStorage.removeItem('user')
+        localStorage.removeItem('permissions')
+        toast.error('Your session has expired. Please sign in again to use AI video extraction.')
+        navigate('/login?target=seller', { replace: true })
+        return
+      }
+
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to process video'
+      toast.error(errorMessage, { duration: 5000 })
+      setUploadStage('uploaded')
     } finally {
       setIsProcessing(false)
     }
@@ -863,6 +1060,7 @@ function Step3VideoUpload({
   const removeVideo = () => {
     setVideoFile(null)
     setValue('video', null)
+    setUploadStage('idle')
     setTranscript('')
     setExtractedData(null)
     setScreenshots([])
@@ -876,6 +1074,9 @@ function Step3VideoUpload({
     })
     setValue('__suggestedFilters', null, { shouldDirty: false, shouldTouch: false })
     setValue('__suggestedFilterData', null, { shouldDirty: false, shouldTouch: false })
+    setValue('__extractedData', null, { shouldDirty: false, shouldTouch: false })
+    setValue('__transcript', '', { shouldDirty: false, shouldTouch: false })
+    setValue('__aiListingExtraction', null, { shouldDirty: false, shouldTouch: false })
     // Remove screenshot images from imageFiles
     setImageFiles(prev => prev.filter(file => !file.isScreenshot))
   }
@@ -903,8 +1104,7 @@ function Step3VideoUpload({
       const response = await videoService.captureScreenshot(videoFile, currentTime)
       const { screenshot } = response.data
 
-      const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5002/api'
-      const BASE_URL = API_URL.replace('/api', '')
+      const BASE_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5002'
       const screenshotUrl = screenshot.url.startsWith('http') 
         ? screenshot.url 
         : `${BASE_URL}${screenshot.url}`
@@ -1007,12 +1207,21 @@ function Step3VideoUpload({
   }
 
   const handleContinue = () => {
-    if (!videoFile) {
-      toast.error('Please upload a video first')
+    const title = (watch('title') || '').trim()
+    const description = (watch('description') || '').trim()
+    if (title.length < 10) {
+      toast.error('Title must be at least 10 characters')
       return
     }
-    // Check if at least one image is uploaded (excluding screenshots)
-    const nonScreenshotImages = imageFiles.filter(file => !file.isScreenshot)
+    if (description.length < 30) {
+      toast.error('Description must be at least 30 characters')
+      return
+    }
+    if (!videoFile) {
+      toast.error('Please upload or capture a video')
+      return
+    }
+    const nonScreenshotImages = imageFiles.filter((file) => !file.isScreenshot)
     if (nonScreenshotImages.length === 0 && screenshots.length === 0) {
       toast.error('Please upload at least 1 image or capture a screenshot')
       return
@@ -1020,112 +1229,155 @@ function Step3VideoUpload({
     onNext()
   }
 
+  const currentTipText = VIDEO_TIPS[tipIndex % VIDEO_TIPS.length]
+
   return (
-    <div className="card space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Upload Video</h2>
-
-      {/* Description Guide — read-only helper text */}
-      <div className="border border-gray-200 rounded-lg bg-gray-50 p-4 space-y-3">
-        <p className="text-sm font-semibold text-gray-900">Description Guide</p>
-        <ul className="text-sm text-gray-700 list-disc list-inside space-y-1.5">
-          <li><strong>What is it?</strong> — name, brand, model, or item type</li>
-          <li><strong>Condition</strong> — new, used, refurbished, mention any issues</li>
-          <li><strong>Key features</strong> — specs, size, material, highlights</li>
-          <li><strong>Usage or history</strong> — age, mileage, ownership details</li>
-          <li><strong>What&apos;s included</strong> — accessories, box, warranty, extras</li>
-          <li><strong>Price</strong> — asking price and if negotiable</li>
-          <li><strong>Location</strong> — pickup or shipping area</li>
-          <li><strong>Reason for selling</strong> (optional)</li>
-          <li>Anything else buyers should know</li>
-        </ul>
-      </div>
-
-      {/* Tips for a great video — static tips */}
-      <div className="border border-gray-200 rounded-lg bg-gray-50 p-4 space-y-2">
-        <p className="text-sm font-semibold text-gray-900">🎥 Tips for a great video:</p>
-        <ul className="text-sm text-gray-700 space-y-1.5">
-          <li className="flex items-start gap-2"><span className="text-green-600 font-medium">✔</span> Show the item from multiple angles</li>
-          <li className="flex items-start gap-2"><span className="text-green-600 font-medium">✔</span> Zoom in on important details</li>
-          <li className="flex items-start gap-2"><span className="text-green-600 font-medium">✔</span> Speak clearly and naturally</li>
-          <li className="flex items-start gap-2"><span className="text-green-600 font-medium">✔</span> Keep it under 60–90 seconds</li>
-        </ul>
-      </div>
-
-      {/* Vehicle-specific recording prompt */}
-      {categoryNameForPrompt === 'Vehicles' && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-yellow-900 flex items-center gap-2">
-              <span className="text-lg">🎥</span>
-              <span>Record Your Car Video</span>
-            </p>
-            <p className="mt-1 text-xs text-yellow-800">
-              Show the car and clearly talk through the points below. Our system will auto-create your ad from the video.
-            </p>
-          </div>
-          <div>
-            <p className="text-xs font-medium text-yellow-900 mb-1">Checklist (keep this visible while recording):</p>
-            <ul className="text-xs text-yellow-900 list-disc list-inside space-y-1">
-              <li>Brand, model &amp; year</li>
-              <li>Mileage (show odometer)</li>
-              <li>Engine &amp; transmission</li>
-              <li>Market spec (GCC / US / EU)</li>
-              <li>Damages (or say “no damages”)</li>
-              <li>Interior &amp; features</li>
-              <li>Boot space &amp; extras</li>
-              <li>Price &amp; location</li>
-              <li>Any additional information</li>
-            </ul>
-          </div>
-        </div>
+    <div className="post-ad-step-shell-narrow pb-32 sm:pb-36">
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="self-start mb-6 inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-800"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Back
+        </button>
       )}
 
-      {!videoFile && (
+      <div className="text-center mb-5 sm:mb-6 w-full">
+        <h2 className="post-ad-step-heading">{pageHeading}</h2>
+        <p className="post-ad-step-subheading">Select the area that suits your ad best.</p>
+      </div>
+
+      <PostAdListingBreadcrumb items={breadcrumbItems} />
+
+      <div className="space-y-5 sm:space-y-6 w-full">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Video <span className="text-red-500">*</span> (Required)
+          <label className="block text-sm font-medium text-gray-800 mb-2">
+            Title<span className="text-red-500">*</span>
           </label>
-            <label className="flex flex-col items-center justify-center w-full h-64 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
-              <div className="flex flex-col items-center justify-center pt-5 pb-6">
-              <Upload className="w-10 h-10 mb-3 text-gray-400" />
-                <p className="mb-2 text-sm text-gray-500">
-                <span className="font-semibold">Click to upload video</span> or drag and drop
-                </p>
-              <p className="text-xs text-gray-500">MP4, MOV, AVI, MKV, WebM (MAX. 20MB)</p>
-              </div>
+          <div className="relative">
+            <input
+              type="text"
+              {...register('title', {
+                required: 'Title is required',
+                minLength: { value: 10, message: 'Title must be at least 10 characters' },
+              })}
+              className={`${POST_AD_INPUT} pr-11`}
+              placeholder="Enter product title"
+            />
+            <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
+          </div>
+          {errors?.title && <p className="mt-1.5 text-sm text-red-600">{errors.title.message}</p>}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-800 mb-2">
+            Description<span className="text-red-500">*</span>
+          </label>
+          <textarea
+            {...register('description', {
+              required: 'Description is required',
+              minLength: { value: 30, message: 'Description must be at least 30 characters' },
+              maxLength: { value: 2500, message: 'Description must not exceed 2500 characters' },
+            })}
+            rows={6}
+            className={`${POST_AD_INPUT} resize-none min-h-[150px]`}
+            placeholder="Enter product description"
+          />
+          {errors?.description && (
+            <p className="mt-1.5 text-sm text-red-600">{errors.description.message}</p>
+          )}
+        </div>
+
+        {!videoFile ? (
+          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4">
+            <label className="flex min-h-[160px] w-full flex-1 cursor-pointer flex-col items-center justify-center rounded-2xl border border-[#2563eb] bg-white px-3 py-6 transition hover:bg-blue-50/40 sm:min-h-[180px] sm:max-h-[220px] sm:py-8 md:min-h-[200px]">
+              <UploadCloud className="mb-3 h-9 w-9 text-[#2563eb] sm:mb-4 sm:h-11 sm:w-11" strokeWidth={1.5} />
+              <span className="text-sm font-semibold text-gray-900 sm:text-[15px]">Upload Video</span>
+              <span className="mt-1 text-xs text-gray-500 sm:mt-1.5 sm:text-sm">Max video duration 2 mins</span>
               <input
                 type="file"
                 className="hidden"
-              accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,.mp4,.mov,.avi,.mkv,.webm"
+                accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,.mp4,.mov,.avi,.mkv,.webm"
                 onChange={handleVideoUpload}
-              disabled={isProcessing}
+                disabled={isProcessing}
               />
             </label>
-        </div>
-      )}
-
-      {videoFile && (
-        <div className="space-y-4">
-            <div className="relative">
-              <video
+            <span className="shrink-0 text-center text-sm font-medium text-gray-400 sm:text-left">Or</span>
+            <button
+              type="button"
+              onClick={() => captureVideoInputRef.current?.click()}
+              disabled={isProcessing}
+              className="flex min-h-[160px] w-full flex-1 flex-col items-center justify-center rounded-2xl border border-[#2563eb] bg-white px-3 py-6 transition hover:bg-blue-50/40 disabled:opacity-50 sm:min-h-[180px] sm:max-h-[220px] sm:py-8 md:min-h-[200px]"
+            >
+              <Camera className="mb-3 h-9 w-9 text-[#2563eb] sm:mb-4 sm:h-11 sm:w-11" strokeWidth={1.5} />
+              <span className="text-sm font-semibold text-gray-900 sm:text-[15px]">Capture Video</span>
+              <span className="mt-1 text-xs text-gray-500 sm:mt-1.5 sm:text-sm">Max video duration 2 mins</span>
+            </button>
+            <input
+              ref={captureVideoInputRef}
+              type="file"
+              className="hidden"
+              accept="video/*"
+              capture="environment"
+              onChange={handleVideoUpload}
+            />
+          </div>
+        ) : (
+          <div className="relative overflow-hidden rounded-2xl border border-[#2563eb] bg-black">
+            <video
               ref={videoRef}
               src={videoPreviewSrc}
-              className="w-full h-96 object-contain rounded-lg bg-black"
-                controls
-              />
-                <button
-                  type="button"
-                  onClick={removeVideo}
-              className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full hover:bg-red-600"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
+              className="max-h-[200px] w-full object-contain sm:max-h-[220px] md:max-h-[280px]"
+              controls
+            />
+            <button
+              type="button"
+              onClick={removeVideo}
+              className="absolute right-2 top-2 rounded-full bg-red-500 p-2 text-white hover:bg-red-600"
+              aria-label="Remove video"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
 
+        <div className="pt-1">
+          <p className="mb-4 text-sm text-gray-500">Tips for a great video</p>
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#eef0f6]">
+              <SwitchCamera className="h-6 w-6 text-[#2563eb]" strokeWidth={1.75} />
+            </div>
+            <p className="text-[15px] leading-snug text-gray-800">{currentTipText}</p>
+          </div>
+          <div className="mt-5 flex justify-center gap-2">
+            {VIDEO_TIPS.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                aria-label={`Tip ${i + 1}`}
+                aria-current={i === tipIndex ? 'true' : undefined}
+                onClick={() => setTipIndex(i)}
+                className={`rounded-full transition-all ${
+                  i === tipIndex ? 'h-2 w-2 bg-[#2563eb]' : 'h-2 w-2 bg-gray-300 hover:bg-gray-400'
+                }`}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {videoFile && (
+        <details className="mt-8 w-full group">
+          <summary className="cursor-pointer list-none text-sm font-medium text-[#2563eb] hover:underline [&::-webkit-details-marker]:hidden">
+            Screenshots, photos &amp; auto-fill tools
+          </summary>
+          <div className="mt-4 space-y-4">
           {/* Manual Screenshot Capture */}
           <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
+              <div className="min-w-0">
                 <p className="text-sm font-medium text-purple-900">
                   📸 Capture Screenshots
                 </p>
@@ -1137,7 +1389,7 @@ function Step3VideoUpload({
                 type="button"
                 onClick={captureScreenshot}
                 disabled={isCapturingScreenshot}
-                className="btn-primary flex items-center gap-2 px-4 py-2"
+                className="btn-primary flex w-full sm:w-auto shrink-0 items-center justify-center gap-2 px-4 py-2"
               >
                 {isCapturingScreenshot ? (
                   <>
@@ -1158,7 +1410,7 @@ function Step3VideoUpload({
                 <p className="text-xs text-purple-800 mb-2">
                   Captured Screenshots ({screenshots.length})
                 </p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {screenshots.map((screenshot) => (
                     <div
                       key={screenshot.id}
@@ -1186,19 +1438,46 @@ function Step3VideoUpload({
             )}
           </div>
 
-          {isProcessing && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <div className="flex items-center gap-3">
-                <Loader2 className="h-5 w-5 text-blue-600 animate-spin" />
-                <div>
-                  <p className="text-sm font-medium text-blue-900">Processing video...</p>
-                  <p className="text-xs text-blue-700">Transcribing and extracting information</p>
-                </div>
-              </div>
+          {(isProcessing || uploadStage !== 'idle') && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+              {[
+                { key: 'uploading', label: 'Uploading Video...', done: ['uploaded', 'transcribing', 'ready'].includes(uploadStage) },
+                { key: 'uploaded', label: 'Video Uploaded', done: ['uploaded', 'transcribing', 'ready'].includes(uploadStage) && uploadStage !== 'uploading' },
+                { key: 'transcribing', label: 'Processing Video...', active: uploadStage === 'transcribing', done: uploadStage === 'ready' },
+                { key: 'ready', label: 'Video Ready', done: uploadStage === 'ready' && !isProcessing },
+              ].map(({ key, label, active, done }) => {
+                const isActive = active || (key === 'uploading' && uploadStage === 'uploading') || (key === 'transcribing' && isProcessing)
+                const isDone = done || (key === 'uploaded' && uploadStage !== 'uploading' && uploadStage !== 'idle')
+                if (key === 'uploaded' && uploadStage === 'uploading') return null
+                if (key === 'ready' && uploadStage !== 'ready') return null
+                return (
+                  <div
+                    key={key}
+                    className={`flex items-center gap-3 text-sm ${
+                      isDone ? 'text-green-700' : isActive ? 'text-blue-900 font-medium' : 'text-gray-400'
+                    }`}
+                  >
+                    {isActive && !isDone ? (
+                      <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+                    ) : isDone ? (
+                      <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                    ) : (
+                      <div className="h-4 w-4 rounded-full border border-gray-300 flex-shrink-0" />
+                    )}
+                    <span>{label}</span>
+                    {key === 'transcribing' && isActive && (
+                      <span className="text-xs text-blue-700 font-normal">Transcribing and extracting information</span>
+                    )}
+                  </div>
+                )
+              })}
+              <p className="text-xs text-blue-600 pt-1">
+                HLS streaming files are generated in the background after you publish your listing.
+              </p>
             </div>
           )}
 
-          {transcript && !isProcessing && (
+          {transcript && !isProcessing && uploadStage === 'ready' && (
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <p className="text-sm font-medium text-green-900 mb-2">✓ Video transcribed successfully!</p>
               {extractedData && (
@@ -1221,7 +1500,7 @@ function Step3VideoUpload({
           {extractedData && !isProcessing && (
             <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
               <p className="text-sm font-medium text-gray-900 mb-2">Extracted Information:</p>
-              <div className="grid grid-cols-2 gap-2 text-xs">
+              <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
                 {extractedData.title && (
                   <div><span className="font-medium">Title:</span> {extractedData.title}</div>
                 )}
@@ -1267,6 +1546,93 @@ function Step3VideoUpload({
                   <div><span className="font-medium">Size:</span> {extractedData.size}</div>
                 )}
               </div>
+            </div>
+          )}
+
+          {aiListingExtraction?.enrichment && !isProcessing && (
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-blue-900 mb-1">
+                    Vehicle profile enriched by AI
+                  </p>
+                  <p className="text-xs text-blue-800">
+                    Source: {aiListingExtraction.enrichment.source || 'unknown'}
+                    {typeof aiListingExtraction.enrichment.confidence === 'number'
+                      ? ` · Confidence: ${aiListingExtraction.enrichment.confidence}%`
+                      : ''}
+                  </p>
+                </div>
+              </div>
+
+              {aiListingExtraction.enrichment.profile?.variant && (
+                <p className="text-sm text-blue-900">
+                  <span className="font-medium">Identified variant:</span>{' '}
+                  {aiListingExtraction.enrichment.profile.variant}
+                  {aiListingExtraction.enrichment.profile.generation
+                    ? ` (${aiListingExtraction.enrichment.profile.generation})`
+                    : ''}
+                </p>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                {(aiListingExtraction.enrichment.transcription_fields || []).length > 0 && (
+                  <div className="bg-white rounded-md border border-green-200 p-2">
+                    <p className="font-semibold text-green-800 mb-1">From transcription</p>
+                    <p className="text-green-900">
+                      {aiListingExtraction.enrichment.transcription_fields.join(', ')}
+                    </p>
+                  </div>
+                )}
+                {(aiListingExtraction.enrichment.enriched_fields || []).length > 0 && (
+                  <div className="bg-white rounded-md border border-blue-200 p-2">
+                    <p className="font-semibold text-blue-800 mb-1">AI enriched</p>
+                    <p className="text-blue-900">
+                      {aiListingExtraction.enrichment.enriched_fields.join(', ')}
+                    </p>
+                  </div>
+                )}
+                {(aiListingExtraction.enrichment.not_found_fields || []).length > 0 && (
+                  <div className="bg-white rounded-md border border-gray-200 p-2">
+                    <p className="font-semibold text-gray-700 mb-1">Not found</p>
+                    <p className="text-gray-600">
+                      {aiListingExtraction.enrichment.not_found_fields.slice(0, 12).join(', ')}
+                      {aiListingExtraction.enrichment.not_found_fields.length > 12 ? '…' : ''}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {Array.isArray(aiListingExtraction.enrichment.profile?.features) &&
+                aiListingExtraction.enrichment.profile.features.length > 0 && (
+                  <div className="text-xs text-blue-900">
+                    <span className="font-semibold">Detected features:</span>{' '}
+                    {aiListingExtraction.enrichment.profile.features.join(', ')}
+                  </div>
+                )}
+
+              {aiListingExtraction.enrichment.vehicleSpecifications && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-blue-900">
+                  {aiListingExtraction.enrichment.vehicleSpecifications.engineCapacity && (
+                    <div><span className="font-medium">Engine:</span> {aiListingExtraction.enrichment.vehicleSpecifications.engineCapacity}</div>
+                  )}
+                  {aiListingExtraction.enrichment.vehicleSpecifications.fuelType && (
+                    <div><span className="font-medium">Fuel:</span> {aiListingExtraction.enrichment.vehicleSpecifications.fuelType}</div>
+                  )}
+                  {aiListingExtraction.enrichment.vehicleSpecifications.transmission && (
+                    <div><span className="font-medium">Transmission:</span> {aiListingExtraction.enrichment.vehicleSpecifications.transmission}</div>
+                  )}
+                  {aiListingExtraction.enrichment.vehicleSpecifications.driveType && (
+                    <div><span className="font-medium">Drive:</span> {aiListingExtraction.enrichment.vehicleSpecifications.driveType}</div>
+                  )}
+                  {aiListingExtraction.enrichment.vehicleSpecifications.horsepower && (
+                    <div><span className="font-medium">Power:</span> {aiListingExtraction.enrichment.vehicleSpecifications.horsepower}</div>
+                  )}
+                  {aiListingExtraction.enrichment.vehicleSpecifications.seatingCapacity && (
+                    <div><span className="font-medium">Seats:</span> {aiListingExtraction.enrichment.vehicleSpecifications.seatingCapacity}</div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -1605,7 +1971,7 @@ function Step3VideoUpload({
             </div>
 
             <div className="mt-4">
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                 {imageFiles.filter(file => !file.isScreenshot).map((file, index) => {
                   // Find the actual index in imageFiles array
                   const actualIndex = imageFiles.findIndex(f => f === file)
@@ -1650,23 +2016,48 @@ function Step3VideoUpload({
               </p>
           </div>
         </div>
-
-          <button
-            type="button"
-            onClick={handleContinue}
-            className="w-full btn-primary"
-          >
-            Continue to Next Step
-          </button>
-              </div>
+          </div>
+        </details>
       )}
+
+      <div className="post-ad-fixed-footer">
+        <div className="mx-auto w-full max-w-[640px] px-4 pt-4 sm:px-6 sm:pt-5">
+          <div className="mb-3 flex gap-1 sm:mb-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="h-[3px] flex-1 rounded-full"
+                style={{ backgroundColor: i === 0 ? POST_AD_NAVY : '#e5e7eb' }}
+              />
+            ))}
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-gray-600">1 of 4</p>
+            <button
+              type="button"
+              onClick={handleContinue}
+              disabled={isProcessing}
+              className="inline-flex w-full items-center justify-center gap-1 rounded-xl px-8 py-3.5 text-[15px] font-semibold text-white transition disabled:opacity-50 sm:w-auto sm:px-10"
+              style={{ backgroundColor: POST_AD_BLUE }}
+              onMouseEnter={(e) => {
+                if (!isProcessing) e.currentTarget.style.backgroundColor = '#1d4ed8'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = POST_AD_BLUE
+              }}
+            >
+              Next
+              <span className="text-lg leading-none">&gt;</span>
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
 
 // Step 4: Basic Details (renamed from Step3)
-function Step4BasicDetails({ register, watch, setValue, errors, categories, selectedCategory, subcategories }) {
-  const condition = watch('condition')
+function Step4BasicDetails({ register, watch, setValue, getValues, control, errors, categories, selectedCategory, subcategories }) {
   const selectedCategoryObj = categories.find(cat => cat._id === selectedCategory)
   const selectedSubcategory = subcategories.find(sub => sub._id === watch('subcategory'))
   
@@ -1702,6 +2093,7 @@ function Step4BasicDetails({ register, watch, setValue, errors, categories, sele
   const categoryFilters = watch('__categoryFilters') || []
   const categoryFiltersLoading = watch('__categoryFiltersLoading') === true
   const categoryFiltersError = watch('__categoryFiltersError') || ''
+  const conditionValue = scalarFromMultiSelect(watch('condition'))
 
   const filterGroups = useMemo(() => {
     const list = Array.isArray(categoryFilters) ? categoryFilters : []
@@ -1717,54 +2109,79 @@ function Step4BasicDetails({ register, watch, setValue, errors, categories, sele
 
     const roots = (childrenByParent.get(null) || []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
 
-    const getPathLabels = (node) => {
-      const labels = []
-      let cur = node
-      const guard = new Set()
-      while (cur) {
-        const id = String(cur._id)
-        if (guard.has(id)) break
-        guard.add(id)
-        labels.unshift(cur.name)
-        cur = cur.parentId ? byId.get(String(cur.parentId)) : null
-      }
-      return labels
-    }
-
     const groups = roots.map((root) => {
-      const rootId = String(root._id)
-      const rootSlug = String(root.slug || rootId)
+      const rootSlug = String(root.slug || root._id)
       const fieldKey = `filter_${rootSlug}`
-
-      // If this "root" filter has explicit options, use them as selectable values.
-      const explicitOptions = Array.isArray(root.options) ? root.options.filter(Boolean) : []
-      if (explicitOptions.length) {
-        return {
-          root,
-          fieldKey,
-          mode: 'explicit',
-          options: explicitOptions.map((opt) => ({ value: opt, label: opt })),
-        }
-      }
-
-      // Cascading mode: first select children of this root, then children of selected node, and so on.
-      const firstLevelOptions = (childrenByParent.get(rootId) || [])
-        .map((node) => ({ value: String(node._id), label: node.name || '' }))
-        .sort((a, b) => a.label.localeCompare(b.label))
+      const options = buildFilterMultiselectOptions(root, childrenByParent, byId)
 
       return {
         root,
         fieldKey,
-        mode: 'cascade',
-        byId,
-        childrenByParent,
-        options: firstLevelOptions,
-        getPathLabels,
+        options,
       }
     })
 
-    return groups.filter((g) => (g.options?.length || 0) > 0)
+    return groups.filter((g) => (g.options?.length || 0) > 0 && !isAdsPostedFilterRoot(g.root))
   }, [categoryFilters])
+
+  // When user reaches Step 4 after AI video processing, re-apply brand + filter prefills.
+  useEffect(() => {
+    if (!categoryFilters.length || !getValues) return
+    const aiPayload = getValues('__aiListingExtraction')
+    const extracted = getValues('__extractedData')
+    if (!aiPayload && !extracted) return
+
+    syncBrandChoiceFromMake({
+      getValues,
+      setValue,
+      categoryName,
+      subcategoryName,
+    })
+
+    if (aiPayload) {
+      applyAiVehicleFormPrefill({
+        setValue,
+        getValues,
+        mappingResult: aiPayload,
+        context: {
+          categoryName,
+          subcategoryName,
+          isVehicle,
+        },
+      })
+
+      if (aiPayload.filter_selections && typeof aiPayload.filter_selections === 'object') {
+        const sanitizedAiFilters = omitAdsPostedFromSelections(aiPayload.filter_selections, categoryFilters)
+        Object.entries(sanitizedAiFilters).forEach(([key, value]) => {
+          if (key.startsWith('filter_') && value) {
+            setValue(key, mergeFilterValues(getValues(key), value), {
+              shouldDirty: true,
+              shouldTouch: true,
+              shouldValidate: true,
+            })
+          }
+        })
+      }
+    }
+
+    applyTranscriptFilterSelections({
+      filters: categoryFilters,
+      getValues,
+      setValue,
+      extractedData: extracted,
+      aiExtraction: aiPayload,
+      force: false,
+    })
+  }, [
+    categoryFilters,
+    categoryName,
+    subcategoryName,
+    isVehicle,
+    getValues,
+    setValue,
+    watch('__aiListingExtraction'),
+    watch('__extractedData'),
+  ])
 
   // When Vehicle subcategory switches to Bicycles, clear transmission/fuelType (aligned with vehicle filters)
   useEffect(() => {
@@ -1838,19 +2255,28 @@ function Step4BasicDetails({ register, watch, setValue, errors, categories, sele
       case FIELD_TYPES.select:
         return (
           <div key={fieldName}>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {fieldConfig.label}
-              {req && <span className="text-red-500"> *</span>}
-            </label>
-            <select {...register(fieldName, merged)} className="input-field">
-              <option value="">{fieldConfig.placeholder}</option>
-              {fieldConfig.options?.map(option => (
-                <option key={option} value={option}>{option}</option>
-              ))}
-            </select>
-            {errors[fieldName] && (
-              <p className="mt-1 text-sm text-red-600">{errors[fieldName].message}</p>
-            )}
+            <Controller
+              name={fieldName}
+              control={control}
+              defaultValue={[]}
+              rules={{
+                validate: (v) => {
+                  if (!req) return true
+                  return toFilterArray(v).length > 0 || reqMsg
+                },
+              }}
+              render={({ field, fieldState }) => (
+                <FilterMultiSelect
+                  label={fieldConfig.label}
+                  required={req}
+                  options={(fieldConfig.options || []).map((option) => ({ value: option, label: option }))}
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={fieldState.error}
+                  placeholder={fieldConfig.placeholder || `Select ${fieldConfig.label.toLowerCase()}`}
+                />
+              )}
+            />
           </div>
         )
       
@@ -1885,8 +2311,8 @@ function Step4BasicDetails({ register, watch, setValue, errors, categories, sele
       
       case 'dimensions':
         return (
-          <div key={fieldName} className="grid grid-cols-4 gap-4">
-            <div className="col-span-3 grid grid-cols-3 gap-2">
+          <div key={fieldName} className="grid grid-cols-1 gap-4 sm:grid-cols-4">
+            <div className="grid grid-cols-1 gap-2 sm:col-span-3 sm:grid-cols-3">
               <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Length</label>
                 <input
@@ -1944,7 +2370,7 @@ function Step4BasicDetails({ register, watch, setValue, errors, categories, sele
 
   return (
     <div className="card space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Item Information</h2>
+      <h2 className={STEP_CARD_TITLE}>Item Information</h2>
       
       {!categoryName && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
@@ -1957,52 +2383,42 @@ function Step4BasicDetails({ register, watch, setValue, errors, categories, sele
       {/* Brand - Show if brand is in dynamic fields or if brandOptions exist */}
       {(dynamicFields.includes('brand') || brandOptions.length > 0) && (
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Brand
-            {brandOptions.length > 0 && <span className="text-red-500"> *</span>}
-          </label>
-          <select
-            {...(() => {
-              const reg = register('brandChoice', {
-                validate: (v) => {
-                  if (!brandOptions.length) return true
-                  if (v && String(v).trim()) return true
-                  return 'Please select a brand'
-                },
-              })
-              return {
-                ...reg,
-                onChange: (e) => {
-                  reg.onChange(e)
-                  const selected = e.target.value
-                  if (selected && selected !== 'Other') {
-                    setValue('brand', selected)
-                  } else if (selected === 'Other') {
-                    setValue('brand', '')
-                  } else {
-                    setValue('brand', '')
+          <Controller
+            name="brandChoice"
+            control={control}
+            defaultValue={[]}
+            rules={{
+              validate: (v) => {
+                if (!brandOptions.length) return true
+                return toFilterArray(v).length > 0 || 'Please select a brand'
+              },
+            }}
+            render={({ field, fieldState }) => (
+              <FilterMultiSelect
+                label="Brand"
+                required={brandOptions.length > 0}
+                options={[
+                  ...brandOptions.map((b) => ({ value: b, label: b })),
+                  ...(brandOptions.includes('Other') ? [] : [{ value: 'Other', label: 'Other' }]),
+                ]}
+                value={field.value}
+                onChange={(next) => {
+                  field.onChange(next)
+                  const selected = toFilterArray(next).filter((b) => b !== 'Other')
+                  if (selected.length) {
+                    setValue('brand', selected.join(', '), { shouldDirty: true, shouldTouch: true })
+                    if (isVehicle) setValue('make', selected[0], { shouldDirty: true, shouldTouch: true })
+                  } else if (!toFilterArray(next).includes('Other')) {
+                    setValue('brand', '', { shouldDirty: true, shouldTouch: true })
                   }
-                },
-              }
-            })()}
-            className="input-field"
-          >
-            <option value="">Select brand</option>
-            {brandOptions.map((b) => (
-              <option key={b} value={b}>
-                {b}
-              </option>
-            ))}
-            { !brandOptions.includes('Other') && <option value="Other">Other</option> }
-          </select>
-          {errors.brandChoice && (
-            <p className="mt-1 text-sm text-red-600">{errors.brandChoice.message}</p>
-          )}
-          {watch('brandChoice') !== 'Other' && <input type="hidden" {...register('brand')} />}
-
-          {watch('brandChoice') === 'Other' ? (
+                }}
+                error={fieldState.error}
+                placeholder="Select brand"
+              />
+            )}
+          />
+          {toFilterArray(watch('brandChoice')).includes('Other') ? (
             <div className="mt-2">
-              {/* When 'Other' is chosen, register a text input bound to canonical 'brand' */}
               <input
                 type="text"
                 {...register('brand', {
@@ -2016,7 +2432,6 @@ function Step4BasicDetails({ register, watch, setValue, errors, categories, sele
               )}
             </div>
           ) : (
-            // If a custom brand value exists while a non-Other selection is used, show it
             watch('brand') &&
             watch('brand') !== '' &&
             !brandOptions.includes(watch('brand')) && (
@@ -2026,43 +2441,31 @@ function Step4BasicDetails({ register, watch, setValue, errors, categories, sele
         </div>
       )}
 
-      {/* Title - Always shown */}
-      <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Title <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-          {...register('title', { 
-            required: 'Title is required',
-            minLength: { value: 10, message: 'Title must be at least 10 characters' }
-          })}
-            className="input-field"
-          placeholder={selectedSubcategory ? `${watch('brand') || 'Brand'} ${selectedSubcategory.name}` : 'Enter product title'}
-          />
-          {errors.title && (
-            <p className="mt-1 text-sm text-red-600">{errors.title.message}</p>
-          )}
-        </div>
-
       {/* Condition - Always shown */}
       <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-          Condition <span className="text-red-500">*</span>
-          </label>
-          <select
-          {...register('condition', { required: 'Condition is required' })}
-            className="input-field"
-          >
-          <option value="">Select condition</option>
-          {CONDITION_OPTIONS.map((opt) => (
-            <option key={opt} value={opt}>{opt === 'Brand New' ? `${opt} (Unused)` : opt}</option>
-          ))}
-          </select>
-        {errors.condition && (
-          <p className="mt-1 text-sm text-red-600">{errors.condition.message}</p>
+        <Controller
+          name="condition"
+          control={control}
+          defaultValue={[]}
+          rules={{
+            validate: (v) => toFilterArray(v).length > 0 || 'Condition is required',
+          }}
+          render={({ field, fieldState }) => (
+            <FilterMultiSelect
+              label="Condition"
+              required
+              options={CONDITION_OPTIONS.map((opt) => ({
+                value: opt,
+                label: opt === 'Brand New' ? `${opt} (Unused)` : opt,
+              }))}
+              value={field.value}
+              onChange={field.onChange}
+              error={fieldState.error}
+              placeholder="Select condition"
+            />
           )}
-        </div>
+        />
+      </div>
 
       {/* Category Filters (from Admin -> Filters, applied by category/subcategory) */}
       {categoryFiltersLoading ? (
@@ -2078,106 +2481,30 @@ function Step4BasicDetails({ register, watch, setValue, errors, categories, sele
         <div className="space-y-4">
           <h3 className="text-sm font-semibold text-gray-900">Category Filters</h3>
           {filterGroups.map((g) => (
-            <div key={g.fieldKey} className="space-y-3">
-              {g.mode === 'explicit' ? (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    {g.root.name}
-                    {isVehicle && !isBicycle && <span className="text-red-500"> *</span>}
-                  </label>
-                  <select
-                    {...register(
-                      g.fieldKey,
-                      isVehicle && !isBicycle ? { required: `${g.root.name} is required` } : {}
-                    )}
-                    className="input-field"
-                  >
-                    <option value="">Select {g.root.name.toLowerCase()}</option>
-                    {g.options.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                  {errors[g.fieldKey] && (
-                    <p className="mt-1 text-sm text-red-600">{errors[g.fieldKey].message}</p>
-                  )}
-                </div>
-              ) : (
-                (() => {
-                  const levels = []
-                  let currentOptions = g.options || []
-                  let parentLabel = g.root.name
-                  let levelIndex = 0
-
-                  while (currentOptions.length > 0 && levelIndex < 8) {
-                    const levelKey = `${g.fieldKey}_lvl${levelIndex}`
-                    const selectedValue = watch(levelKey) || ''
-
-                    levels.push(
-                      <div key={levelKey}>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                          {levelIndex === 0 ? g.root.name : parentLabel}
-                          {isVehicle && !isBicycle && <span className="text-red-500"> *</span>}
-                        </label>
-                        <select
-                          {...(() => {
-                            const lvlReg = register(
-                              levelKey,
-                              isVehicle && !isBicycle ? { required: `${g.root.name} is required` } : {}
-                            )
-                            return {
-                              ...lvlReg,
-                              className: 'input-field',
-                              value: selectedValue,
-                              onChange: (e) => {
-                                lvlReg.onChange(e)
-                                const next = e.target.value
-                                setValue(levelKey, next, { shouldDirty: true, shouldTouch: true })
-
-                                // Clear deeper levels when parent changes
-                                for (let i = levelIndex + 1; i < 8; i += 1) {
-                                  setValue(`${g.fieldKey}_lvl${i}`, '', { shouldDirty: true, shouldTouch: true })
-                                }
-
-                                // Store the deepest-selected value in the base filter key
-                                // so the backend receives filter_<slug> = <selected ObjectId>
-                                setValue(g.fieldKey, next || '', { shouldDirty: true, shouldTouch: true })
-
-                                // Also store the human-readable name for DB storage
-                                const selectedNode = next ? g.byId.get(String(next)) : null
-                                setValue(`${g.fieldKey}_name`, selectedNode?.name || '', { shouldDirty: true, shouldTouch: true })
-                              },
-                            }
-                          })()}
-                        >
-                          <option value="">Select {(levelIndex === 0 ? g.root.name : parentLabel).toLowerCase()}</option>
-                          {currentOptions.map((opt) => (
-                            <option key={opt.value} value={opt.value}>
-                              {opt.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>,
-                    )
-
-                    if (!selectedValue) break
-                    const selectedNode = g.byId.get(String(selectedValue))
-                    parentLabel = selectedNode?.name || `Level ${levelIndex + 2}`
-                    const kids = g.childrenByParent.get(String(selectedValue)) || []
-                    currentOptions = kids
-                      .map((node) => ({ value: String(node._id), label: node.name || '' }))
-                      .sort((a, b) => a.label.localeCompare(b.label))
-                    levelIndex += 1
-                  }
-
-                  return (
-                    <>
-                      {levels}
-                    </>
-                  )
-                })()
-              )}
+            <div key={g.fieldKey}>
+              <Controller
+                name={g.fieldKey}
+                control={control}
+                defaultValue={[]}
+                rules={{
+                  validate: (v) => {
+                    if (!(isVehicle && !isBicycle)) return true
+                    const arr = toFilterArray(v)
+                    return arr.length > 0 || `${g.root.name} is required`
+                  },
+                }}
+                render={({ field, fieldState }) => (
+                  <FilterMultiSelect
+                    label={g.root.name}
+                    required={isVehicle && !isBicycle}
+                    options={g.options}
+                    value={field.value}
+                    onChange={field.onChange}
+                    error={fieldState.error}
+                    placeholder={`Select ${g.root.name.toLowerCase()}`}
+                  />
+                )}
+              />
             </div>
           ))}
         </div>
@@ -2189,7 +2516,7 @@ function Step4BasicDetails({ register, watch, setValue, errors, categories, sele
         return renderField(fieldName, {})
       })}
 
-      {condition === 'Brand New' && (
+      {conditionValue === 'Brand New' && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <p className="text-sm text-yellow-800">
             ⚠️ Brand New items cannot have visible damage in photos. Please ensure your photos show an unused item.
@@ -2207,7 +2534,7 @@ function Step5Usage({ register, errors }) {
 
   return (
     <div className="card space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Usage Details</h2>
+      <h2 className={STEP_CARD_TITLE}>Usage Details</h2>
       <p className="text-sm text-gray-600 mb-4">All fields are required. Values may be prefilled from your video; complete anything missing.</p>
       
       <div>
@@ -2228,7 +2555,7 @@ function Step5Usage({ register, errors }) {
         )}
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Usage Duration <span className="text-red-500">*</span>
@@ -2299,7 +2626,7 @@ function Step6Price({ register, errors, watch, setValue }) {
 
   return (
     <div className="card space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Pricing</h2>
+      <h2 className={STEP_CARD_TITLE}>Pricing</h2>
       
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2374,7 +2701,7 @@ function Step6Price({ register, errors, watch, setValue }) {
 function Step7Location({ register, errors }) {
   return (
     <div className="card space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Location & Delivery</h2>
+      <h2 className={STEP_CARD_TITLE}>Location & Delivery</h2>
       
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2478,7 +2805,7 @@ function Step8Description({ register, errors, watch, setValue }) {
 
   return (
     <div className="card space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Description</h2>
+      <h2 className={STEP_CARD_TITLE}>Description</h2>
       
       <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2533,7 +2860,7 @@ function Step8Description({ register, errors, watch, setValue }) {
             Keeps it concise, engaging, and conversion-focused.
           </p>
         </div>
-        <div className="flex justify-between mt-2">
+        <div className="flex flex-col gap-1 mt-2 sm:flex-row sm:justify-between sm:gap-2">
           <p className="text-sm text-gray-500">
             {charCount < 30 ? `${30 - charCount} more characters needed` : 'Minimum length met'}
           </p>
@@ -2572,7 +2899,7 @@ function Step8Description({ register, errors, watch, setValue }) {
 function Step9Contact({ register, errors, user }) {
   return (
     <div className="card space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Contact Preferences</h2>
+      <h2 className={STEP_CARD_TITLE}>Contact Preferences</h2>
       
       <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -2668,7 +2995,7 @@ function Step10Review({ formData, imageFiles, videoFile, categories, selectedCat
 
   return (
     <div className="card space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900 mb-6">Review Your Listing</h2>
+      <h2 className={STEP_CARD_TITLE}>Review Your Listing</h2>
       
       <div className="space-y-4">
         <div className="border-b pb-4">
@@ -2789,12 +3116,13 @@ function PostAdPage() {
   const [searchParams] = useSearchParams()
   const editProductId = searchParams.get('edit')
   const isEditMode = !!editProductId
-  
+  const [editProductPostedAt, setEditProductPostedAt] = useState(null)
+
   const { categories } = useSelector((state) => state.categories)
   const { loading } = useSelector((state) => state.products)
   const { user } = useSelector((state) => state.auth)
   
-  const { register, handleSubmit, watch, setValue, getValues, trigger, formState: { errors } } = useForm({
+  const { register, handleSubmit, watch, setValue, getValues, trigger, control, formState: { errors } } = useForm({
     mode: 'onChange', // Validate on change for better UX
     defaultValues: {
       currency: MARKETPLACE_CURRENCY,
@@ -2814,7 +3142,8 @@ function PostAdPage() {
         unit: 'cm'
       },
       brand: '',
-      brandChoice: '',
+      brandChoice: [],
+      condition: [],
       make: '',
       model: '',
       childCategory: '',
@@ -2838,6 +3167,8 @@ function PostAdPage() {
   const [selectedPath, setSelectedPath] = useState([])
   const [levelLabelsFromApi, setLevelLabelsFromApi] = useState(null)
   const [loadingLevels, setLoadingLevels] = useState(false)
+  const [categoryPhase, setCategoryPhase] = useState('root')
+  const [loadingSubcategories, setLoadingSubcategories] = useState(false)
   const [categoryFilters, setCategoryFilters] = useState([])
   const [loadingCategoryFilters, setLoadingCategoryFilters] = useState(false)
   const [categoryFiltersError, setCategoryFiltersError] = useState('')
@@ -2854,62 +3185,65 @@ function PostAdPage() {
     accident_free: null,
   })
 
-  // Use refs to prevent multiple API calls
-  const categoriesFetchedRef = useRef(false)
-  const userRefreshedRef = useRef(false)
-  const initialStepFetchedRef = useRef(false)
   const prevFilterScopeRef = useRef('')
   const prevFilterFieldKeysRef = useRef([])
 
-  // Resolve initial step: first-time user → Step 1 (Welcome); returning user (has ≥1 product) → Step 2 (Category). Run before rendering flow.
+  // Restore session from storage when entering post-ad (prevents false logout on Back).
   useEffect(() => {
-    if (initialStepFetchedRef.current) return
-    if (!user) {
-      setInitialStepResolved(true)
-      return
-    }
-    initialStepFetchedRef.current = true
+    dispatch(rehydrateSessionFromStorage())
+  }, [dispatch])
+
+  // Fresh post-ad flow each visit: step 2 categories, no stale selection/video.
+  useEffect(() => {
     if (isEditMode) {
-      initialStepFetchedRef.current = true
-      setCurrentStep(2)
       setInitialStepResolved(true)
       return
     }
-    setInitialStepResolved(false)
-    productService
-      .getProducts({ userId: user._id, limit: 1 })
-      .then((res) => {
-        const total = res?.data?.total ?? (Array.isArray(res?.data?.products) ? res.data.products.length : 0)
-        if (total > 0) setCurrentStep(2)
-        setInitialStepResolved(true)
-      })
-      .catch(() => setInitialStepResolved(true))
-  }, [user, isEditMode])
 
-  // Fetch categories only once (for any legacy use)
-  useEffect(() => {
-    if (!categoriesFetchedRef.current && categories.length === 0) {
-      categoriesFetchedRef.current = true
-      dispatch(fetchCategories())
-    }
-  }, [dispatch, categories.length])
+    setSelectedPath([])
+    setSelectedCategory('')
+    setValue('category', '')
+    setValue('subcategory', '')
+    setValue('childCategory', '')
+    setValue('categoryPath', [])
+    setVideoFile(null)
+    setImageFiles([])
+    setCategoryPhase('root')
+    setCurrentStep(user ? (user?.role === 'admin' || user.isVerified ? 2 : 1) : 1)
+    setInitialStepResolved(true)
+  }, [dispatch, isEditMode, setValue, user?.id])
 
-  // Fetch root categories for cascading dropdowns
+  // Root categories for step 2 (single request; aborted on leave via route scope).
   useEffect(() => {
+    const signal = getRouteAbortSignal()
     let cancelled = false
     setLoadingLevels(true)
+
+    const timeoutId = window.setTimeout(() => {
+      if (!cancelled) {
+        setLoadingLevels(false)
+        setLevelOptions((prev) => (prev[0]?.length ? prev : [[]]))
+      }
+    }, 30000)
+
     categoryService
-      .getCategoryChildren(null)
+      .getCategoryChildren(null, { signal })
       .then((res) => {
-        if (!cancelled) setLevelOptions([Array.isArray(res.data) ? res.data : []])
+        if (cancelled) return
+        setLevelOptions([Array.isArray(res.data) ? res.data : []])
       })
       .catch(() => {
         if (!cancelled) setLevelOptions([[]])
       })
       .finally(() => {
         if (!cancelled) setLoadingLevels(false)
+        window.clearTimeout(timeoutId)
       })
-    return () => { cancelled = true }
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timeoutId)
+    }
   }, [])
 
   // Fetch level labels from backend when root category changes (for cascading dropdown labels)
@@ -2957,7 +3291,7 @@ function PostAdPage() {
 
     // If the scope changed, clear previously set filter fields
     if (prevFilterScopeRef.current && prevFilterScopeRef.current !== scopeKey) {
-      prevFilterFieldKeysRef.current.forEach((k) => setValue(k, ''))
+      prevFilterFieldKeysRef.current.forEach((k) => setValue(k, []))
     }
     prevFilterScopeRef.current = scopeKey
 
@@ -2983,17 +3317,27 @@ function PostAdPage() {
         const rootFilters = list.filter((f) => !f.parentId)
         const fieldKeys = []
         for (const root of rootFilters) {
+          if (isAdsPostedFilterRoot(root)) continue
           const slug = String(root.slug || root._id)
-          const base = `filter_${slug}`
-          const explicitOpts = Array.isArray(root.options) ? root.options.filter(Boolean) : []
-          if (explicitOpts.length) {
-            fieldKeys.push(base)
-          } else {
-            for (let i = 0; i < 8; i += 1) fieldKeys.push(`${base}_lvl${i}`)
-            fieldKeys.push(base)
-          }
+          fieldKeys.push(`filter_${slug}`)
         }
         prevFilterFieldKeysRef.current = fieldKeys
+
+        // Register filter fields so setValue before Step 4 mount is preserved.
+        fieldKeys.forEach((k) => {
+          const cur = getValues(k)
+          if (cur === undefined) {
+            setValue(k, [], { shouldRegister: true, shouldDirty: false, shouldTouch: false })
+          }
+        })
+
+        const adsPostedResolved = resolveAdsPostedSelectionForDate(
+          isEditMode && editProductPostedAt ? editProductPostedAt : new Date(),
+          list,
+        )
+        if (adsPostedResolved?.fieldKey) {
+          setValue(adsPostedResolved.fieldKey, [], { shouldDirty: false, shouldTouch: false })
+        }
 
         // Expose to Step4 via RHF watch (simple wiring without prop drilling too much)
         setValue('__categoryFilters', list, { shouldDirty: false, shouldTouch: false })
@@ -3001,134 +3345,28 @@ function PostAdPage() {
         setValue('__categoryFiltersLoading', false, { shouldDirty: false, shouldTouch: false })
         setValue('__categoryFiltersError', '', { shouldDirty: false, shouldTouch: false })
 
-        // Auto-fill filter dropdowns from transcript-suggested filter values.
-        // Suggested filters come from the transcribe API (stored in __suggestedFilters).
-        // If no transcript suggestions, try matching current form data against filter names.
-        const suggested = getValues('__suggestedFilters')
-        if (suggested && typeof suggested === 'object' && list.length) {
-          const byId = new Map(list.map((f) => [String(f._id), f]))
-          const childrenByParent = new Map()
-          list.forEach((f) => {
-            const pid = f.parentId ? String(f.parentId) : null
-            if (!childrenByParent.has(pid)) childrenByParent.set(pid, [])
-            childrenByParent.get(pid).push(f)
-          })
+        const aiPayload = getValues('__aiListingExtraction')
+        const extracted = getValues('__extractedData')
 
-          for (const [fieldKey, value] of Object.entries(suggested)) {
-            if (!fieldKey.startsWith('filter_')) continue
-            const currentVal = getValues(fieldKey)
-            if (currentVal) continue
-
-            const rootSlug = fieldKey.replace('filter_', '')
-            const matchingRoot = rootFilters.find(
-              (r) => String(r.slug || r._id) === rootSlug
-            )
-            if (!matchingRoot) continue
-
-            const explicitOpts = Array.isArray(matchingRoot.options) ? matchingRoot.options.filter(Boolean) : []
-            if (explicitOpts.length) {
-              if (explicitOpts.includes(value)) {
-                setValue(fieldKey, value)
-                console.log(`Auto-filled ${fieldKey} = "${value}" (from transcript)`)
-              }
-            } else {
-              const children = childrenByParent.get(String(matchingRoot._id)) || []
-              const childMatch = children.find((c) => String(c._id) === value)
-              if (childMatch) {
-                setValue(fieldKey, value)
-                console.log(`Auto-filled ${fieldKey} = "${childMatch.name}" (id: ${value}, from transcript)`)
-              }
+        if (aiPayload?.filter_selections && typeof aiPayload.filter_selections === 'object') {
+          const sanitizedAiFilters = omitAdsPostedFromSelections(aiPayload.filter_selections, list)
+          Object.entries(sanitizedAiFilters).forEach(([key, value]) => {
+            if (key.startsWith('filter_') && value) {
+              setValue(key, mergeFilterValues(getValues(key), value), {
+                shouldDirty: true,
+                shouldTouch: true,
+              })
             }
-          }
-        } else if (list.length) {
-          // Fallback: try to match current form field values against filter names.
-          // This covers cases where transcript didn't return suggestedFilters
-          // (e.g. category IDs weren't available at transcription time).
-          const formValues = getValues()
-          const byId = new Map(list.map((f) => [String(f._id), f]))
-          const childrenByParent = new Map()
-          list.forEach((f) => {
-            const pid = f.parentId ? String(f.parentId) : null
-            if (!childrenByParent.has(pid)) childrenByParent.set(pid, [])
-            childrenByParent.get(pid).push(f)
           })
-
-          const normalizeStr = (s) => String(s || '').trim().toLowerCase()
-
-          const fieldKeyMap = {
-            condition: ['condition'],
-            brand: ['brand', 'make'],
-            make: ['make', 'brand'],
-            color: ['color'],
-            colour: ['color'],
-            transmission: ['transmission'],
-            'fuel type': ['fuelType'],
-            fueltype: ['fuelType'],
-            material: ['material'],
-            'body type': ['bodyType'],
-            size: ['size'],
-            model: ['model'],
-          }
-
-          for (const root of rootFilters) {
-            const rootId = String(root._id)
-            const rootSlug = String(root.slug || rootId)
-            const fieldKey = `filter_${rootSlug}`
-            const currentVal = getValues(fieldKey)
-            if (currentVal) continue
-
-            const explicitOpts = Array.isArray(root.options) ? root.options.filter(Boolean) : []
-            const children = childrenByParent.get(rootId) || []
-            const normalizedRootName = normalizeStr(root.name)
-
-            const productFieldKeys = fieldKeyMap[normalizedRootName] || []
-            const titleText = normalizeStr(formValues.title || '')
-
-            if (explicitOpts.length) {
-              let matched = null
-              for (const fk of productFieldKeys) {
-                const fv = normalizeStr(formValues[fk])
-                if (!fv) continue
-                const opt = explicitOpts.find((o) => normalizeStr(o) === fv)
-                if (opt) { matched = opt; break }
-              }
-              if (!matched) {
-                for (const opt of explicitOpts) {
-                  const normOpt = normalizeStr(opt)
-                  if (normOpt.length >= 3 && titleText.includes(normOpt)) {
-                    matched = opt
-                    break
-                  }
-                }
-              }
-              if (matched) {
-                setValue(fieldKey, matched)
-                console.log(`Auto-filled ${fieldKey} = "${matched}" (from form data fallback)`)
-              }
-            } else if (children.length) {
-              let matched = null
-              for (const fk of productFieldKeys) {
-                const fv = normalizeStr(formValues[fk])
-                if (!fv) continue
-                const child = children.find((c) => normalizeStr(c.name) === fv)
-                if (child) { matched = child; break }
-              }
-              if (!matched) {
-                for (const child of children) {
-                  const normName = normalizeStr(child.name)
-                  if (normName.length >= 3 && titleText.includes(normName)) {
-                    matched = child
-                    break
-                  }
-                }
-              }
-              if (matched) {
-                setValue(fieldKey, String(matched._id))
-                console.log(`Auto-filled ${fieldKey} = "${matched.name}" (from form data fallback)`)
-              }
-            }
-          }
         }
+
+        applyTranscriptFilterSelections({
+          filters: list,
+          getValues,
+          setValue,
+          extractedData: extracted,
+          aiExtraction: aiPayload,
+        })
       })
       .catch((err) => {
         if (cancelled) return
@@ -3151,22 +3389,7 @@ function PostAdPage() {
     return () => {
       cancelled = true
     }
-  }, [selectedPath, setValue])
-
-  // Refresh user data only once when user is available
-  useEffect(() => {
-    if (user?._id && !userRefreshedRef.current) {
-      userRefreshedRef.current = true
-      // Only refresh if verification status is missing from current user data
-      // This prevents unnecessary API calls if user data is already complete
-      if (user.isVerified === undefined) {
-        dispatch(refreshUser()).catch(() => {
-          // If refresh fails, reset ref so it can try again later
-          userRefreshedRef.current = false
-        })
-      }
-    }
-  }, [user?._id, user?.isVerified, dispatch]) // Depend on user ID and verification status
+  }, [selectedPath, setValue, isEditMode, editProductPostedAt])
 
   // Load product data if in edit mode
   useEffect(() => {
@@ -3183,6 +3406,8 @@ function PostAdPage() {
           navigate('/dashboard')
           return
         }
+
+        setEditProductPostedAt(product.createdAt ? new Date(product.createdAt) : new Date())
         
         // Check ownership
         if (user && product.seller) {
@@ -3208,9 +3433,9 @@ function PostAdPage() {
           city: product.city || '',
           area: product.area || product.location || '',
           brand: product.brand || '',
-          condition: product.condition || '',
+          condition: product.condition ? toFilterArray(product.condition) : [],
           material: product.material || '',
-          color: product.color || '',
+          color: product.color ? toFilterArray(product.color) : [],
           priceType: product.priceType || 'Fixed',
           contactName: product.contactName || user?.name || '',
           contactPhone: product.contactPhone || user?.phone || '',
@@ -3218,8 +3443,8 @@ function PostAdPage() {
           model: product.model || '',
           year: product.year ?? '',
           mileage: product.mileage ?? '',
-          transmission: product.transmission || '',
-          fuelType: product.fuelType || '',
+          transmission: product.transmission ? toFilterArray(product.transmission) : [],
+          fuelType: product.fuelType ? toFilterArray(product.fuelType) : [],
           ...product.dimensions && { dimensions: product.dimensions },
           ...product.usageDuration && { usageDuration: product.usageDuration },
           ...product.deliveryOptions && { deliveryOptions: product.deliveryOptions },
@@ -3292,17 +3517,17 @@ function PostAdPage() {
                 prodSubName = foundSub?.name || ''
               }
             }
-            const options = getBrandOptionsForCategory(category.name, prodSubName)
+            const options = getBrandOptionsForCategory(resolveCategoryKeyForFields(category.name), prodSubName)
             if (options && options.includes(product.brand)) {
-              setValue('brandChoice', product.brand)
+              setValue('brandChoice', [product.brand])
             } else {
-              setValue('brandChoice', 'Other')
+              setValue('brandChoice', ['Other'])
               setValue('brand', product.brand)
             }
           } else {
             // fallback: set brand directly
             setValue('brand', product.brand)
-            setValue('brandChoice', product.brand)
+            setValue('brandChoice', [product.brand])
           }
         }
 
@@ -3340,7 +3565,7 @@ function PostAdPage() {
   }, [isEditMode, editProductId, user, navigate, setValue])
 
   const handleLevelChange = async (levelIndex, categoryId) => {
-    const MAX_CATEGORY_LEVEL_INDEX = 1 // selection capped at index 1 => 2 levels total
+    const MAX_CATEGORY_LEVEL_INDEX = 1
     const maxPathLen = MAX_CATEGORY_LEVEL_INDEX + 1
 
     const newPathRaw = categoryId
@@ -3349,16 +3574,11 @@ function PostAdPage() {
     const newPath = newPathRaw.slice(0, maxPathLen)
 
     setSelectedPath(newPath)
-    // Map hierarchy to backend model:
-    // - `category` is the root (level 0)
-    // - `subcategory` is the level 1 selection (e.g. Vehicles -> Cars)
-    // - `childCategory` is not used in this two-level flow
     const rootId = newPath[0] || ''
     const subcategoryId = newPath[1] || ''
-    const childCategoryId = ''
     setValue('category', rootId)
     setValue('subcategory', subcategoryId)
-    setValue('childCategory', childCategoryId)
+    setValue('childCategory', '')
     setValue('categoryPath', newPath.filter(Boolean))
 
     if (!categoryId) {
@@ -3366,7 +3586,6 @@ function PostAdPage() {
       return
     }
 
-    // If user picked the last allowed level, do not fetch deeper options.
     if (levelIndex >= MAX_CATEGORY_LEVEL_INDEX) {
       setLevelOptions((prev) => prev.slice(0, maxPathLen))
       return
@@ -3376,7 +3595,6 @@ function PostAdPage() {
     try {
       const res = await categoryService.getCategoryChildren(categoryId)
       const children = Array.isArray(res.data) ? res.data : []
-      // Prevent extending beyond max allowed hierarchy depth.
       const nextLevelIndex = levelIndex + 1
       if (nextLevelIndex > MAX_CATEGORY_LEVEL_INDEX) {
         setLevelOptions((prev) => prev.slice(0, maxPathLen))
@@ -3390,6 +3608,79 @@ function PostAdPage() {
     }
   }
 
+  /** Step 2a: pick root category → show subcategory list (or skip if none). */
+  const handleRootCategorySelect = (categoryId) => {
+    if (!categoryId) return
+
+    setSelectedPath([categoryId])
+    setSelectedCategory(categoryId)
+    setValue('category', categoryId, { shouldValidate: true })
+    setValue('subcategory', '')
+    setValue('childCategory', '')
+    setValue('categoryPath', [categoryId])
+
+    const roots = levelOptions[0] || []
+    setLoadingSubcategories(true)
+    categoryService
+      .getCategoryChildren(categoryId, { signal: getRouteAbortSignal() })
+      .then((res) => {
+        const children = Array.isArray(res.data) ? res.data : []
+        setLevelOptions([roots, children])
+        setSubcategories(children)
+        if (children.length === 0) {
+          setCategoryPhase('root')
+          toast.success('Category selected')
+          setCurrentStep(3)
+          window.scrollTo(0, 0)
+        } else {
+          setCategoryPhase('subcategory')
+          window.scrollTo(0, 0)
+        }
+      })
+      .catch(() => {
+        setLevelOptions([roots])
+        setSubcategories([])
+        setCategoryPhase('root')
+      })
+      .finally(() => setLoadingSubcategories(false))
+  }
+
+  const handleSubcategorySelect = (subcategoryId) => {
+    if (!subcategoryId) return
+    const rootId = selectedPath[0]
+    setSelectedPath([rootId, subcategoryId])
+    setValue('subcategory', subcategoryId, { shouldValidate: true })
+    setValue('childCategory', '')
+    setValue('categoryPath', [rootId, subcategoryId].filter(Boolean))
+
+    setCurrentStep(3)
+    window.scrollTo(0, 0)
+
+    const roots = levelOptions[0] || []
+    const subs = levelOptions[1] || []
+    categoryService
+      .getCategoryChildren(subcategoryId, { signal: getRouteAbortSignal() })
+      .then((res) => {
+        const children = Array.isArray(res.data) ? res.data : []
+        setLevelOptions([roots, subs, children])
+      })
+      .catch(() => setLevelOptions([roots, subs]))
+  }
+
+  const handleCategoryPhaseBack = () => {
+    const rootId = selectedPath[0]
+    if (!rootId) {
+      navigate('/', { replace: true })
+      return
+    }
+    setCategoryPhase('root')
+    setValue('subcategory', '')
+    setValue('childCategory', '')
+    setSelectedPath([rootId])
+    setValue('categoryPath', [rootId])
+    window.scrollTo(0, 0)
+  }
+
   const handleCategoryChange = (categoryId) => {
     setSelectedCategory(categoryId)
     const category = categories.find((cat) => cat._id === categoryId)
@@ -3398,11 +3689,10 @@ function PostAdPage() {
     setValue('subcategory', '')
   }
 
-  const handleSubcategoryChange = (subcategoryId) => {
-    setValue('subcategory', subcategoryId)
-  }
-
-  const rootCategoryName = levelOptions[0]?.find((c) => c._id === selectedPath[0])?.name || ''
+  const rootCategoryName =
+    levelOptions[0]?.find((c) => String(c._id) === String(selectedPath[0]))?.name || ''
+  const subcategoryOptions = levelOptions[1] || []
+  const selectedSubcategoryId = watch('subcategory') || selectedPath[1] || ''
   const levelLabels = levelLabelsFromApi ?? getLevelLabels(rootCategoryName)
   const flatCategoriesForSteps = levelOptions.flat()
   const selectedCategoryForSteps = watch('category')
@@ -3420,10 +3710,18 @@ function PostAdPage() {
       return !!user && (isAdmin || user.isVerified)
     }
 
-    case 2:
-      return !!watch('category')
+    case 2: {
+      if (!watch('category')) return false
+      const subs = levelOptions[1] || []
+      if (subs.length > 0) return !!watch('subcategory')
+      return true
+    }
 
     case 3: {
+      const title = (watch('title') || '').trim()
+      const desc = (watch('description') || '').trim()
+      if (!title || title.length < 10) return false
+      if (!desc || desc.length < 30) return false
       if (!videoFile) return false
 
       const nonScreenshotImages = imageFiles.filter(f => !f.isScreenshot)
@@ -3435,7 +3733,7 @@ function PostAdPage() {
     case 4: {
       const cat = categories.find((c) => c._id === watch('category'))
       const isVehicle = cat && /vehicles?|motors?|cars?|auto/i.test(String(cat.name || ''))
-      const base = !!watch('title') && watch('title').length >= 10 && !!watch('condition')
+      const base = toFilterArray(watch('condition')).length > 0
       if (isVehicle) return base && !!watch('make')?.trim()
       return base
     }
@@ -3509,11 +3807,14 @@ function PostAdPage() {
   
   const getStepFields = (step) => {
     switch (step) {
-      case 2: return ['category']
-      case 3: return [] // Video upload - no form fields
+      case 2: {
+        const subs = levelOptions[1] || []
+        return subs.length > 0 ? ['category', 'subcategory'] : ['category']
+      }
+      case 3: return ['title', 'description']
       case 4: {
         const cat = (flatCategoriesForSteps.length ? flatCategoriesForSteps : categories).find((c) => c._id === watch('category'))
-        if (!cat) return ['title', 'condition']
+        if (!cat) return ['condition']
         const categoryName = cat.name || ''
         const resolvedKey = resolveCategoryKeyForFields(categoryName)
         const sub = levelOptions[1]?.find((s) => s._id === watch('subcategory'))
@@ -3526,11 +3827,11 @@ function PostAdPage() {
         }
         const filterKeys = watch('__categoryFilterFieldKeys') || []
         const brands = getBrandOptionsForCategory(resolvedKey, subName)
-        const fields = ['title', 'condition', ...dyn, ...filterKeys]
+        const fields = ['condition', ...dyn, ...filterKeys]
         if (isVehicleCat) fields.push('make')
         if (brands.length) {
           fields.push('brandChoice')
-          if (String(watch('brandChoice') || '') === 'Other') fields.push('brand')
+          if (toFilterArray(watch('brandChoice')).includes('Other')) fields.push('brand')
         }
         return [...new Set(fields)]
       }
@@ -3577,10 +3878,17 @@ function PostAdPage() {
   switch (step) {
     case 2:
       if (!watch('category')) return 'Please select a category'
+      if ((levelOptions[1] || []).length > 0 && !watch('subcategory')) return 'Please select a subcategory'
       return 'Please complete all required fields'
 
-    case 3:
-      if (!videoFile) return 'Please upload a video'
+    case 3: {
+      const title = (watch('title') || '').trim()
+      const desc = (watch('description') || '').trim()
+      if (!title) return 'Please enter a title'
+      if (title.length < 10) return 'Title must be at least 10 characters'
+      if (!desc) return 'Please enter a description'
+      if (desc.length < 30) return 'Description must be at least 30 characters'
+      if (!videoFile) return 'Please upload or capture a video'
 
       const nonScreenshotImages = imageFiles.filter(f => !f.isScreenshot)
       const screenshotImages = imageFiles.filter(f => f.isScreenshot)
@@ -3590,10 +3898,9 @@ function PostAdPage() {
       }
 
       return 'Please complete all required fields'
+    }
 
     case 4:
-      if (!watch('title')) return 'Please enter a title'
-      if (watch('title').length < 10) return 'Title must be at least 10 characters'
       if (!watch('condition')) return 'Please select a condition'
       {
         const cat = (flatCategoriesForSteps.length ? flatCategoriesForSteps : categories).find((c) => c._id === watch('category'))
@@ -3648,6 +3955,23 @@ function PostAdPage() {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1)
       window.scrollTo(0, 0)
+    }
+  }
+
+  const handlePostAdBack = () => {
+    if (currentStep === 3) {
+      const hasSubs = (levelOptions[1] || []).length > 0
+      setCurrentStep(2)
+      setCategoryPhase(hasSubs ? 'subcategory' : 'root')
+      window.scrollTo(0, 0)
+      return
+    }
+    if (currentStep === 2 && categoryPhase === 'subcategory') {
+      handleCategoryPhaseBack()
+      return
+    }
+    if (currentStep === 2) {
+      navigate('/', { replace: true })
     }
   }
 
@@ -3753,7 +4077,7 @@ function PostAdPage() {
         const userTransmission = data.transmission || baseDisplay.transmission || null
         const userFuelType = data.fuelType || baseDisplay.fuel_type || null
         const userBodyType = data.bodyType || baseDisplay.body_type || null
-        const userCondition = data.condition || baseDisplay.condition || null
+        const userCondition = scalarFromMultiSelect(data.condition) || baseDisplay.condition || null
         const userAccidentFree = aiListingUserOverrides?.accident_free ?? baseDisplay.accident_free ?? null
 
         const display_data = {
@@ -3766,9 +4090,9 @@ function PostAdPage() {
           mileage_km: userMileage,
           engine_cc: userEngineCc,
           horsepower: userHorsepower,
-          transmission: userTransmission,
-          fuel_type: userFuelType,
-          body_type: userBodyType,
+          transmission: scalarFromMultiSelect(data.transmission) || userTransmission,
+          fuel_type: scalarFromMultiSelect(data.fuelType) || userFuelType,
+          body_type: scalarFromMultiSelect(data.bodyType) || userBodyType,
           condition: userCondition,
           accident_free: userAccidentFree,
         }
@@ -3801,6 +4125,12 @@ function PostAdPage() {
         // The existing multi-step UI flow already enforces the truly required inputs (title/condition/make, price, location).
         // We still store missing_fields for debugging + later enrichment.
 
+        const vehicleSpecifications =
+          getValues('__vehicleSpecifications') ||
+          aiListingExtraction?.vehicleSpecifications ||
+          aiListingExtraction?.enrichment?.vehicleSpecifications ||
+          null
+
         aiMergedCarListing = {
           display_data,
           filter_data,
@@ -3810,6 +4140,7 @@ function PostAdPage() {
             horsepower: filter_data.horsepower,
             accident_free: filter_data.accident_free,
           },
+          vehicleSpecifications,
           missing_fields,
           ai_raw_response: aiListingExtraction,
         }
@@ -3839,8 +4170,20 @@ function PostAdPage() {
       const newImages = [...regularImageFiles, ...screenshotFiles.filter(f => f !== null)]
       const existingImageUrls = imageFiles.filter(file => file.isExisting).map(file => file.originalUrl || file.url)
       
-      const newVideo = videoFile && !videoFile.isExisting && videoFile instanceof File ? videoFile : null
+      let newVideo =
+        videoFile && !videoFile.isExisting && videoFile instanceof File ? videoFile : null
+      if (!newVideo && videoFile instanceof Blob && !videoFile.isExisting) {
+        const name = videoFile.name || 'listing-video.mp4'
+        newVideo = new File([videoFile], name, { type: videoFile.type || 'video/mp4' })
+      }
       const existingVideoUrl = videoFile?.isExisting ? (videoFile.originalUrl || videoFile.url) : null
+
+      if (!newVideo && !existingVideoUrl) {
+        toast.error('Video file is missing. Please re-upload your video on step 3.')
+        setCurrentStep(3)
+        setIsSubmitting(false)
+        return
+      }
       
       // Build the full category hierarchy path (IDs + names)
       const pathIds = selectedPath.filter(Boolean)
@@ -3865,18 +4208,19 @@ function PostAdPage() {
         city: data.city,
         area: data.area,
         brand: data.brand || null,
-        condition: data.condition,
+        condition: scalarFromMultiSelect(data.condition) || null,
         material: data.material || null,
-        color: data.color || null,
+        color: scalarFromMultiSelect(data.color) || null,
         make: data.make || null,
         model: data.model || null,
         year: data.year !== '' && data.year != null ? Number(data.year) : null,
         mileage: data.mileage !== '' && data.mileage != null ? Number(data.mileage) : null,
-        transmission: data.transmission || null,
-        fuelType: data.fuelType || null,
+        transmission: scalarFromMultiSelect(data.transmission) || null,
+        fuelType: scalarFromMultiSelect(data.fuelType) || null,
         seatingCapacity: data.seatingCapacity ? Number(data.seatingCapacity) : null,
         assemblyStatus: data.assemblyStatus || null,
         priceType: data.priceType || 'Fixed',
+        adType: data.adType || 'free',
         contactName: data.contactName,
         contactPhone: data.contactPhone,
         images: newImages.length > 0 ? newImages : undefined,
@@ -3888,21 +4232,36 @@ function PostAdPage() {
               display_data: aiMergedCarListing.display_data,
               filter_data: aiMergedCarListing.filter_data,
               specifications: aiMergedCarListing.specifications,
+              vehicleSpecifications: aiMergedCarListing.vehicleSpecifications,
               missing_fields: aiMergedCarListing.missing_fields,
               ai_raw_response: aiMergedCarListing.ai_raw_response,
             }
           : {}),
       }
 
-      // Attach category filter selections and any other filter_* fields.
+      // Attach category filter selections (exclude Ads Posted — set automatically below).
+      const categoryFilterList = getValues('__categoryFilters') || []
+      const adsPostedAuto = resolveAdsPostedSelectionForDate(
+        isEditMode && editProductPostedAt ? editProductPostedAt : new Date(),
+        categoryFilterList,
+      )
       const filterEntries = {}
       Object.keys(data || {}).forEach((key) => {
         if (!key.startsWith('filter_')) return
+        if (adsPostedAuto?.fieldKey && key === adsPostedAuto.fieldKey) return
         const v = data[key]
         if (v === undefined || v === null || v === '') return
-        formData[key] = v
-        filterEntries[key] = v
+        const normalized = toFilterArray(v)
+        if (!normalized.length) return
+        formData[key] = normalized
+        filterEntries[key] = normalized
       })
+      applyAdsPostedToFormData(formData, categoryFilterList, {
+        postedAt: isEditMode && editProductPostedAt ? editProductPostedAt : new Date(),
+      })
+      if (adsPostedAuto?.fieldKey) {
+        filterEntries[adsPostedAuto.fieldKey] = formData[adsPostedAuto.fieldKey]
+      }
       if (Object.keys(filterEntries).length) {
         console.log('[PostAd] Sending filter data:', filterEntries)
       }
@@ -3937,7 +4296,13 @@ function PostAdPage() {
         const value = allValues[key]
         if (value === undefined || value === null || value === '') return
 
-        // Avoid sending nested objects/arrays unless explicitly mapped above.
+        if (Array.isArray(value)) {
+          const scalar = scalarFromMultiSelect(value)
+          if (scalar) formData[key] = scalar
+          return
+        }
+
+        // Avoid sending nested objects unless explicitly mapped above.
         if (typeof value === 'object') return
 
         if (typeof value === 'string') {
@@ -4002,13 +4367,19 @@ function PostAdPage() {
       }
       navigate('/dashboard')
     } catch (error) {
-      console.error('Error submitting form:', error)
-      const errorMessage = error?.response?.data?.message || error?.message || `Failed to ${isEditMode ? 'update' : 'post'} product`
-      const angleChecklist = error?.response?.data?.angleChecklist
+      console.error('Error submitting form:', error?.response?.data || error)
+      const errPayload = error?.response?.data || (typeof error === 'object' ? error : null)
+      const errorMessage =
+        (typeof errPayload === 'string' ? errPayload : errPayload?.message) ||
+        error?.message ||
+        `Failed to ${isEditMode ? 'update' : 'post'} product`
+      const angleChecklist =
+        typeof errPayload === 'object' && errPayload ? errPayload.angleChecklist : undefined
       toast.error(
         Array.isArray(angleChecklist) && angleChecklist.length
           ? `${errorMessage} (${angleChecklist.join(', ')})`
           : errorMessage,
+        { duration: 6000 },
       )
     } finally {
       setIsSubmitting(false)
@@ -4037,42 +4408,60 @@ function PostAdPage() {
 
   const formData = watch()
 
-  return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <h1 className="text-3xl font-bold text-gray-900 mb-8">
-        {isEditMode ? 'Edit Product' : 'Post Your Ad'}
-      </h1>
+  const isCategoryStep = currentStep === 2 && !isEditMode
+  const isListingDetailsStep = currentStep === 3 && !isEditMode
 
-      {/* Progress Bar */}
-      <div className="mb-8">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-gray-700">
-            Step {currentStep} of {TOTAL_STEPS}
-          </span>
-          <span className="text-sm text-gray-500">
-            {Math.round((currentStep / TOTAL_STEPS) * 100)}% Complete
-          </span>
-              </div>
-        <div className="w-full bg-gray-200 rounded-full h-2">
-          <div
-            className="bg-primary-600 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${(currentStep / TOTAL_STEPS) * 100}%` }}
-          />
-              </div>
-        </div>
+  return (
+    <div className={`mx-auto w-full ${isCategoryStep || isListingDetailsStep ? 'max-w-none px-0 py-0' : 'max-w-4xl px-3 sm:px-4 md:px-6 lg:px-8 py-6 sm:py-8'}`}>
+      {!isCategoryStep && !isListingDetailsStep && (
+        <>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6 sm:mb-8">
+            {isEditMode ? 'Edit Product' : 'Post Your Ad'}
+          </h1>
+
+          {/* Progress Bar */}
+          <div className="mb-6 sm:mb-8">
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+              <span className="text-sm font-medium text-gray-700">
+                Step {currentStep} of {TOTAL_STEPS}
+              </span>
+              <span className="text-sm text-gray-500">
+                {Math.round((currentStep / TOTAL_STEPS) * 100)}% Complete
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 rounded-full h-2">
+              <div
+                className="bg-primary-600 h-2 rounded-full transition-all duration-300"
+                style={{ width: `${(currentStep / TOTAL_STEPS) * 100}%` }}
+              />
+            </div>
+          </div>
+        </>
+      )}
 
       {/* Step Content */}
       <form onSubmit={handleSubmit(onSubmit)}>
         {currentStep === 1 && <Step1Auth user={user} onNext={nextStep} />}
-        {currentStep === 2 && (
+        {currentStep === 2 && categoryPhase === 'root' && (
           <Step2Category
             levelOptions={levelOptions}
             selectedPath={selectedPath}
-            levelLabels={levelLabels}
-            onLevelChange={handleLevelChange}
-            loadingLevels={loadingLevels}
+            onCategorySelect={handleRootCategorySelect}
+            onBack={handlePostAdBack}
+            loadingLevels={loadingLevels || loadingSubcategories}
             register={register}
-            setValue={setValue}
+            errors={errors}
+          />
+        )}
+        {currentStep === 2 && categoryPhase === 'subcategory' && (
+          <Step2Subcategory
+            rootCategoryName={rootCategoryName}
+            subcategories={subcategoryOptions}
+            selectedSubcategoryId={selectedSubcategoryId}
+            onSubcategorySelect={handleSubcategorySelect}
+            onBack={handleCategoryPhaseBack}
+            loading={loadingSubcategories}
+            register={register}
             errors={errors}
           />
         )}
@@ -4081,11 +4470,15 @@ function PostAdPage() {
             videoFile={videoFile}
             setVideoFile={setVideoFile}
             setValue={setValue}
+            getValues={getValues}
             register={register}
             watch={watch}
+            errors={errors}
             selectedCategory={selectedCategoryForSteps || selectedCategory}
             subcategories={levelOptions[1] || []}
             categories={flatCategoriesForSteps.length ? flatCategoriesForSteps : categories}
+            breadcrumbItems={categoryPathNames}
+            onBack={handlePostAdBack}
             onNext={nextStep}
             imageFiles={imageFiles}
             setImageFiles={setImageFiles}
@@ -4104,6 +4497,8 @@ function PostAdPage() {
             register={register}
             watch={watch}
             setValue={setValue}
+            getValues={getValues}
+            control={control}
             errors={errors}
             categories={flatCategoriesForSteps.length ? flatCategoriesForSteps : categories}
             selectedCategory={selectedCategoryForSteps || selectedCategory}
@@ -4135,20 +4530,20 @@ function PostAdPage() {
           />
         )}
         {currentStep === 12 && (
-          <div className="card text-center py-12">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-primary-600 mx-auto mb-4"></div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Submitting Your Ad...</h2>
+          <div className="card text-center py-8 sm:py-12 px-4">
+            <div className="animate-spin rounded-full h-12 w-12 sm:h-16 sm:w-16 border-b-2 border-primary-600 mx-auto mb-4"></div>
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Submitting Your Ad...</h2>
             <p className="text-gray-600">Please wait while we process your submission</p>
           </div>
         )}
 
         {/* Navigation Buttons */}
-        {currentStep < TOTAL_STEPS && currentStep !== 1 && currentStep !== 3 && (
-          <div className="flex justify-between mt-8">
+        {currentStep < TOTAL_STEPS && currentStep !== 1 && currentStep !== 2 && currentStep !== 3 && (
+          <div className="post-ad-form-nav">
           <button
             type="button"
               onClick={prevStep}
-              className="btn-secondary flex items-center gap-2"
+              className="btn-secondary post-ad-form-nav-btn flex items-center gap-2"
           >
               <ChevronLeft className="w-4 h-4" />
               Previous
@@ -4165,7 +4560,7 @@ function PostAdPage() {
                     return false
                   }
                 }}
-                className="btn-primary flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="btn-primary post-ad-form-nav-btn flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {isSubmitting ? (
                   <>
@@ -4183,7 +4578,7 @@ function PostAdPage() {
               <button
                 type="button"
                 onClick={nextStep}
-                className="btn-primary flex items-center gap-2"
+                className="btn-primary post-ad-form-nav-btn flex items-center gap-2"
               >
                 Next
                 <ChevronRight className="w-4 h-4" />
@@ -4193,11 +4588,11 @@ function PostAdPage() {
         )}
 
         {currentStep === 1 && (
-          <div className="flex justify-end mt-8">
+          <div className="flex justify-stretch sm:justify-end mt-6 sm:mt-8">
           <button
             type="button"
             onClick={() => navigate(-1)}
-            className="btn-secondary"
+            className="btn-secondary w-full sm:w-auto"
           >
             Cancel
           </button>

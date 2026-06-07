@@ -8,10 +8,19 @@ const mongoose = require('mongoose')
 const authMiddleware = require('../middleware/auth')
 const validateObjectId = require('../middleware/validateObjectId')
 const { upload, compressVideo } = require('../middleware/upload')
+const { enqueueProductVideoTranscode, normalizeStatus } = require('../jobs/videoTranscodeQueue')
 const { resolveFiltersFromProductData } = require('../services/filterMatchingService')
+const { parseFilterValues } = require('../utils/filterValueUtils')
 const { getJwtFromRequest } = require('../utils/authToken')
 const adTypes = require('../config/adTypes')
 const { extractStructuredCarDetails } = require('../services/structuredCarDetailsService')
+const { validationResult } = require('express-validator')
+const { createProductRules, updateProductRules } = require('../core/validators/product.validator')
+const {
+  parseProductVehicleFields,
+  applyProductVehicleFields,
+  HANDLED_REQUEST_KEYS,
+} = require('../utils/productVehicleFields')
 
 // Helper function to safely parse JSON strings
 const parseJSONField = (field) => {
@@ -805,7 +814,7 @@ router.get('/', async (req, res) => {
 
     const products = await Product.find(query)
       .populate('category', 'name icon emoji')
-      .populate('seller', 'name avatar rating memberSince isVerified')
+      .populate('seller', 'name avatar rating memberSince isVerified identityVerificationStatus')
       .sort(sort)
       .skip(skip)
       .limit(Number(limit))
@@ -1013,6 +1022,7 @@ router.get('/reels-feed', async (req, res) => {
               rating: '$_sellerDoc.rating',
               memberSince: '$_sellerDoc.memberSince',
               isVerified: '$_sellerDoc.isVerified',
+              identityVerificationStatus: '$_sellerDoc.identityVerificationStatus',
             },
           },
         },
@@ -1025,7 +1035,7 @@ router.get('/reels-feed', async (req, res) => {
       try {
         products = await Product.find(query)
           .populate('category', 'name icon emoji')
-          .populate('seller', 'name avatar rating memberSince isVerified')
+          .populate('seller', 'name avatar rating memberSince isVerified identityVerificationStatus')
           .sort({ $rand: 1 })
           .limit(limit)
           .lean()
@@ -1034,7 +1044,7 @@ router.get('/reels-feed', async (req, res) => {
         const skip = (page - 1) * limit
         products = await Product.find(query)
           .populate('category', 'name icon emoji')
-          .populate('seller', 'name avatar rating memberSince isVerified')
+          .populate('seller', 'name avatar rating memberSince isVerified identityVerificationStatus')
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(limit)
@@ -1196,7 +1206,7 @@ router.get('/search', async (req, res) => {
         total = await Product.countDocuments(match)
         products = await Product.find(match)
           .populate('category', 'name icon emoji')
-          .populate('seller', 'name avatar rating memberSince isVerified')
+          .populate('seller', 'name avatar rating memberSince isVerified identityVerificationStatus')
           .sort({ score: { $meta: 'textScore' }, createdAt: -1 })
           .skip((page - 1) * limit)
           .limit(limit)
@@ -1209,7 +1219,7 @@ router.get('/search', async (req, res) => {
         total = await Product.countDocuments(match)
         products = await Product.find(match)
           .populate('category', 'name icon emoji')
-          .populate('seller', 'name avatar rating memberSince isVerified')
+          .populate('seller', 'name avatar rating memberSince isVerified identityVerificationStatus')
           .sort({ createdAt: -1 })
           .skip((page - 1) * limit)
           .limit(limit)
@@ -1219,7 +1229,7 @@ router.get('/search', async (req, res) => {
       total = await Product.countDocuments(match)
       products = await Product.find(match)
         .populate('category', 'name icon emoji')
-        .populate('seller', 'name avatar rating memberSince isVerified')
+        .populate('seller', 'name avatar rating memberSince isVerified identityVerificationStatus')
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)
@@ -1250,6 +1260,59 @@ router.get('/search', async (req, res) => {
   }
 })
 
+// @route   GET /api/products/:id/video-processing
+// @desc    Poll HLS transcoding status for a product video
+// @access  Public (owners/admins get full error details)
+router.get('/:id/video-processing', validateObjectId('id'), async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+      .select('video videoStream seller')
+      .lean()
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' })
+    }
+
+    const stream = product.videoStream || {}
+    const status = normalizeStatus(stream.status)
+
+    const stageLabels = {
+      pending: 'Processing Video...',
+      processing: 'Processing Video...',
+      generating_thumbnail: 'Generating Thumbnail...',
+      generating_streams: 'Generating Streaming Files...',
+      completed: 'Video Ready',
+      failed: 'Processing Failed',
+    }
+
+    const processingStage = stream.processingStage || stream.status || 'pending'
+
+    return res.json({
+      productId: product._id,
+      originalUrl: stream.originalUrl || product.video,
+      status,
+      processingStage,
+      message: stageLabels[processingStage] || stageLabels[status] || 'Processing Video...',
+      progress: stream.progress ?? null,
+      hlsUrl: stream.hlsUrl || null,
+      masterPlaylistUrl: stream.masterPlaylistUrl || stream.hlsUrl || null,
+      thumbnailUrl: stream.thumbnailUrl || null,
+      duration: stream.duration || 0,
+      width: stream.width || 0,
+      height: stream.height || 0,
+      fileSize: stream.fileSize || 0,
+      availableQualities: stream.availableQualities || (stream.renditions || []).map((r) => r.id),
+      processingStartedAt: stream.processingStartedAt || null,
+      processingCompletedAt: stream.processingCompletedAt || null,
+      jobId: stream.jobId || null,
+      error: status === 'failed' ? stream.error : null,
+    })
+  } catch (error) {
+    console.error('[products] video-processing status error:', error)
+    return res.status(500).json({ message: error.message || 'Error fetching video processing status' })
+  }
+})
+
 // @route   GET /api/products/:id
 // @desc    Get single product by ID
 // @access  Public (but only active products visible to non-owners)
@@ -1258,7 +1321,7 @@ router.get('/:id', validateObjectId('id'), async (req, res) => {
     const product = await Product.findById(req.params.id)
       .populate('category', 'name icon emoji')
       .populate('categoryPath', 'name icon emoji')
-      .populate('seller', 'name email phone avatar rating memberSince isVerified')
+      .populate('seller', 'name email phone avatar rating memberSince isVerified identityVerificationStatus')
 
     if (!product) {
       return res.status(404).json({ message: 'Product not found' })
@@ -1374,8 +1437,22 @@ router.post(
     { name: 'images', maxCount: 20 },
   ]),
   compressVideo,
+  createProductRules,
   async (req, res) => {
     try {
+      const validationErrors = validationResult(req)
+      if (!validationErrors.isEmpty()) {
+        return res.status(400).json({
+          message: validationErrors.array()[0]?.msg || 'Validation failed',
+          errors: validationErrors.array(),
+        })
+      }
+
+      const { values: vehicleFieldValues, errors: vehicleFieldErrors } = parseProductVehicleFields(req.body)
+      if (vehicleFieldErrors.length) {
+        return res.status(400).json({ message: vehicleFieldErrors[0], errors: vehicleFieldErrors })
+      }
+
       // Check if user is verified (admins can bypass this check)
       const isAdmin = req.user.role === 'admin'
       if (!isAdmin && !req.user.isVerified) {
@@ -1413,6 +1490,7 @@ router.post(
         display_data,
         filter_data,
         specifications,
+        vehicleSpecifications,
         missing_fields,
         ai_raw_response,
       } = req.body
@@ -1431,8 +1509,10 @@ router.post(
         'display_data',
         'filter_data',
         'specifications',
+        'vehicleSpecifications',
         'missing_fields',
         'ai_raw_response',
+        ...HANDLED_REQUEST_KEYS,
       ]
       const dynamicFields = {}
       allFields.forEach(key => {
@@ -1452,17 +1532,22 @@ router.post(
       const uploadedImageFiles = Array.isArray(req.files?.images) ? req.files.images : []
       const autoScreenshots = Array.isArray(req.videoScreenshots) ? req.videoScreenshots : []
 
-      // If auto screenshot extraction fails, enforce a user-side fallback checklist.
-      if (autoScreenshots.length === 0) {
-        if (uploadedImageFiles.length < 3) {
-          return res.status(400).json({
-            message: 'Please upload at least 3 images showing different angles (front/side/top).',
-            angleChecklist: ['Front view', 'Side view', 'Top/close-up view'],
-          })
-        }
-      } else if (autoScreenshots.length < 3) {
+      // Images: prefer auto angles from video; otherwise require at least one user-uploaded image (matches Post Ad UI).
+      const totalImageCount = uploadedImageFiles.length + autoScreenshots.length
+      if (totalImageCount < 1) {
         return res.status(400).json({
-          message: 'Could not extract enough distinct angles from your video. Please capture at least 3 screenshots (front/side/top) and retry.',
+          message: 'Please upload at least 1 image or capture screenshots from your video.',
+        })
+      }
+      if (autoScreenshots.length === 0 && uploadedImageFiles.length < 1) {
+        return res.status(400).json({
+          message: 'Please upload at least 1 image. Auto screenshots from video were not available on the server.',
+        })
+      }
+      if (autoScreenshots.length > 0 && autoScreenshots.length < 3 && uploadedImageFiles.length < 1) {
+        return res.status(400).json({
+          message:
+            'Could not extract enough angles from your video. Upload at least 1 photo or capture screenshots in the video step.',
           angleChecklist: ['Front view', 'Side view', 'Top/close-up view'],
         })
       }
@@ -1541,14 +1626,15 @@ router.post(
       // Validate selected categories exist in the database
       let validCategoryId = category || null
       let validSubcategoryId = subcategory || null
+      if (!validCategoryId || !mongoose.Types.ObjectId.isValid(String(validCategoryId))) {
+        return res.status(400).json({ message: 'Category is required. Please go back and select a category.' })
+      }
       if (validCategoryId && mongoose.Types.ObjectId.isValid(validCategoryId)) {
         const catDoc = await Category.findOne({ _id: validCategoryId, isDeleted: false }).select('_id name').lean()
         if (!catDoc) {
           return res.status(400).json({ message: 'Selected category not found. Please choose a valid category.' })
         }
         console.log(`[PostProduct] Category validated: ${catDoc.name} (${catDoc._id})`)
-      } else if (validCategoryId) {
-        return res.status(400).json({ message: 'Invalid category ID provided.' })
       }
       if (validSubcategoryId && mongoose.Types.ObjectId.isValid(validSubcategoryId)) {
         const subDoc = await Category.findOne({ _id: validSubcategoryId, isDeleted: false }).select('_id name').lean()
@@ -1612,11 +1698,13 @@ router.post(
         display_data: parseJSONField(display_data) || null,
         filter_data: parseJSONField(filter_data) || null,
         specifications: parseJSONField(specifications),
+        vehicleSpecifications: parseJSONField(vehicleSpecifications) || null,
         missing_fields: Array.isArray(parseJSONField(missing_fields))
           ? parseJSONField(missing_fields)
           : [],
         ai_raw_response: parseJSONField(ai_raw_response) || null,
       }
+      applyProductVehicleFields(productData, vehicleFieldValues)
       productData.adConfig = adTypes[productData.adType] || adTypes.free
 
       // Dimensions
@@ -1758,18 +1846,30 @@ router.post(
       console.log('[FilterStore] All filter_* keys in req.body:', bodyKeys.filter((k) => k.startsWith('filter_')))
 
       for (const key of filterBaseKeys) {
-        const val = String(req.body[key] || '').trim()
-        if (!val) continue
-
         const slug = key.replace('filter_', '')
         const nameKey = `${key}_name`
         const humanName = req.body[nameKey] ? String(req.body[nameKey]).trim() : ''
+        const values = parseFilterValues(req.body[key])
+        if (!values.length) continue
 
-        if (mongoose.Types.ObjectId.isValid(val)) {
-          allFilterIds.push(val)
-          filterDataObj[slug] = { filterId: val, value: humanName || val }
-        } else {
-          filterDataObj[slug] = { value: val }
+        const objectIds = values.filter((v) => mongoose.Types.ObjectId.isValid(v))
+        const stringValues = values.filter((v) => !mongoose.Types.ObjectId.isValid(v))
+
+        for (const id of objectIds) {
+          allFilterIds.push(id)
+        }
+
+        if (objectIds.length) {
+          filterDataObj[slug] = {
+            values: objectIds,
+            filterIds: objectIds,
+            value: humanName || objectIds.join(', '),
+          }
+        } else if (stringValues.length) {
+          filterDataObj[slug] = {
+            values: stringValues,
+            value: stringValues.join(', '),
+          }
         }
       }
 
@@ -1854,7 +1954,10 @@ router.post(
           color: ['color'],
         }
         for (const [slug, data] of Object.entries(filterDataObj)) {
-          const val = data.value
+          const val =
+            Array.isArray(data.values) && data.values.length
+              ? data.values[0]
+              : data.value
           if (!val || typeof val !== 'string') continue
           const normalizedSlug = slug.toLowerCase().replace(/[\s_]+/g, '-')
           const targetFields = filterFieldMap[normalizedSlug]
@@ -1870,10 +1973,10 @@ router.post(
 
       // Also persist in additionalFields for backward compatibility
       for (const key of filterBaseKeys) {
-        const val = String(req.body[key] || '').trim()
-        if (!val) continue
+        const values = parseFilterValues(req.body[key])
+        if (!values.length) continue
         if (!productData.additionalFields) productData.additionalFields = {}
-        productData.additionalFields[key] = val
+        productData.additionalFields[key] = values
       }
 
       console.log('[FilterStore] Final selectedFilters:', uniqueFilterIds)
@@ -1895,6 +1998,12 @@ router.post(
 
       const product = new Product(productData)
       await product.save()
+
+      if (product.video) {
+        enqueueProductVideoTranscode(product._id, product.video).catch((err) => {
+          console.error('[products] adaptive transcode queue failed:', err.message)
+        })
+      }
 
       await product.populate('category', 'name icon emoji')
       await product.populate('seller', 'name avatar rating memberSince')
@@ -1962,8 +2071,22 @@ router.put(
     { name: 'images', maxCount: 20 },
   ]),
   compressVideo,
+  updateProductRules,
   async (req, res) => {
     try {
+      const validationErrors = validationResult(req)
+      if (!validationErrors.isEmpty()) {
+        return res.status(400).json({
+          message: validationErrors.array()[0]?.msg || 'Validation failed',
+          errors: validationErrors.array(),
+        })
+      }
+
+      const { values: vehicleFieldValues, errors: vehicleFieldErrors } = parseProductVehicleFields(req.body)
+      if (vehicleFieldErrors.length) {
+        return res.status(400).json({ message: vehicleFieldErrors[0], errors: vehicleFieldErrors })
+      }
+
       const product = await Product.findById(req.params.id).lean()
       if (!product) {
         return res.status(404).json({ message: 'Product not found' })
@@ -2219,6 +2342,7 @@ router.put(
         'contactPhone', 'contactOptions', 'dimensions', 'adType', 'status',
         // media helper fields used by frontend sometimes
         'existingImages', 'existingVideo',
+        ...HANDLED_REQUEST_KEYS,
       ])
 
       const updateFilterIds = []
@@ -2231,16 +2355,29 @@ router.put(
 
         // Collect filter data from filter_* fields
         if (key.startsWith('filter_') && !key.includes('_lvl') && !key.endsWith('_name')) {
-          const val = String(fieldValue).trim()
-          if (val) {
-            const slug = key.replace('filter_', '')
-            const nameKey = `${key}_name`
-            const humanName = req.body[nameKey] ? String(req.body[nameKey]).trim() : ''
-            if (mongoose.Types.ObjectId.isValid(val)) {
-              updateFilterIds.push(val)
-              updateFilterDataObj[slug] = { filterId: val, value: humanName || val }
-            } else {
-              updateFilterDataObj[slug] = { value: val }
+          const slug = key.replace('filter_', '')
+          const nameKey = `${key}_name`
+          const humanName = req.body[nameKey] ? String(req.body[nameKey]).trim() : ''
+          const values = parseFilterValues(fieldValue)
+          if (!values.length) return
+
+          const objectIds = values.filter((v) => mongoose.Types.ObjectId.isValid(v))
+          const stringValues = values.filter((v) => !mongoose.Types.ObjectId.isValid(v))
+
+          for (const id of objectIds) {
+            updateFilterIds.push(id)
+          }
+
+          if (objectIds.length) {
+            updateFilterDataObj[slug] = {
+              values: objectIds,
+              filterIds: objectIds,
+              value: humanName || objectIds.join(', '),
+            }
+          } else if (stringValues.length) {
+            updateFilterDataObj[slug] = {
+              values: stringValues,
+              value: stringValues.join(', '),
             }
           }
         }
@@ -2329,7 +2466,16 @@ router.put(
         console.log('[FilterStore] Updated filterData:', JSON.stringify(updateFilterDataObj))
       }
 
+      applyProductVehicleFields(productDoc, vehicleFieldValues)
+
       await productDoc.save()
+
+      if (req.files?.video?.[0] && productDoc.video) {
+        enqueueProductVideoTranscode(productDoc._id, productDoc.video).catch((err) => {
+          console.error('[products] adaptive transcode queue failed:', err.message)
+        })
+      }
+
       await productDoc.populate('category', 'name icon emoji')
       await productDoc.populate('seller', 'name avatar rating memberSince')
 

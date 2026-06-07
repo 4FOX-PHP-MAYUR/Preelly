@@ -5,16 +5,24 @@ import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import App from './App'
 import { ChatProvider } from './components/Chat/ChatContext'
+import { CallProvider } from './components/Call/CallContext'
 import { store } from './store/store'
 import './index.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <Provider store={store}>
-      <BrowserRouter>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
         <ChatProvider>
-          <App />
-          <Toaster position="top-right" />
+          <CallProvider>
+            <App />
+            <Toaster position="top-right" />
+          </CallProvider>
         </ChatProvider>
       </BrowserRouter>
     </Provider>

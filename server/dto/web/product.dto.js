@@ -1,0 +1,54 @@
+/**
+ * Web-optimized product payloads — full metadata, SEO fields, breadcrumbs.
+ */
+const { pickVehicleListingFields } = require('../../utils/productVehicleFields')
+
+function buildBreadcrumbs(product) {
+  if (!product.category) return []
+  const cat = product.category
+  return [{ id: cat._id, name: cat.name, slug: cat.slug }]
+}
+
+function listItem(product) {
+  return {
+    _id: product._id,
+    title: product.title,
+    slug: product.slug || null,
+    price: product.price,
+    currency: product.currency || 'AED',
+    description: product.description
+      ? product.description.slice(0, 200) + (product.description.length > 200 ? '…' : '')
+      : '',
+    images: product.images || [],
+    video: product.video || null,
+    videoThumbnail: product.videoThumbnail || null,
+    location: product.location || product.city || null,
+    category: product.category || null,
+    breadcrumbs: buildBreadcrumbs(product),
+    user: product.user || null,
+    saved: Boolean(product.saved),
+    status: product.status,
+    adType: product.adType || 'free',
+    createdAt: product.createdAt,
+    updatedAt: product.updatedAt,
+    views: product.views || 0,
+    likes: product.likes || 0,
+    ...pickVehicleListingFields(product),
+  }
+}
+
+function detail(product) {
+  return {
+    ...listItem(product),
+    description: product.description,
+    filters: product.filters || {},
+    filterValues: product.filterValues || {},
+    coordinates: product.coordinates || null,
+    negotiable: Boolean(product.negotiable),
+    condition: product.condition || null,
+    rejectionReason: product.rejectionReason || null,
+    streaming: product.streaming || null,
+  }
+}
+
+module.exports = { listItem, detail, buildBreadcrumbs }

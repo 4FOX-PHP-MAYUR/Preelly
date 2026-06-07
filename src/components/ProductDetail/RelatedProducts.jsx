@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { MapPin } from 'lucide-react'
 import { getMediaUrl } from '../../utils/helpers'
+import VideoPreview from '../Video/VideoPreview'
 
 function RelatedProducts({ products }) {
   const navigate = useNavigate()
@@ -25,14 +26,8 @@ function RelatedProducts({ products }) {
               className="flex-shrink-0 w-64 bg-white rounded-lg shadow-md overflow-hidden cursor-pointer hover:shadow-lg transition-shadow"
             >
               <div className="aspect-video bg-gray-200 relative">
-                {product.video ? (
-                  <video
-                    src={getMediaUrl(product.video)}
-                    className="w-full h-full object-cover"
-                    muted
-                    loop
-                    autoPlay
-                  />
+                {product.video || product.videoStream?.hlsUrl ? (
+                  <VideoPreview product={product} className="w-full h-full object-cover" />
                 ) : (
                   <img
                     src={getMediaUrl(product.images?.[0]) || '/placeholder.jpg'}

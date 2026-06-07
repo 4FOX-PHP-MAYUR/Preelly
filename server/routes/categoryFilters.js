@@ -74,7 +74,25 @@ router.get('/', async (req, res) => {
     for (const f of [...directLevelFilters, ...linkedFilters]) {
       byId.set(String(f._id), f)
     }
-    const filters = [...byId.values()]
+
+    // Include descendant filters (e.g. "Today" under "Ads Posted") when a parent is assigned.
+    const seedIds = [...byId.keys()].map((id) => new mongoose.Types.ObjectId(id))
+    if (seedIds.length) {
+      const expanded = await Filter.find({
+        isDeleted: { $ne: true },
+        isActive: { $ne: false },
+        $or: [{ _id: { $in: seedIds } }, { path: { $in: seedIds } }],
+      })
+        .sort({ sortOrder: 1, name: 1 })
+        .lean()
+      for (const f of expanded) {
+        byId.set(String(f._id), f)
+      }
+    }
+
+    const filters = [...byId.values()].sort(
+      (a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || String(a.name).localeCompare(String(b.name)),
+    )
 
     res.json({
       category: category.name,
@@ -87,6 +105,7 @@ router.get('/', async (req, res) => {
         name: f.name,
         slug: f.slug,
         parentId: f.parentId || null,
+        sortOrder: f.sortOrder ?? 0,
         category_id: f.categoryId || null,
         subcategory_id: f.subcategoryId || null,
         child_category_id: f.childCategoryId || null,

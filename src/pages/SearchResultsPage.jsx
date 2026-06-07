@@ -418,8 +418,8 @@ function SearchResultsPage() {
         
         {/* Filters Sidebar */}
         <div className={`${
-          showFilters 
-              ? 'fixed left-0 top-0 h-full w-80 bg-white z-50 shadow-2xl overflow-y-auto lg:relative lg:z-auto lg:h-auto lg:w-64 lg:shadow-none' 
+          showFilters
+              ? 'fixed left-0 top-0 h-full w-full max-w-xs sm:w-80 bg-white z-50 shadow-2xl overflow-y-auto lg:relative lg:z-auto lg:h-auto lg:w-64 lg:shadow-none'
             : 'hidden lg:block'
           } flex-shrink-0`}>
             <div className="bg-white rounded-lg shadow-sm p-4 lg:sticky lg:top-24">
@@ -746,14 +746,14 @@ function SearchResultsPage() {
                   </div>
                 ) : (
                   /* List View */
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {sortedProducts.map((product) => (
                       <Link
                         key={product._id}
                         to={`/products/${product._id}`}
                         className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow flex"
                       >
-                        <div className="relative w-48 h-48 bg-gray-200 flex-shrink-0">
+                        <div className="relative w-24 h-24 sm:w-36 sm:h-36 md:w-48 md:h-48 bg-gray-200 flex-shrink-0">
                           {product.video ? (
                             <video
                               src={getMediaUrl(product.video)}
@@ -771,32 +771,32 @@ function SearchResultsPage() {
                             />
                           )}
                         </div>
-                        <div className="p-4 flex-1">
-                          <h3 className="font-semibold text-gray-900 mb-2 text-lg">
+                        <div className="p-3 sm:p-4 flex-1 min-w-0">
+                          <h3 className="font-semibold text-gray-900 mb-1 sm:mb-2 text-sm sm:text-base md:text-lg line-clamp-2">
                             {product.title}
                           </h3>
-                          <p className="text-primary-600 font-bold text-xl mb-3">
+                          <p className="text-primary-600 font-bold text-base sm:text-lg md:text-xl mb-1 sm:mb-3">
                             {formatPrice(product.price)}
                           </p>
-                          <div className="flex items-center text-sm text-gray-600 gap-4">
+                          <div className="flex flex-wrap items-center text-xs sm:text-sm text-gray-600 gap-2 sm:gap-4">
                             <div className="flex items-center gap-1">
-                              <MapPin className="h-4 w-4" />
-                      <span>{product.location}</span>
+                              <MapPin className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
+                              <span className="truncate max-w-[120px] sm:max-w-none">{product.location}</span>
                             </div>
                             {product.createdAt && (
-                              <div className="flex items-center gap-1">
-                                <Calendar className="h-4 w-4" />
+                              <div className="hidden sm:flex items-center gap-1">
+                                <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
                                 <span>{new Date(product.createdAt).toLocaleDateString()}</span>
                               </div>
                             )}
-                      {product.views > 0 && (
-                          <span>{product.views} views</span>
-                      )}
-                    </div>
+                            {product.views > 0 && (
+                              <span className="hidden md:inline">{product.views} views</span>
+                            )}
+                          </div>
+                        </div>
+                      </Link>
+                    ))}
                   </div>
-                </Link>
-              ))}
-            </div>
                 )}
 
           {/* Load More */}

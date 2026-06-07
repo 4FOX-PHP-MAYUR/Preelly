@@ -12,10 +12,11 @@ function buildSpec (opts) {
       version: '1.0.0',
       description:
         'Full REST surface for the OLX/Dubizzle-style marketplace backend.\n\n' +
-        '- **Auth:** Use **Authorize** with a JWT from `POST /api/auth/login` or `POST /api/auth/verify-email-otp`. The SPA may also send the same token as an HTTP-only cookie (Try it out uses the header).\n' +
+        '- **Auth:** Use **Authorize** with a JWT from `POST /api/auth/verify-otp` (email or WhatsApp), `POST /api/auth/verify-email-otp`, or signup verification flows. The SPA may also send the same token as an HTTP-only cookie (Try it out uses the header).\n' +
+        '- **OTP channels:** `POST /api/auth/send-otp` accepts `channel: "email" | "whatsapp"`. WhatsApp login requires `phone`, optional `phoneCountryCode` / `phoneCountryIso`, and `mode: "login"`.\n' +
         '- **Admin:** Same bearer token; user must have admin role.\n' +
         '- **WebSocket:** Real-time chat uses Socket.IO (not part of OpenAPI). Events include `join-user`, `join-room`, `leave-room`, `new-message`, `unread-updated`.\n' +
-        '- **Route list:** See `API_LIST.md` in the repo root; OpenAPI paths are generated from `server/swagger/allPaths.js`.',
+        '- **Route lists:** See `docs/API_List_Mobile.xlsx` and `docs/API_List_Web.xlsx`; OpenAPI paths are generated from `server/swagger/allPaths.js`.',
     },
     servers: [{ url: baseUrl, description: 'Server root' }],
     tags: getTagDefinitions(),
@@ -26,7 +27,7 @@ function buildSpec (opts) {
           scheme: 'bearer',
           bearerFormat: 'JWT',
           description:
-            'JWT from login or email verification. Send as `Authorization: Bearer <token>`. Cookies are not sent from Swagger Try it by default.',
+            'JWT from verify-otp or email/phone verification. Send as `Authorization: Bearer <token>`. Cookies are not sent from Swagger Try it by default.',
         },
       },
     },

@@ -80,7 +80,11 @@ const transformMessage = (message) => {
     id: message._id || message.id,
     senderId: senderId,
     senderRole: message.senderRole || null,
-    text: message.text,
+    type: message.type || 'text',
+    callMeta: message.callMeta || null,
+    text: message.text || '',
+    attachment: message.attachment || null,
+    attachments: message.attachments?.length > 0 ? message.attachments : (message.attachment ? [message.attachment] : []),
     createdAt: message.createdAt || new Date().toISOString(),
     read: message.read || false,
     readAt: message.readAt || null,
@@ -127,7 +131,11 @@ export function ChatProvider({ children }) {
           id: message._id || message.id,
           senderId: senderId,
           senderRole: null,
-          text: message.text,
+          type: message.type || 'text',
+          callMeta: message.callMeta || null,
+          text: message.text || '',
+          attachment: message.attachment || null,
+          attachments: message.attachments?.length > 0 ? message.attachments : (message.attachment ? [message.attachment] : []),
           createdAt: message.createdAt || new Date().toISOString(),
           read: message.read || false,
           readAt: message.readAt || null,
@@ -237,7 +245,9 @@ export function ChatProvider({ children }) {
       setError(null)
       // Only load chat threads when user is actually on chat routes.
       // This avoids heavy `/api/feed-data?includeChats=1` requests on every page load.
-      const isChatRoute = location?.pathname?.startsWith('/chat')
+      const isChatRoute =
+        location?.pathname?.startsWith('/chat') ||
+        location?.pathname?.startsWith('/dashboard/messages')
       if (!isChatRoute) {
         setThreads([])
         return
@@ -302,12 +312,12 @@ export function ChatProvider({ children }) {
     }
   }, [])
 
-  const sendMessage = useCallback(async (threadId, { senderId, senderRole, text }) => {
-    if (!threadId || !text?.trim()) return null
+  const sendMessage = useCallback(async (threadId, { senderId, senderRole, text, files, file }) => {
+    const fileList = files || (file ? [file] : [])
+    if (!threadId || (!text?.trim() && fileList.length === 0)) return null
 
     try {
-      // Message will be added via socket event, but we still need to send to backend
-      const response = await chatService.sendMessage(threadId, text.trim())
+      const response = await chatService.sendMessage(threadId, text?.trim() || '', fileList.length > 0 ? fileList : null)
       const message = response.data
 
       // Transform message
@@ -315,7 +325,10 @@ export function ChatProvider({ children }) {
         id: message._id || message.id,
         senderId: typeof message.sender === 'object' ? message.sender._id : message.sender,
         senderRole: senderRole,
+        type: message.type || 'text',
         text: message.text,
+        attachment: message.attachment || null,
+        attachments: message.attachments?.length > 0 ? message.attachments : (message.attachment ? [message.attachment] : []),
         createdAt: message.createdAt || new Date().toISOString(),
         read: message.read || false,
         readAt: message.readAt || null,

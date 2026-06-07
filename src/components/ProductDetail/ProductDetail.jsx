@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { MapPin, Phone, MessageCircle, Flag, Heart, Share2, Edit, Trash2, BarChart3 } from 'lucide-react'
-import ReactPlayer from 'react-player'
 import toast from 'react-hot-toast'
 import SellerInfo from './SellerInfo'
+import HlsVideoPlayer from '../Video/HlsVideoPlayer'
 import { interactionService, productService } from '../../services/api'
 import { selectIsAuthenticated, selectUser } from '../../store/slices/authSlice'
 import { getMediaUrl } from '../../utils/helpers'
+import { getVideoThumbnailUrl } from '../../utils/videoHelpers'
 import { useChat } from '../Chat/ChatContext'
 import CarOverview from './CarOverview'
 import ProductFeatures from './ProductFeatures'
@@ -130,22 +131,22 @@ function ProductDetail({ product }) {
   const whatsappPhone = formatPhoneForWhatsApp(phone)
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6 lg:gap-8">
       {/* Left Column - Media */}
-      <div className="lg:col-span-2">
+      <div className="lg:col-span-2 min-w-0">
         <div className="bg-white rounded-lg shadow-md overflow-hidden">
           {/* Main Media Display */}
           <div className="aspect-video bg-black relative">
             {allMedia[selectedImage]?.type === 'video' ? (
-              <ReactPlayer
-                url={allMedia[selectedImage].url}
-                playing
+              <HlsVideoPlayer
+                product={product}
+                className="w-full h-full object-contain"
+                style={{ width: '100%', height: '100%' }}
+                controls
                 loop
                 muted
-                width="100%"
-                height="100%"
-                controls
-                className="object-cover"
+                autoPlay
+                showQualitySelector
               />
             ) : (
               <img
@@ -199,8 +200,8 @@ function ProductDetail({ product }) {
         <ProductFeatures product={product} />
 
         {/* Product Description */}
-        <div className="mt-6 bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">Description</h2>
+        <div className="mt-4 sm:mt-6 bg-white rounded-lg shadow-md p-4 sm:p-6">
+          <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-4">Description</h2>
           <p className="text-gray-700 whitespace-pre-line">{product.description || 'No description provided.'}</p>
           
           {product.brand && (
@@ -213,12 +214,12 @@ function ProductDetail({ product }) {
       </div>
 
       {/* Right Column - Product Info & Seller */}
-      <div className="space-y-6">
+      <div className="space-y-4 sm:space-y-6 min-w-0">
         {/* Product Info Card */}
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
           <div className="flex items-start justify-between mb-4">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.title}</h1>
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold text-gray-900 mb-2 break-words">{product.title}</h1>
               <div className="flex items-center space-x-2 text-gray-600 mb-4">
                 <MapPin className="h-4 w-4" />
                 <span className="text-sm">{product.location}</span>
@@ -227,7 +228,7 @@ function ProductDetail({ product }) {
           </div>
 
           <div className="mb-6">
-            <div className="text-4xl font-bold text-primary-600 mb-2">
+            <div className="text-2xl sm:text-3xl lg:text-4xl font-bold text-primary-600 mb-2">
               {formatPrice(product.price)}
             </div>
             {product.condition && (

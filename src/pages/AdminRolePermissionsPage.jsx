@@ -115,13 +115,13 @@ function AdminRolePermissionsPage() {
           <ArrowLeft className="h-4 w-4" />
           Back to Roles
         </button>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-lg bg-indigo-100 flex items-center justify-center">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-10 w-10 shrink-0 rounded-lg bg-indigo-100 flex items-center justify-center">
               <Shield className="h-5 w-5 text-indigo-600" />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 truncate">
                 Permissions — {role?.role_name}
               </h1>
               <p className="text-sm text-gray-600">
@@ -129,7 +129,7 @@ function AdminRolePermissionsPage() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
             <button
               onClick={selectAll}
               className="px-3 py-1.5 text-sm bg-green-50 text-green-700 border border-green-200 rounded-lg hover:bg-green-100"
@@ -160,6 +160,7 @@ function AdminRolePermissionsPage() {
 
       {/* Permissions Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="responsive-table-wrap">
         <table className="w-full">
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
@@ -236,6 +237,7 @@ function AdminRolePermissionsPage() {
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Bottom Save */}

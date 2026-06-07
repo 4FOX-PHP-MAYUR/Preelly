@@ -6,6 +6,7 @@ import { interactionService } from '../../services/api'
 import { selectIsAuthenticated, selectUser } from '../../store/slices/authSlice'
 import { useChat } from '../Chat/ChatContext'
 import { getMediaUrl } from '../../utils/helpers'
+import ChatMessageRichContent from '../Chat/ChatMessageRichContent'
 
 const REPORT_REASONS = [
   { value: 'fake', label: 'Fake' },
@@ -474,7 +475,9 @@ function ReelCommentsModal({ productId, productTitle, product, onClose, onCommen
                     : 'bg-gray-700 text-white rounded-bl-md'
                 }`}
               >
-                <p className="text-xs sm:text-sm break-words">{msg.text}</p>
+                <div className="text-xs sm:text-sm break-words">
+                  <ChatMessageRichContent text={msg.text} bubbleVariant={isMe(msg) ? 'primary' : 'dark'} />
+                </div>
                 <p className={`text-[10px] sm:text-xs mt-0.5 flex items-center justify-end gap-1 ${isMe(msg) ? 'text-primary-100' : 'text-gray-400'}`}>
                   <span>{formatChatTime(msg.createdAt)}</span>
                   {isMe(msg) && (
@@ -568,12 +571,12 @@ function ReelCommentsModal({ productId, productTitle, product, onClose, onCommen
   return (
     <>
       <div
-        className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[2px] transition-opacity duration-300"
+        className="fixed inset-0 z-[10000] bg-black/50 backdrop-blur-[2px] transition-opacity duration-300"
         onClick={onClose}
         aria-hidden
       />
       <div
-        className="fixed top-0 right-0 bottom-0 z-50 flex flex-col transition-transform ease-out bg-gray-900 shadow-2xl w-full max-w-[100vw] sm:max-w-[400px] md:max-w-[520px] min-w-0"
+        className="fixed top-0 right-0 bottom-0 z-[10001] flex flex-col transition-transform ease-out bg-gray-900 shadow-2xl w-full max-w-[100vw] sm:max-w-[400px] md:max-w-[520px] min-w-0"
         style={{
           transitionDuration: `${SLIDE_DURATION_MS}ms`,
           transform: slideIn ? 'translateX(0)' : 'translateX(100%)',

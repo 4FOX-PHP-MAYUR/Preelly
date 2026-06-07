@@ -1,5 +1,15 @@
-// API Configuration
-export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api'
+// API — in dev prefer Vite proxy (/api) so cookies and media share localhost:3002
+const envApi = import.meta.env.VITE_API_URL
+export const API_URL =
+  envApi && !String(envApi).includes('localhost:5002')
+    ? envApi
+    : import.meta.env.DEV
+      ? '/api'
+      : envApi || 'http://localhost:5002/api'
+
+export const SOCKET_URL =
+  import.meta.env.VITE_SOCKET_URL ||
+  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5002')
 
 // Product Conditions
 export const PRODUCT_CONDITIONS = [

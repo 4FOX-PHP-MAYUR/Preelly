@@ -4,7 +4,10 @@ const Chat = require('../models/Chat')
 const Message = require('../models/Message')
 const Product = require('../models/Product')
 const User = require('../models/User')
+const Notification = require('../models/Notification')
 const authMiddleware = require('../middleware/auth')
+const { chatUpload } = require('../middleware/upload')
+const path = require('path')
 
 async function getUnreadTotalForUser(userId) {
   const productChats = await Chat.find({
@@ -35,12 +38,12 @@ router.get('/', authMiddleware, async (req, res) => {
       $or: [{ buyer: userId }, { seller: userId }],
     })
       .populate('product', 'title images video')
-      .populate('buyer', 'name username avatar isVerified')
-      .populate('seller', 'name username avatar isVerified')
+      .populate('buyer', 'name username avatar isVerified identityVerificationStatus')
+      .populate('seller', 'name username avatar isVerified identityVerificationStatus')
       .lean()
 
     const supportChat = await Chat.findOne({ type: 'support', user: userId })
-      .populate('user', 'name username avatar isVerified')
+      .populate('user', 'name username avatar isVerified identityVerificationStatus')
       .lean()
 
     const chats = [...productChats]
@@ -77,9 +80,9 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
     const chat = await Chat.findById(chatId)
       .populate('product', 'title images video price currency')
-      .populate('buyer', 'name username avatar isVerified')
-      .populate('seller', 'name username avatar isVerified')
-      .populate('user', 'name username avatar isVerified')
+      .populate('buyer', 'name username avatar isVerified identityVerificationStatus')
+      .populate('seller', 'name username avatar isVerified identityVerificationStatus')
+      .populate('user', 'name username avatar isVerified identityVerificationStatus')
 
     if (!chat) {
       return res.status(404).json({ message: 'Chat not found' })
@@ -125,11 +128,11 @@ router.post('/', authMiddleware, async (req, res) => {
     if (req.body.type === 'support') {
       const userId = req.user._id
       let chat = await Chat.findOne({ type: 'support', user: userId })
-        .populate('user', 'name username avatar isVerified')
+        .populate('user', 'name username avatar isVerified identityVerificationStatus')
       const created = !chat
       if (!chat) {
         chat = await Chat.create({ type: 'support', user: userId })
-        await chat.populate('user', 'name username avatar isVerified')
+        await chat.populate('user', 'name username avatar isVerified identityVerificationStatus')
       }
       const messages = await Message.find({ chat: chat._id })
         .populate('sender', 'name username avatar')
@@ -156,9 +159,10 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.status(404).json({ message: 'Seller not found' })
     }
 
-    if (product.seller.toString() !== sellerId) {
-      return res.status(400).json({ message: 'Seller does not match product seller' })
-    }
+    // Classic listing chat: `sellerId` must be the product owner.
+    // Reel/message share: `sellerId` is the *recipient* user id (legacy field name); they are often not the seller.
+    // Classic chat: `sellerId` is the listing owner. Reel/share: `sellerId` is the chosen recipient
+    // (follower/following); they may differ from `product.seller` — still allowed.
 
     // Prevent users from chatting with themselves
     if (buyerId.toString() === sellerId.toString()) {
@@ -172,8 +176,8 @@ router.post('/', authMiddleware, async (req, res) => {
       seller: sellerId,
     })
       .populate('product', 'title images video price currency')
-      .populate('buyer', 'name username avatar isVerified')
-      .populate('seller', 'name username avatar isVerified')
+      .populate('buyer', 'name username avatar isVerified identityVerificationStatus')
+      .populate('seller', 'name username avatar isVerified identityVerificationStatus')
 
     if (chat) {
       // Get messages for existing chat
@@ -195,8 +199,8 @@ router.post('/', authMiddleware, async (req, res) => {
     })
 
     await chat.populate('product', 'title images video price currency')
-    await chat.populate('buyer', 'name username avatar isVerified')
-    await chat.populate('seller', 'name username avatar isVerified')
+    await chat.populate('buyer', 'name username avatar isVerified identityVerificationStatus')
+    await chat.populate('seller', 'name username avatar isVerified identityVerificationStatus')
 
     res.status(201).json({
       chat,
@@ -220,9 +224,9 @@ router.post('/', authMiddleware, async (req, res) => {
 
       const chat = await Chat.findOne(chatQuery)
         .populate('product', 'title images video price currency')
-        .populate('buyer', 'name username avatar isVerified')
-        .populate('seller', 'name username avatar isVerified')
-        .populate('user', 'name username avatar isVerified')
+        .populate('buyer', 'name username avatar isVerified identityVerificationStatus')
+        .populate('seller', 'name username avatar isVerified identityVerificationStatus')
+        .populate('user', 'name username avatar isVerified identityVerificationStatus')
 
       if (chat) {
         const messages = await Message.find({ chat: chat._id })
@@ -240,18 +244,24 @@ router.post('/', authMiddleware, async (req, res) => {
 })
 
 // @route   POST /api/chats/:id/messages
-// @desc    Send a message in a chat
+// @desc    Send a message in a chat (text and/or file attachment)
 // @access  Private
-router.post('/:id/messages', authMiddleware, async (req, res) => {
+router.post('/:id/messages', authMiddleware, (req, res, next) => {
+  chatUpload.array('files', 10)(req, res, (err) => {
+    if (err) return res.status(400).json({ message: err.message || 'File upload error' })
+    next()
+  })
+}, async (req, res) => {
   try {
     const chatId = req.params.id
-    const { text } = req.body
+    const text = String(req.body?.text || '').trim()
+    const files = req.files || []
     const userId = req.user._id
     const isAdmin = req.user.role === 'admin'
     const io = req.app.get('io')
 
-    if (!text || !text.trim()) {
-      return res.status(400).json({ message: 'Message text is required' })
+    if (!text && files.length === 0) {
+      return res.status(400).json({ message: 'Message text or file is required' })
     }
 
     const chat = await Chat.findById(chatId)
@@ -265,7 +275,7 @@ router.post('/:id/messages', authMiddleware, async (req, res) => {
       if (!chat.user) return res.status(400).json({ message: 'Invalid support chat' })
       const isCustomer = chat.user.toString() === userId.toString()
       if (!isCustomer && !isAdmin) return res.status(403).json({ message: 'Not authorized to send in this chat' })
-      otherPartyId = isCustomer ? null : chat.user.toString() // admin sent -> notify user (customer)
+      otherPartyId = isCustomer ? null : chat.user.toString()
     } else {
       if (
         (!chat.buyer || chat.buyer.toString() !== userId.toString()) &&
@@ -276,13 +286,27 @@ router.post('/:id/messages', authMiddleware, async (req, res) => {
       otherPartyId = chat.buyer.toString() === userId.toString() ? chat.seller.toString() : chat.buyer.toString()
     }
 
-    const message = await Message.create({
+    const attachments = files.map((f) => ({
+      url: `/uploads/chats/${f.filename}`,
+      mimeType: f.mimetype,
+      name: f.originalname,
+      size: f.size,
+    }))
+
+    const msgData = {
       chat: chatId,
       sender: userId,
-      text: text.trim(),
-    })
+      type: files.length > 0 ? 'file' : 'text',
+      text: text || '',
+      attachments,
+      // keep legacy single-attachment field populated for old clients
+      ...(attachments.length === 1 ? { attachment: attachments[0] } : {}),
+    }
 
-    chat.lastMessage = text.trim()
+    const message = await Message.create(msgData)
+
+    const displayText = files.length > 0 ? (text || files[0].originalname) : text
+    chat.lastMessage = displayText
     chat.lastMessageAt = new Date()
 
     if (chat.type === 'support') {
@@ -310,7 +334,10 @@ router.post('/:id/messages', authMiddleware, async (req, res) => {
         username: message.sender.username,
         avatar: message.sender.avatar,
       },
+      type: message.type,
       text: message.text,
+      attachment: message.attachment || null,
+      attachments: message.attachments || [],
       createdAt: message.createdAt,
       updatedAt: message.updatedAt,
       read: message.read || false,
@@ -334,6 +361,28 @@ router.post('/:id/messages', authMiddleware, async (req, res) => {
       io.to(`user-${otherPartyId}`).emit('new-message', { chatId, message: messageData, isOwnMessage: false, unreadTotal })
     }
 
+    // Create an in-app notification for the receiver so it appears in Notifications page too.
+    if (otherPartyId) {
+      try {
+        const preview = String(message.text || '').slice(0, 160)
+        await Notification.create({
+          user: otherPartyId,
+          type: 'message',
+          title: 'New message',
+          body: preview,
+          actor: userId,
+          relatedProduct: chat.product || null,
+          data: {
+            chatId: String(chatId),
+            productId: chat.product ? String(chat.product) : null,
+            senderId: String(userId),
+          },
+        })
+      } catch (notificationError) {
+        console.error('Error creating message notification:', notificationError)
+      }
+    }
+
     res.status(201).json(message)
   } catch (error) {
     console.error('Error sending message:', error)
@@ -341,6 +390,69 @@ router.post('/:id/messages', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Invalid chat ID' })
     }
     res.status(500).json({ message: 'Error sending message' })
+  }
+})
+
+// @route   POST /api/chats/:id/call-event
+// @desc    Save a call event (completed/missed/rejected/cancelled) as a chat message
+// @access  Private
+router.post('/:id/call-event', authMiddleware, async (req, res) => {
+  try {
+    const chatId  = req.params.id
+    const userId  = req.user._id
+    const { callType, status, duration } = req.body
+    const io = req.app.get('io')
+
+    if (!callType || !status) {
+      return res.status(400).json({ message: 'callType and status are required' })
+    }
+
+    const chat = await Chat.findById(chatId)
+    if (!chat) return res.status(404).json({ message: 'Chat not found' })
+
+    const buyerId  = chat.buyer?.toString()
+    const sellerId = chat.seller?.toString()
+    const uid      = userId.toString()
+    if (uid !== buyerId && uid !== sellerId) {
+      return res.status(403).json({ message: 'Not authorized' })
+    }
+
+    const message = await Message.create({
+      chat: chatId,
+      sender: userId,
+      type: 'call',
+      callMeta: { callType, status, duration: Number(duration) || 0 },
+    })
+
+    // Update chat preview
+    const callLabel = status === 'completed'
+      ? `${callType === 'video' ? '📹' : '📞'} ${callType} call`
+      : `📵 Missed ${callType} call`
+    chat.lastMessage    = callLabel
+    chat.lastMessageAt  = new Date()
+    await chat.save()
+
+    const msgData = {
+      _id: message._id,
+      chat: chatId,
+      sender: { _id: userId },
+      text: '',
+      type: 'call',
+      callMeta: message.callMeta,
+      createdAt: message.createdAt,
+      read: false,
+      readAt: null,
+    }
+
+    // Emit to both participants so both see it in real-time
+    const otherPartyId = uid === buyerId ? sellerId : buyerId
+    io.to(`user-${uid}`).emit('new-message',          { chatId, message: msgData, isOwnMessage: true  })
+    io.to(`user-${otherPartyId}`).emit('new-message', { chatId, message: msgData, isOwnMessage: false })
+
+    res.status(201).json(message)
+  } catch (error) {
+    console.error('Error saving call event:', error)
+    res.status(500).json({ message: 'Error saving call event' })
   }
 })
 
@@ -438,6 +550,11 @@ router.put('/:id/read', authMiddleware, async (req, res) => {
       if (isCustomer) chat.unreadForUser = 0
       else chat.unreadForAdmin = 0
       await chat.save()
+      // mark related message notifications as read
+      await Notification.updateMany(
+        { user: userId, type: 'message', 'data.chatId': String(chatId), isRead: false },
+        { isRead: true }
+      )
       const io = req.app.get('io')
       if (io && otherSenderId) io.to(`user-${otherSenderId}`).emit('messages-read', { chatId })
       return res.json({ message: 'Messages marked as read' })
@@ -464,6 +581,12 @@ router.put('/:id/read', authMiddleware, async (req, res) => {
     }
 
     await chat.save()
+
+    // mark related message notifications as read so the bell badge clears
+    await Notification.updateMany(
+      { user: userId, type: 'message', 'data.chatId': String(chatId), isRead: false },
+      { isRead: true }
+    )
 
     const io = req.app.get('io')
     if (io) {

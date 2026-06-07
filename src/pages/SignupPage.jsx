@@ -1,33 +1,74 @@
 import { useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
-import { useNavigate, Link, useLocation } from 'react-router-dom'
+import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
-import { register as registerUser, clearError } from '../store/slices/authSlice'
+import { sendOtp, clearError } from '../store/slices/authSlice'
 import toast from 'react-hot-toast'
-import { Mail, Lock, User, Phone, UserPlus } from 'lucide-react'
+import { ArrowLeft, Mail } from 'lucide-react'
+import {
+  AuthField,
+  AuthPhoneField,
+  AuthSidePanel,
+  AuthSocialButton,
+} from '../components/Auth/AuthSplitLayout'
+import { DEFAULT_COUNTRY_ISO, getCountryByIso } from '../data/countryCodes'
+
+function GoogleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+      <path
+        fill="#EA4335"
+        d="M12 10.2v3.9h5.42c-.24 1.26-.96 2.32-2.04 3.03l3.3 2.56c1.92-1.77 3.02-4.38 3.02-7.48 0-.71-.06-1.39-.19-2.02H12Z"
+      />
+      <path
+        fill="#34A853"
+        d="M12 22c2.73 0 5.02-.9 6.68-2.43l-3.3-2.56c-.91.61-2.08.97-3.38.97-2.6 0-4.8-1.76-5.59-4.12H3.01v2.64A10.08 10.08 0 0 0 12 22Z"
+      />
+      <path
+        fill="#4A90E2"
+        d="M6.41 13.86a6.08 6.08 0 0 1 0-3.72V7.5H3.01a10.01 10.01 0 0 0 0 9l3.4-2.64Z"
+      />
+      <path
+        fill="#FBBC05"
+        d="M12 6.02c1.49 0 2.82.51 3.86 1.51l2.89-2.89C17.01 2.98 14.72 2 12 2 8.09 2 4.72 4.24 3.01 7.5l3.4 2.64C7.2 7.78 9.4 6.02 12 6.02Z"
+      />
+    </svg>
+  )
+}
+
+function AppleIcon() {
+  return (
+    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current text-slate-900" aria-hidden="true">
+      <path d="M16.37 12.64c.02 2.34 2.05 3.11 2.07 3.12-.02.05-.32 1.12-1.06 2.22-.64.95-1.31 1.9-2.36 1.92-1.03.02-1.37-.61-2.56-.61-1.19 0-1.56.59-2.54.63-1.02.04-1.79-1.02-2.44-1.96-1.33-1.92-2.34-5.42-.98-7.78.68-1.17 1.89-1.92 3.2-1.94 1-.02 1.94.68 2.56.68.62 0 1.79-.84 3.02-.72.51.02 1.95.21 2.87 1.56-.07.04-1.72 1-1.7 2.88Zm-2.01-5.57c.54-.66.91-1.58.81-2.49-.78.03-1.72.52-2.28 1.18-.5.58-.94 1.51-.82 2.4.87.07 1.75-.44 2.29-1.09Z" />
+    </svg>
+  )
+}
 
 function SignupPage() {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const location = useLocation()
   const { loading, error, isAuthenticated } = useSelector((state) => state.auth)
-  const { register, handleSubmit, watch, formState: { errors } } = useForm()
-  const password = watch('password')
+  const { register, handleSubmit, formState: { errors } } = useForm()
   const [oauthLoading, setOauthLoading] = useState(null)
+  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO)
+  const [alreadyRegistered, setAlreadyRegistered] = useState(false)
 
   const params = new URLSearchParams(location.search)
   const target = params.get('target') === 'seller' ? 'seller' : 'buyer'
+  const loginPath = target === 'seller' ? '/login?target=seller' : '/login'
 
   useEffect(() => {
     localStorage.setItem('authTarget', target)
     if (isAuthenticated) {
-      navigate('/dashboard')
+      navigate(target === 'seller' ? '/post-ad' : '/')
     }
-  }, [isAuthenticated, navigate])
+  }, [isAuthenticated, navigate, target])
 
   useEffect(() => {
     if (error) {
-      toast.error(error)
+      const message = typeof error === 'string' ? error : error?.message
+      if (message) toast.error(message)
       dispatch(clearError())
     }
   }, [error, dispatch])
@@ -41,15 +82,31 @@ function SignupPage() {
   }, [location.search])
 
   const onSubmit = async (data) => {
+    setAlreadyRegistered(false)
     try {
-      // Remove confirmPassword and terms from data before sending
-      const { confirmPassword, terms, ...userData } = data
-      const result = await dispatch(registerUser(userData)).unwrap()
-      toast.success('Account created successfully! Verify your email to login.')
-      const email = result?.email || userData.email
-      navigate(`/verify-email-otp?email=${encodeURIComponent(email)}`)
-    } catch (error) {
-      // Error handled by useEffect
+      const email = data.email.trim()
+      const phoneDigits = String(data.phone || '').replace(/\D/g, '')
+      const dialCode = getCountryByIso(countryIso).code
+      const fullPhone = phoneDigits ? `${dialCode}${phoneDigits}` : ''
+
+      await dispatch(sendOtp({ email, mode: 'signup' })).unwrap()
+      toast.success('Verification code sent to your email')
+
+      const query = new URLSearchParams({
+        email,
+        mode: 'signup',
+      })
+      if (fullPhone) {
+        query.set('phone', fullPhone.replace(/\D/g, ''))
+        query.set('countryIso', countryIso)
+      }
+
+      navigate(`/verify-email-otp?${query.toString()}`)
+    } catch (err) {
+      if (err?.code === 'USER_ALREADY_EXISTS') {
+        setAlreadyRegistered(true)
+      }
+      toast.error(err?.message || 'Signup failed')
     }
   }
 
@@ -60,204 +117,117 @@ function SignupPage() {
   }
 
   return (
-    <div className="min-h-[calc(100vh-4rem)] flex items-center justify-center px-4 py-12">
-      <div className="max-w-md w-full">
-        <div className="bg-white rounded-lg shadow-lg p-8">
-          <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Create Account</h1>
-            <p className="text-gray-600">Sign up to start selling</p>
+    <div className="min-h-screen bg-[#f6f7fb] px-4 py-8 sm:px-6 lg:px-8">
+      <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:items-center">
+        <section className="mx-auto w-full max-w-[420px] px-2 py-8 sm:px-4 lg:mx-0 lg:px-0">
+          <Link
+            to={loginPath}
+            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#2c24ff] transition hover:text-[#1800ff]"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to log in
+          </Link>
+
+          <div className="mt-8">
+            <h1 className="text-[2.35rem] font-semibold tracking-tight text-slate-950">
+              Sign Up
+            </h1>
+            <p className="mt-4 max-w-sm text-sm leading-6 text-slate-500">
+              Explore cars your way scroll effortlessly, discover the best deals, and drive home your perfect match.
+            </p>
           </div>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Full Name
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="text"
-                  {...register('name', {
-                    required: 'Name is required',
-                  })}
-                  className="input-field pl-10"
-                  placeholder="Enter your full name"
-                />
+          <form onSubmit={handleSubmit(onSubmit)} className="mt-10 space-y-5">
+            {alreadyRegistered ? (
+              <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
+                An account with this email already exists. Please{' '}
+                <Link to={loginPath} className="font-semibold text-[#2c24ff] hover:text-[#1800ff]">
+                  go to login
+                </Link>
+                .
               </div>
-              {errors.name && (
-                <p className="mt-1 text-sm text-red-600">{errors.name.message}</p>
-              )}
-            </div>
+            ) : null}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Email
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="email"
-                  {...register('email', {
-                    required: 'Email is required',
-                    pattern: {
-                      value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                      message: 'Invalid email address',
-                    },
-                  })}
-                  className="input-field pl-10"
-                  placeholder="Enter your email"
-                />
-              </div>
-              {errors.email && (
-                <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>
-              )}
-            </div>
+            <AuthField
+              label="Email"
+              type="email"
+              icon={Mail}
+              placeholder="Enter your email"
+              error={errors.email?.message}
+              {...register('email', {
+                required: 'Email is required',
+                pattern: {
+                  value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
+                  message: 'Invalid email address',
+                },
+              })}
+            />
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Phone Number
-              </label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="tel"
-                  {...register('phone', {
-                    required: 'Phone number is required',
-                  })}
-                  className="input-field pl-10"
-                  placeholder="Enter your phone number"
-                />
-              </div>
-              {errors.phone && (
-                <p className="mt-1 text-sm text-red-600">{errors.phone.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="password"
-                  {...register('password', {
-                    required: 'Password is required',
-                    minLength: {
-                      value: 6,
-                      message: 'Password must be at least 6 characters',
-                    },
-                  })}
-                  className="input-field pl-10"
-                  placeholder="Create a password"
-                />
-              </div>
-              {errors.password && (
-                <p className="mt-1 text-sm text-red-600">{errors.password.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Confirm Password
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
-                <input
-                  type="password"
-                  {...register('confirmPassword', {
-                    required: 'Please confirm your password',
-                    validate: (value) =>
-                      value === password || 'Passwords do not match',
-                  })}
-                  className="input-field pl-10"
-                  placeholder="Confirm your password"
-                />
-              </div>
-              {errors.confirmPassword && (
-                <p className="mt-1 text-sm text-red-600">{errors.confirmPassword.message}</p>
-              )}
-            </div>
-
-            <div className="flex items-start">
-              <input
-                type="checkbox"
-                {...register('terms', {
-                  required: 'You must agree to the terms',
-                })}
-                className="mt-1 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-              />
-              <label className="ml-2 text-sm text-gray-600">
-                I agree to the{' '}
-                <a href="#" className="text-primary-600 hover:text-primary-700">
-                  Terms of Service
-                </a>{' '}
-                and{' '}
-                <a href="#" className="text-primary-600 hover:text-primary-700">
-                  Privacy Policy
-                </a>
-              </label>
-            </div>
-            {errors.terms && (
-              <p className="text-sm text-red-600">{errors.terms.message}</p>
-            )}
+            <AuthPhoneField
+              countryIso={countryIso}
+              onCountryIsoChange={setCountryIso}
+              placeholder="Enter your Phone Number"
+              error={errors.phone?.message}
+              {...register('phone', {
+                required: 'Phone number is required',
+                minLength: {
+                  value: 7,
+                  message: 'Enter a valid phone number',
+                },
+              })}
+            />
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full btn-primary flex items-center justify-center space-x-2"
+              className="flex h-[54px] w-full items-center justify-center rounded-full bg-[#1a43ff] px-6 text-base font-medium text-white shadow-[0_18px_36px_rgba(26,67,255,0.28)] transition hover:bg-[#1438df] disabled:cursor-not-allowed disabled:opacity-70"
             >
               {loading ? (
-                <>
-                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
-                  <span>Creating account...</span>
-                </>
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
               ) : (
-                <>
-                  <UserPlus className="h-5 w-5" />
-                  <span>Create Account</span>
-                </>
+                'Sign Up'
               )}
             </button>
           </form>
 
-          <div className="mt-6">
-            <div className="text-center text-sm text-gray-500 mb-3">
-              Or sign up with
+          <div className="mt-8">
+            <div className="flex items-center gap-4">
+              <div className="h-px flex-1 bg-[#e7e9f2]" />
+              <span className="text-sm font-medium uppercase tracking-[0.24em] text-slate-400">
+                Or
+              </span>
+              <div className="h-px flex-1 bg-[#e7e9f2]" />
             </div>
-            <div className="space-y-3">
-              <button
-                type="button"
+
+            <div className="mt-6 grid grid-cols-2 gap-4">
+              <AuthSocialButton
+                label="Continue with Google"
                 onClick={() => startSocialSignup('google')}
                 disabled={!!oauthLoading}
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-60 flex items-center justify-center space-x-2"
+                active={oauthLoading === 'google'}
               >
-                <span className="font-semibold">Continue with Google</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => startSocialSignup('facebook')}
+                <GoogleIcon />
+              </AuthSocialButton>
+              <AuthSocialButton
+                label="Continue with Apple"
+                onClick={() => startSocialSignup('apple')}
                 disabled={!!oauthLoading}
-                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-60 flex items-center justify-center space-x-2"
+                active={oauthLoading === 'apple'}
               >
-                <span className="font-semibold">Continue with Facebook</span>
-              </button>
+                <AppleIcon />
+              </AuthSocialButton>
             </div>
           </div>
+        </section>
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              Already have an account?{' '}
-              <Link to="/login" className="text-primary-600 hover:text-primary-700 font-medium">
-                Sign in
-              </Link>
-            </p>
-          </div>
-        </div>
+        <AuthSidePanel
+          quote="I found my perfect car in minutes scrolling through Prelly made the whole process effortless."
+          quoteAuthor="Aarav Mehta"
+          quoteRole="Car Buyer"
+        />
       </div>
     </div>
   )
 }
 
 export default SignupPage
-

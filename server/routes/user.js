@@ -6,13 +6,16 @@ const path = require('path')
 const fs = require('fs')
 const Product = require('../models/Product')
 const User = require('../models/User')
+const Follow = require('../models/Follow')
 const Order = require('../models/Order')
 const Notification = require('../models/Notification')
 const AdminRolePermission = require('../models/AdminRolePermission')
 const validateObjectId = require('../middleware/validateObjectId')
 
 const avatarDir = path.join(__dirname, '..', 'uploads', 'avatars')
+const identityDir = path.join(__dirname, '..', 'uploads', 'identity')
 if (!fs.existsSync(avatarDir)) fs.mkdirSync(avatarDir, { recursive: true })
+if (!fs.existsSync(identityDir)) fs.mkdirSync(identityDir, { recursive: true })
 
 const upload = multer({
   storage: multer.diskStorage({
@@ -28,6 +31,94 @@ const upload = multer({
     cb(null, true)
   },
 })
+
+const identityUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, identityDir),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname || '') || '.jpg'
+      const side = file.fieldname === 'emiratesIdBack' ? 'back' : 'front'
+      cb(null, `eid_${side}_${req.user?._id || 'unknown'}_${Date.now()}${ext}`)
+    },
+  }),
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!file.mimetype?.startsWith('image/')) return cb(new Error('Only image uploads are allowed'))
+    cb(null, true)
+  },
+})
+
+// @route   GET /api/user/identity-verification
+// @desc    Get current user's identity verification status
+// @access  Private
+router.get('/identity-verification', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select(
+      'identityVerificationStatus identityVerificationRejectionReason identityVerificationSubmittedAt identityVerifiedAt emiratesIdFront emiratesIdBack isVerified'
+    )
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    res.json({
+      status: user.identityVerificationStatus,
+      rejectionReason: user.identityVerificationRejectionReason,
+      submittedAt: user.identityVerificationSubmittedAt,
+      verifiedAt: user.identityVerifiedAt,
+      emiratesIdFront: user.emiratesIdFront,
+      emiratesIdBack: user.emiratesIdBack,
+      isVerified: user.isVerified,
+    })
+  } catch (error) {
+    console.error('Error fetching identity verification:', error)
+    res.status(500).json({ message: 'Error fetching identity verification status' })
+  }
+})
+
+// @route   POST /api/user/identity-verification
+// @desc    Submit Emirates ID front/back for identity verification
+// @access  Private
+router.post(
+  '/identity-verification',
+  authMiddleware,
+  identityUpload.fields([
+    { name: 'emiratesIdFront', maxCount: 1 },
+    { name: 'emiratesIdBack', maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      const frontFile = req.files?.emiratesIdFront?.[0]
+      const backFile = req.files?.emiratesIdBack?.[0]
+
+      if (!frontFile || !backFile) {
+        return res.status(400).json({ message: 'Both Emirates ID front and back photos are required' })
+      }
+
+      const user = await User.findById(req.user._id)
+      if (!user) return res.status(404).json({ message: 'User not found' })
+
+      if (user.identityVerificationStatus === 'pending') {
+        return res.status(400).json({ message: 'Your verification is already under review' })
+      }
+      if (user.identityVerificationStatus === 'approved') {
+        return res.status(400).json({ message: 'Your account is already verified' })
+      }
+
+      user.emiratesIdFront = `/uploads/identity/${frontFile.filename}`
+      user.emiratesIdBack = `/uploads/identity/${backFile.filename}`
+      user.identityVerificationStatus = 'pending'
+      user.identityVerificationRejectionReason = null
+      user.identityVerificationSubmittedAt = new Date()
+      await user.save()
+
+      res.json({
+        message: 'Verification submitted successfully. We will review your documents shortly.',
+        status: user.identityVerificationStatus,
+        submittedAt: user.identityVerificationSubmittedAt,
+      })
+    } catch (error) {
+      console.error('Error submitting identity verification:', error)
+      res.status(500).json({ message: error.message || 'Error submitting identity verification' })
+    }
+  }
+)
 
 // @route   GET /api/user/reels-progress
 // @desc    Get last watched reel index per feed (for resume on revisit)
@@ -161,7 +252,7 @@ router.get('/orders', authMiddleware, async (req, res) => {
         .skip((page - 1) * limit)
         .limit(limit)
         .populate('product', 'title images price currency status')
-        .populate('seller', 'name avatar rating isVerified')
+        .populate('seller', 'name avatar rating isVerified identityVerificationStatus')
         .lean(),
       Order.countDocuments(query),
     ])
@@ -179,6 +270,23 @@ router.get('/orders', authMiddleware, async (req, res) => {
   }
 })
 
+// @route   GET /api/user/liked
+// @desc    Products the current user has liked (heart button)
+// @access  Private
+router.get('/liked', authMiddleware, async (req, res) => {
+  try {
+    const products = await Product.find({ likes: req.user._id })
+      .populate('category', 'name icon emoji')
+      .populate('seller', 'name avatar rating isVerified identityVerificationStatus')
+      .sort({ createdAt: -1 })
+      .lean()
+    res.json({ items: products })
+  } catch (error) {
+    console.error('Error fetching liked products:', error)
+    res.status(500).json({ message: 'Error fetching liked products' })
+  }
+})
+
 // @route   GET /api/user/wishlist
 // @desc    Alias for saved products (wishlist)
 // @access  Private
@@ -187,9 +295,10 @@ router.get('/wishlist', authMiddleware, async (req, res) => {
     const user = await User.findById(req.user._id).select('savedProducts').lean()
     if (!user) return res.status(404).json({ message: 'User not found' })
 
-    const products = await Product.find({ _id: { $in: user.savedProducts || [] } })
+    const savedIds = (user.savedProducts || []).filter(Boolean)
+    const products = await Product.find({ _id: { $in: savedIds } })
       .populate('category', 'name icon emoji')
-      .populate('seller', 'name avatar rating memberSince isVerified')
+      .populate('seller', 'name avatar rating isVerified identityVerificationStatus')
       .sort({ createdAt: -1 })
       .lean()
 
@@ -201,19 +310,62 @@ router.get('/wishlist', authMiddleware, async (req, res) => {
 })
 
 // @route   GET /api/user/notifications
-// @desc    Get recent notifications
+// @desc    Get recent notifications with actor/product populated
 // @access  Private
 router.get('/notifications', authMiddleware, async (req, res) => {
   try {
-    const limit = Math.min(50, Math.max(1, Number(req.query.limit || 20)))
-    const items = await Notification.find({ user: req.user._id })
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)))
+    const { tab } = req.query // 'buying' | 'selling' | 'general' | undefined (all)
+
+    const query = { user: req.user._id }
+    if (tab && tab !== 'all') query.tab = tab
+
+    const items = await Notification.find(query)
       .sort({ createdAt: -1 })
       .limit(limit)
+      .populate('actor', 'name avatar isVerified')
+      .populate('relatedProduct', 'title images video price')
       .lean()
-    res.json({ items })
+
+    // counts per tab for badge display
+    const [buyingUnread, sellingUnread] = await Promise.all([
+      Notification.countDocuments({ user: req.user._id, tab: 'buying', isRead: false }),
+      Notification.countDocuments({ user: req.user._id, tab: 'selling', isRead: false }),
+    ])
+
+    res.json({ items, buyingUnread, sellingUnread })
   } catch (error) {
     console.error('Error fetching notifications:', error)
     res.status(500).json({ message: 'Error fetching notifications' })
+  }
+})
+
+// @route   PATCH /api/user/notifications/read-all
+// @desc    Mark all notifications as read
+// @access  Private
+router.patch('/notifications/read-all', authMiddleware, async (req, res) => {
+  try {
+    await Notification.updateMany({ user: req.user._id, isRead: false }, { isRead: true })
+    res.json({ message: 'All notifications marked as read' })
+  } catch (error) {
+    console.error('Error marking notifications read:', error)
+    res.status(500).json({ message: 'Error marking notifications read' })
+  }
+})
+
+// @route   PATCH /api/user/notifications/:id/read
+// @desc    Mark a single notification as read
+// @access  Private
+router.patch('/notifications/:id/read', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    await Notification.findOneAndUpdate(
+      { _id: req.params.id, user: req.user._id },
+      { isRead: true }
+    )
+    res.json({ message: 'Notification marked as read' })
+  } catch (error) {
+    console.error('Error marking notification read:', error)
+    res.status(500).json({ message: 'Error marking notification read' })
   }
 })
 
@@ -224,9 +376,7 @@ router.get('/notifications', authMiddleware, async (req, res) => {
 router.get('/:id/profile', validateObjectId('id'), async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
-      .select('-password -savedProducts -following -followers')
-      .populate('followers', 'name avatar')
-      .populate('following', 'name avatar')
+      .select('-password -savedProducts -emiratesIdFront -emiratesIdBack -identityVerificationRejectionReason')
 
     if (!user) {
       return res.status(404).json({ message: 'User not found' })
@@ -254,22 +404,23 @@ router.get('/:id/profile', validateObjectId('id'), async (req, res) => {
 })
 
 // @route   GET /api/user/:id/followers
-// @desc    Get list of followers for a user
+// @desc    Get list of active followers for a user
 // @access  Public
 router.get('/:id/followers', validateObjectId('id'), async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
-      .populate('followers', 'name avatar email phone rating memberSince isVerified role')
-      .select('followers')
-
-    if (!user) {
+    const userExists = await User.exists({ _id: req.params.id })
+    if (!userExists) {
       return res.status(404).json({ message: 'User not found' })
     }
 
-    res.json({
-      followers: user.followers || [],
-      count: user.followers?.length || 0,
-    })
+    const records = await Follow.find({ following: req.params.id, status: 'active' })
+      .populate('follower', 'name avatar email phone rating memberSince isVerified role')
+      .sort({ followedAt: -1 })
+      .lean()
+
+    const followers = records.map((r) => ({ ...r.follower, followedAt: r.followedAt }))
+
+    res.json({ followers, count: followers.length })
   } catch (error) {
     console.error('Error fetching followers:', error)
     if (error.name === 'CastError') {
@@ -280,22 +431,23 @@ router.get('/:id/followers', validateObjectId('id'), async (req, res) => {
 })
 
 // @route   GET /api/user/:id/following
-// @desc    Get list of users that a user is following
+// @desc    Get list of users that a user is actively following
 // @access  Public
 router.get('/:id/following', validateObjectId('id'), async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
-      .populate('following', 'name avatar email phone rating memberSince isVerified role')
-      .select('following')
-
-    if (!user) {
+    const userExists = await User.exists({ _id: req.params.id })
+    if (!userExists) {
       return res.status(404).json({ message: 'User not found' })
     }
 
-    res.json({
-      following: user.following || [],
-      count: user.following?.length || 0,
-    })
+    const records = await Follow.find({ follower: req.params.id, status: 'active' })
+      .populate('following', 'name avatar email phone rating memberSince isVerified role')
+      .sort({ followedAt: -1 })
+      .lean()
+
+    const following = records.map((r) => ({ ...r.following, followedAt: r.followedAt }))
+
+    res.json({ following, count: following.length })
   } catch (error) {
     console.error('Error fetching following:', error)
     if (error.name === 'CastError') {
@@ -479,55 +631,223 @@ router.put('/profile', authMiddleware, async (req, res) => {
   }
 })
 
-// @route   GET /api/user/:id/followers
-// @desc    Get list of followers for a user
-// @access  Public
-router.get('/:id/followers', async (req, res) => {
+// @route   POST /api/user/change-password
+// @access  Private
+router.post('/change-password', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
-      .populate('followers', 'name avatar email phone rating memberSince isVerified role')
-      .select('followers')
+    const { currentPassword, newPassword } = req.body
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ message: 'New password must be at least 6 characters' })
+    }
+    const user = await User.findById(req.user._id).select('+password')
+    if (!user) return res.status(404).json({ message: 'User not found' })
 
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' })
+    if (user.password) {
+      if (!currentPassword) return res.status(400).json({ message: 'Current password is required' })
+      const match = await user.comparePassword(currentPassword)
+      if (!match) return res.status(400).json({ message: 'Current password is incorrect' })
     }
 
-    res.json({
-      followers: user.followers || [],
-      count: user.followers?.length || 0,
-    })
-  } catch (error) {
-    console.error('Error fetching followers:', error)
-    if (error.name === 'CastError') {
-      return res.status(400).json({ message: 'Invalid user ID' })
-    }
-    res.status(500).json({ message: 'Error fetching followers' })
+    user.password = newPassword
+    await user.save()
+    res.json({ message: 'Password updated successfully' })
+  } catch (err) {
+    console.error('change-password error', err)
+    res.status(500).json({ message: 'Failed to change password' })
   }
 })
 
-// @route   GET /api/user/:id/following
-// @desc    Get list of users that a user is following
-// @access  Public
-router.get('/:id/following', async (req, res) => {
+// @route   POST /api/user/unlink-social
+// @access  Private
+router.post('/unlink-social', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.params.id)
-      .populate('following', 'name avatar email phone rating memberSince isVerified role')
-      .select('following')
-
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' })
+    const { provider } = req.body
+    const allowed = ['google', 'apple', 'facebook', 'instagram']
+    if (!allowed.includes(provider)) return res.status(400).json({ message: 'Invalid provider' })
+    const user = await User.findById(req.user._id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    const fieldMap = {
+      google: 'googleProviderId',
+      apple: 'appleProviderId',
+      facebook: 'facebookProviderId',
+      instagram: 'instagramProviderId',
     }
+    user[fieldMap[provider]] = undefined
+    if (provider === 'instagram') user.instagramUsername = undefined
+    await user.save()
+    res.json({ message: `${provider} account unlinked` })
+  } catch (err) {
+    console.error('unlink-social error', err)
+    res.status(500).json({ message: 'Failed to unlink account' })
+  }
+})
 
-    res.json({
-      following: user.following || [],
-      count: user.following?.length || 0,
-    })
+
+// ─── Follow Requests ────────────────────────────────────────────────────────
+
+// @route   GET /api/user/follow-requests
+// @desc    Get all pending follow requests for the current user
+// @access  Private
+router.get('/follow-requests', authMiddleware, async (req, res) => {
+  try {
+    const records = await Follow.find({ following: req.user._id, status: 'pending' })
+      .populate('follower', 'name avatar isVerified')
+      .sort({ requestedAt: -1 })
+      .lean()
+
+    const requests = records.map((r) => ({
+      _id: r._id,
+      user: r.follower,
+      requestedAt: r.requestedAt || r.createdAt,
+    }))
+
+    res.json({ requests, count: requests.length })
   } catch (error) {
-    console.error('Error fetching following:', error)
-    if (error.name === 'CastError') {
-      return res.status(400).json({ message: 'Invalid user ID' })
+    console.error('Error fetching follow requests:', error)
+    res.status(500).json({ message: 'Error fetching follow requests' })
+  }
+})
+
+// @route   GET /api/user/suggested
+// @desc    Get suggested users to follow (users the current user doesn't follow yet)
+// @access  Private
+router.get('/suggested', authMiddleware, async (req, res) => {
+  try {
+    const limit = Math.min(20, Number(req.query.limit || 10))
+
+    // IDs the user already has a relationship with (any status)
+    const existing = await Follow.find({ follower: req.user._id }).select('following').lean()
+    const excludeIds = existing.map((r) => r.following)
+    excludeIds.push(req.user._id)
+
+    const suggested = await User.find({ _id: { $nin: excludeIds }, status: 'active' })
+      .select('name avatar isVerified')
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean()
+
+    res.json({ suggested })
+  } catch (error) {
+    console.error('Error fetching suggested users:', error)
+    res.status(500).json({ message: 'Error fetching suggested users' })
+  }
+})
+
+// ─── Saved Locations ────────────────────────────────────────────────────────
+
+// @route   GET /api/user/locations
+// @desc    Get all saved locations for authenticated user
+// @access  Private
+router.get('/locations', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('savedLocations').lean()
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    res.json({ locations: user.savedLocations || [] })
+  } catch (error) {
+    console.error('Error fetching locations:', error)
+    res.status(500).json({ message: 'Error fetching locations' })
+  }
+})
+
+// @route   POST /api/user/locations
+// @desc    Add a new saved location
+// @access  Private
+router.post('/locations', authMiddleware, async (req, res) => {
+  try {
+    const { label, city, building, apartment, coordinates, isDefault } = req.body
+    const user = await User.findById(req.user._id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+
+    if (!user.savedLocations) user.savedLocations = []
+
+    // If setting as default, clear existing defaults
+    if (isDefault) {
+      user.savedLocations.forEach((loc) => { loc.isDefault = false })
     }
-    res.status(500).json({ message: 'Error fetching following' })
+
+    const newLoc = {
+      label: (label || 'Home').trim(),
+      city: (city || '').trim(),
+      building: (building || '').trim(),
+      apartment: (apartment || '').trim(),
+      isDefault: Boolean(isDefault),
+    }
+
+    if (coordinates?.lat != null && coordinates?.lng != null) {
+      newLoc.coordinates = {
+        type: 'Point',
+        coordinates: [Number(coordinates.lng), Number(coordinates.lat)],
+      }
+    }
+
+    user.savedLocations.push(newLoc)
+    await user.save()
+
+    const saved = user.savedLocations[user.savedLocations.length - 1]
+    res.status(201).json({ location: saved })
+  } catch (error) {
+    console.error('Error adding location:', error)
+    res.status(500).json({ message: 'Error adding location' })
+  }
+})
+
+// @route   PUT /api/user/locations/:locId
+// @desc    Update a saved location
+// @access  Private
+router.put('/locations/:locId', authMiddleware, async (req, res) => {
+  try {
+    const { label, city, building, apartment, coordinates, isDefault } = req.body
+    const user = await User.findById(req.user._id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+
+    const loc = user.savedLocations?.id(req.params.locId)
+    if (!loc) return res.status(404).json({ message: 'Location not found' })
+
+    // If setting as default, clear others
+    if (isDefault) {
+      user.savedLocations.forEach((l) => { l.isDefault = false })
+    }
+
+    if (label !== undefined) loc.label = label.trim()
+    if (city !== undefined) loc.city = city.trim()
+    if (building !== undefined) loc.building = building.trim()
+    if (apartment !== undefined) loc.apartment = apartment.trim()
+    if (isDefault !== undefined) loc.isDefault = Boolean(isDefault)
+
+    if (coordinates?.lat != null && coordinates?.lng != null) {
+      loc.coordinates = {
+        type: 'Point',
+        coordinates: [Number(coordinates.lng), Number(coordinates.lat)],
+      }
+    }
+
+    await user.save()
+    res.json({ location: loc })
+  } catch (error) {
+    console.error('Error updating location:', error)
+    if (error.name === 'CastError') return res.status(400).json({ message: 'Invalid location ID' })
+    res.status(500).json({ message: 'Error updating location' })
+  }
+})
+
+// @route   DELETE /api/user/locations/:locId
+// @desc    Delete a saved location
+// @access  Private
+router.delete('/locations/:locId', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+
+    const loc = user.savedLocations?.id(req.params.locId)
+    if (!loc) return res.status(404).json({ message: 'Location not found' })
+
+    loc.deleteOne()
+    await user.save()
+    res.json({ message: 'Location deleted' })
+  } catch (error) {
+    console.error('Error deleting location:', error)
+    if (error.name === 'CastError') return res.status(400).json({ message: 'Invalid location ID' })
+    res.status(500).json({ message: 'Error deleting location' })
   }
 })
 

@@ -2,6 +2,8 @@ const express = require('express')
 const router = express.Router()
 const Product = require('../models/Product')
 const User = require('../models/User')
+const Follow = require('../models/Follow')
+const Notification = require('../models/Notification')
 const Comment = require('../models/Comment')
 const CommentReport = require('../models/CommentReport')
 const authMiddleware = require('../middleware/auth')
@@ -60,7 +62,7 @@ router.post('/products/:id/view', validateObjectId('id'), async (req, res) => {
     const updated = await Product.findByIdAndUpdate(
       id,
       { $inc: { views: 1 } },
-      { new: true, useFindAndModify: false }
+      { returnDocument: 'after' }
     ).lean()
 
     if (!updated) {
@@ -130,80 +132,249 @@ router.post('/products/:id/save', authMiddleware, validateObjectId('id'), async 
 // @access  Private
 router.get('/user/saved', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).populate('savedProducts')
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' })
-    }
+    // Use lean() so savedProducts stays as plain ObjectId array (not populated docs)
+    const user = await User.findById(req.user._id).select('savedProducts').lean()
+    if (!user) return res.status(404).json({ message: 'User not found' })
 
-    const products = await Product.find({
-      _id: { $in: user.savedProducts || [] },
-    })
+    const savedIds = (user.savedProducts || []).filter(Boolean)
+    const products = await Product.find({ _id: { $in: savedIds } })
       .populate('category', 'name icon emoji')
-      .populate('seller', 'name avatar rating memberSince isVerified')
+      .populate('seller', 'name avatar rating isVerified identityVerificationStatus')
+      .sort({ createdAt: -1 })
+      .lean()
 
-    res.json(products)
+    res.json({ items: products })
   } catch (error) {
     console.error('Error fetching saved products:', error)
     res.status(500).json({ message: 'Error fetching saved products' })
   }
 })
 
+// @route   GET /api/user/:id/follow-status
+// @desc    Get the follow relationship status between current user and target
+// @access  Private
+router.get('/user/:id/follow-status', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const followerId = req.user._id
+    const followingId = req.params.id
+
+    if (followerId.toString() === followingId) {
+      return res.json({ status: 'self' })
+    }
+
+    const record = await Follow.findOne({ follower: followerId, following: followingId })
+    res.json({ status: record ? record.status : 'none' })
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching follow status' })
+  }
+})
+
 // @route   POST /api/user/:id/follow
-// @desc    Follow/Unfollow a user
+// @desc    Send a follow request (pending) or cancel/unfollow if already pending/active
 // @access  Private
 router.post('/user/:id/follow', authMiddleware, validateObjectId('id'), async (req, res) => {
   try {
-    const currentUser = await User.findById(req.user._id)
-    const targetUser = await User.findById(req.params.id)
+    const followerId = req.user._id
+    const followingId = req.params.id
 
-    if (!currentUser || !targetUser) {
-      return res.status(404).json({ message: 'User not found' })
-    }
-
-    if (currentUser._id.toString() === targetUser._id.toString()) {
+    if (followerId.toString() === followingId) {
       return res.status(400).json({ message: 'Cannot follow yourself' })
     }
 
-    if (!currentUser.following) {
-      currentUser.following = []
-    }
-    if (!targetUser.followers) {
-      targetUser.followers = []
+    const targetUser = await User.findById(followingId).select('name').lean()
+    if (!targetUser) {
+      return res.status(404).json({ message: 'User not found' })
     }
 
-    // Use some() for proper ObjectId comparison
-    const isFollowing = currentUser.following.some(
-      (id) => id.toString() === targetUser._id.toString()
-    )
+    const existing = await Follow.findOne({ follower: followerId, following: followingId })
 
-    if (isFollowing) {
-      // Unfollow: remove from currentUser.following and targetUser.followers
-      currentUser.following = currentUser.following.filter(
-        (id) => id.toString() !== targetUser._id.toString()
-      )
-      targetUser.followers = targetUser.followers.filter(
-        (id) => id.toString() !== currentUser._id.toString()
-      )
-    } else {
-      // Follow: add to currentUser.following and targetUser.followers
-      currentUser.following.push(targetUser._id)
-      targetUser.followers.push(currentUser._id)
+    if (existing) {
+      if (existing.status === 'blocked') {
+        return res.status(403).json({ message: 'You cannot follow this user' })
+      }
+      // cancel pending request or unfollow active — remove record
+      const wasPending = existing.status === 'pending'
+      await existing.deleteOne()
+
+      // remove the follow_request notification if cancelling a pending request
+      if (wasPending) {
+        await Notification.deleteOne({
+          user: followingId,
+          actor: followerId,
+          type: 'follow_request',
+        })
+      }
+
+      const followerCount = await Follow.countDocuments({ following: followingId, status: 'active' })
+      const followingCount = await Follow.countDocuments({ follower: followerId, status: 'active' })
+      return res.json({
+        status: 'none',
+        following: false,
+        pending: false,
+        followerCount,
+        followingCount,
+      })
     }
 
-    await currentUser.save()
-    await targetUser.save()
-
-    res.json({
-      following: !isFollowing,
-      followerCount: targetUser.followers.length,
-      followingCount: currentUser.following.length,
+    // check if the target has blocked this user
+    const blockedByTarget = await Follow.findOne({
+      follower: followingId,
+      following: followerId,
+      status: 'blocked',
     })
+    if (blockedByTarget) {
+      return res.status(403).json({ message: 'You cannot follow this user' })
+    }
+
+    // create pending follow request
+    await Follow.create({
+      follower: followerId,
+      following: followingId,
+      status: 'pending',
+      requestedAt: new Date(),
+    })
+
+    // notify the target user about the follow request
+    const requester = await User.findById(followerId).select('name').lean()
+    await Notification.create({
+      user: followingId,
+      actor: followerId,
+      type: 'follow_request',
+      tab: 'general',
+      title: 'New follow request',
+      body: `${requester.name} wants to follow you`,
+      data: { followerId: followerId.toString() },
+    })
+
+    const followerCount = await Follow.countDocuments({ following: followingId, status: 'active' })
+    const followingCount = await Follow.countDocuments({ follower: followerId, status: 'active' })
+    res.json({ status: 'pending', following: false, pending: true, followerCount, followingCount })
   } catch (error) {
-    console.error('Error toggling follow:', error)
+    console.error('Error sending follow request:', error)
     if (error.name === 'CastError') {
       return res.status(400).json({ message: 'Invalid user ID' })
     }
-    res.status(500).json({ message: 'Error toggling follow' })
+    res.status(500).json({ message: 'Error sending follow request' })
+  }
+})
+
+// @route   POST /api/user/:id/follow/accept
+// @desc    Accept a follow request from user :id
+// @access  Private
+router.post('/user/:id/follow/accept', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const followingId = req.user._id   // the one accepting
+    const followerId = req.params.id   // the one who sent the request
+
+    const record = await Follow.findOne({ follower: followerId, following: followingId, status: 'pending' })
+    if (!record) {
+      return res.status(404).json({ message: 'No pending follow request from this user' })
+    }
+
+    record.status = 'active'
+    record.followedAt = new Date()
+    await record.save()
+
+    // mark the follow_request notification as read
+    await Notification.updateOne(
+      { user: followingId, actor: followerId, type: 'follow_request' },
+      { isRead: true }
+    )
+
+    // notify the requester that their request was accepted
+    const accepter = await User.findById(followingId).select('name').lean()
+    await Notification.create({
+      user: followerId,
+      actor: followingId,
+      type: 'follow',
+      tab: 'general',
+      title: 'Follow request accepted',
+      body: `${accepter.name} accepted your follow request`,
+    })
+
+    const followerCount = await Follow.countDocuments({ following: followingId, status: 'active' })
+    res.json({ accepted: true, followerCount })
+  } catch (error) {
+    console.error('Error accepting follow request:', error)
+    res.status(500).json({ message: 'Error accepting follow request' })
+  }
+})
+
+// @route   POST /api/user/:id/follow/reject
+// @desc    Reject (delete) a follow request from user :id
+// @access  Private
+router.post('/user/:id/follow/reject', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const followingId = req.user._id   // the one rejecting
+    const followerId = req.params.id   // the one who sent the request
+
+    const record = await Follow.findOne({ follower: followerId, following: followingId, status: 'pending' })
+    if (!record) {
+      return res.status(404).json({ message: 'No pending follow request from this user' })
+    }
+
+    await record.deleteOne()
+
+    // mark the notification as read and remove it
+    await Notification.deleteOne({ user: followingId, actor: followerId, type: 'follow_request' })
+
+    const followerCount = await Follow.countDocuments({ following: followingId, status: 'active' })
+    res.json({ rejected: true, followerCount })
+  } catch (error) {
+    console.error('Error rejecting follow request:', error)
+    res.status(500).json({ message: 'Error rejecting follow request' })
+  }
+})
+
+// @route   POST /api/user/:id/block
+// @desc    Block/Unblock a user — blocked user cannot follow you
+// @access  Private
+router.post('/user/:id/block', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const blockerId = req.user._id
+    const targetId = req.params.id
+
+    if (blockerId.toString() === targetId) {
+      return res.status(400).json({ message: 'Cannot block yourself' })
+    }
+
+    const targetExists = await User.exists({ _id: targetId })
+    if (!targetExists) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    // The block record lives as: follower=targetId, following=blockerId, status=blocked
+    // meaning: targetId is blocked from following blockerId
+    const existing = await Follow.findOne({ follower: targetId, following: blockerId })
+
+    if (existing && existing.status === 'blocked') {
+      // unblock — remove the record
+      await existing.deleteOne()
+      return res.json({ blocked: false, message: 'User unblocked' })
+    }
+
+    if (existing) {
+      // was following — upgrade to blocked
+      existing.status = 'blocked'
+      existing.followedAt = null
+      existing.blockedAt = new Date()
+      await existing.save()
+    } else {
+      await Follow.create({
+        follower: targetId,
+        following: blockerId,
+        status: 'blocked',
+        blockedAt: new Date(),
+      })
+    }
+
+    res.json({ blocked: true, message: 'User blocked' })
+  } catch (error) {
+    console.error('Error toggling block:', error)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid user ID' })
+    }
+    res.status(500).json({ message: 'Error toggling block' })
   }
 })
 

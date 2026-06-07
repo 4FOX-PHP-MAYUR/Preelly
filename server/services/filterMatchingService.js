@@ -8,6 +8,8 @@
  */
 
 const mongoose = require('mongoose')
+const { normalizeFilterSelections } = require('../utils/filterSelectionMerge')
+const { isAdsPostedFilterRoot } = require('../utils/adsPostedFilter')
 
 function normalize(str) {
   return String(str || '')
@@ -122,6 +124,8 @@ async function resolveFiltersFromProductData({
   const searchableText = `${titleText} ${descText}`
 
   for (const root of roots) {
+    if (isAdsPostedFilterRoot(root)) continue
+
     const rootId = String(root._id)
     const rootSlug = String(root.slug || rootId)
     const fieldKey = `filter_${rootSlug}`
@@ -129,16 +133,18 @@ async function resolveFiltersFromProductData({
     const explicitOptions = Array.isArray(root.options) ? root.options.filter(Boolean) : []
 
     if (explicitOptions.length) {
-      const match = matchAgainstOptions(explicitOptions, productFieldValues, searchableText, root.name)
-      if (match) {
-        filterSelections[fieldKey] = match.value
+      const matches = matchAllAgainstOptions(explicitOptions, productFieldValues, searchableText, root.name)
+      if (matches.length) {
+        filterSelections[fieldKey] = matches.map((m) => m.value)
         matchedFilterIds.push(rootId)
-        matchDetails.push({
-          rootName: root.name,
-          fieldKey,
-          matchedValue: match.value,
-          matchSource: match.source,
-        })
+        for (const m of matches) {
+          matchDetails.push({
+            rootName: root.name,
+            fieldKey,
+            matchedValue: m.value,
+            matchSource: m.source,
+          })
+        }
       }
       continue
     }
@@ -152,22 +158,28 @@ async function resolveFiltersFromProductData({
       normalized: normalize(c.name),
     }))
 
-    const match = matchAgainstChildren(childNames, productFieldValues, searchableText, root.name)
-    if (match) {
-      filterSelections[fieldKey] = match.id
+    const matches = matchAllAgainstChildren(childNames, productFieldValues, searchableText, root.name)
+    if (matches.length) {
+      filterSelections[fieldKey] = matches.map((m) => m.id)
       matchedFilterIds.push(rootId)
-      matchedFilterIds.push(match.id)
-      matchDetails.push({
-        rootName: root.name,
-        fieldKey,
-        matchedValue: match.name,
-        matchedId: match.id,
-        matchSource: match.source,
-      })
+      for (const m of matches) {
+        matchedFilterIds.push(m.id)
+        matchDetails.push({
+          rootName: root.name,
+          fieldKey,
+          matchedValue: m.name,
+          matchedId: m.id,
+          matchSource: m.source,
+        })
+      }
     }
   }
 
-  return { filterSelections, matchedFilterIds, matchDetails }
+  return {
+    filterSelections: normalizeFilterSelections(filterSelections),
+    matchedFilterIds,
+    matchDetails,
+  }
 }
 
 /**
@@ -218,6 +230,16 @@ function buildProductFieldIndex(data) {
     'equipmentType',
     'assemblyStatus',
     'closureType',
+    'regionalSpec',
+    'targetMarket',
+    'sellerType',
+    'interiorColor',
+    'exportStatus',
+    'steeringSide',
+    'horsepower',
+    'cylinders',
+    'trim',
+    'seatingCapacity',
   ]
 
   for (const key of keys) {
@@ -234,77 +256,78 @@ function buildProductFieldIndex(data) {
 }
 
 /**
- * Try to match explicit options (string list) against product fields, then against title/description.
+ * Match all explicit options (multiselect) from product fields + transcript text.
  */
-function matchAgainstOptions(options, productFields, searchableText, rootName) {
+function matchAllAgainstOptions(options, productFields, searchableText, rootName) {
+  const matched = new Map()
   const normalizedRoot = normalize(rootName)
-
   const fieldForRoot = guessFieldForRoot(normalizedRoot)
+
+  const tryAdd = (opt, source) => {
+    if (!matched.has(opt)) matched.set(opt, { value: opt, source })
+  }
 
   if (fieldForRoot) {
     for (const fk of fieldForRoot) {
       const fieldVal = productFields[fk]
       if (!fieldVal) continue
       for (const opt of options) {
-        if (normalize(opt) === fieldVal.normalized) {
-          return { value: opt, source: `field:${fk}` }
-        }
+        if (normalize(opt) === fieldVal.normalized) tryAdd(opt, `field:${fk}`)
       }
     }
   }
 
   for (const fieldVal of Object.values(productFields)) {
     for (const opt of options) {
-      if (normalize(opt) === fieldVal.normalized) {
-        return { value: opt, source: 'field:any' }
-      }
+      if (normalize(opt) === fieldVal.normalized) tryAdd(opt, 'field:any')
     }
   }
 
   for (const opt of options) {
     const normalizedOpt = normalize(opt)
     if (normalizedOpt.length >= 3 && searchableText.includes(normalizedOpt)) {
-      return { value: opt, source: 'title_or_description' }
+      tryAdd(opt, 'title_or_description')
     }
   }
 
-  return null
+  return [...matched.values()]
 }
 
 /**
- * Try to match child filter names against product fields, then against title/description.
+ * Match all child filter nodes (multiselect) from product fields + transcript text.
  */
-function matchAgainstChildren(childNames, productFields, searchableText, rootName) {
+function matchAllAgainstChildren(childNames, productFields, searchableText, rootName) {
+  const matched = new Map()
   const normalizedRoot = normalize(rootName)
   const fieldForRoot = guessFieldForRoot(normalizedRoot)
+
+  const tryAdd = (child, source) => {
+    if (!matched.has(child.id)) matched.set(child.id, { id: child.id, name: child.name, source })
+  }
 
   if (fieldForRoot) {
     for (const fk of fieldForRoot) {
       const fieldVal = productFields[fk]
       if (!fieldVal) continue
       for (const child of childNames) {
-        if (child.normalized === fieldVal.normalized) {
-          return { id: child.id, name: child.name, source: `field:${fk}` }
-        }
+        if (child.normalized === fieldVal.normalized) tryAdd(child, `field:${fk}`)
       }
     }
   }
 
-  for (const [fk, fieldVal] of Object.entries(productFields)) {
+  for (const fieldVal of Object.values(productFields)) {
     for (const child of childNames) {
-      if (child.normalized === fieldVal.normalized) {
-        return { id: child.id, name: child.name, source: `field:${fk}` }
-      }
+      if (child.normalized === fieldVal.normalized) tryAdd(child, 'field:any')
     }
   }
 
   for (const child of childNames) {
     if (child.normalized.length >= 3 && searchableText.includes(child.normalized)) {
-      return { id: child.id, name: child.name, source: 'title_or_description' }
+      tryAdd(child, 'title_or_description')
     }
   }
 
-  return null
+  return [...matched.values()]
 }
 
 /**
@@ -368,6 +391,20 @@ function guessFieldForRoot(normalizedRootName) {
     'gear type': ['gearType'],
     'equipment type': ['equipmentType'],
     warranty: ['warranty'],
+    'regional spec': ['regionalSpec', 'targetMarket'],
+    'regional specs': ['regionalSpec', 'targetMarket'],
+    regionalspec: ['regionalSpec', 'targetMarket'],
+    'seller type': ['sellerType'],
+    sellertype: ['sellerType'],
+    'interior color': ['interiorColor'],
+    interiorcolor: ['interiorColor'],
+    'export status': ['exportStatus'],
+    exportstatus: ['exportStatus'],
+    'steering side': ['steeringSide'],
+    steeringside: ['steeringSide'],
+    horsepower: ['horsepower'],
+    cylinders: ['cylinders'],
+    trim: ['trim'],
   }
 
   return map[normalizedRootName] || null

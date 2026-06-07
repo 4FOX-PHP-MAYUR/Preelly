@@ -1,63 +1,97 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import { fetchRootCategories } from '../store/slices/categorySlice'
-import CategoryCard from '../components/Categories/CategoryCard'
+import CategoryBrowseLayout from '../components/Categories/CategoryBrowseLayout'
 import CategorySkeleton from '../components/Categories/CategorySkeleton'
+import { CategoryBadge, formatCategoryCount, isVehicleCategoryName } from '../components/Categories/categoryBrowseShared'
+import { getCategoryImageUrl } from '../utils/helpers'
+
+function BrowseCategoryTile({ category, onClick }) {
+  const [imageFailed, setImageFailed] = useState(false)
+  const imageSrc = getCategoryImageUrl(category)
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group overflow-hidden rounded-3xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+    >
+      <div className="mb-4 flex justify-center">
+        <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-2xl bg-primary-50 transition group-hover:bg-primary-100">
+          {imageSrc && !imageFailed ? (
+            <img
+              src={imageSrc}
+              alt={category.name}
+              className="h-20 w-20 object-cover"
+              onError={() => setImageFailed(true)}
+            />
+          ) : category.emoji ? (
+            <span className="text-4xl">{category.emoji}</span>
+          ) : (
+            <CategoryBadge category={category} />
+          )}
+        </div>
+      </div>
+      <h3 className="text-center text-sm font-semibold text-slate-900 transition group-hover:text-primary-700">
+        {category.name}
+      </h3>
+      <p className="mt-1 text-center text-xs text-slate-500">
+        {formatCategoryCount(category.count) || '0'} ads
+      </p>
+    </button>
+  )
+}
 
 function CategoriesPage() {
   const dispatch = useDispatch()
   const navigate = useNavigate()
-  const { rootCategories, loading } = useSelector((state) => state.categories)
+  const { rootCategories, rootLoading: loading } = useSelector((state) => state.categories)
 
   useEffect(() => {
-    // Only fetch if root categories are not already loaded
     if (rootCategories.length === 0 && !loading) {
       dispatch(fetchRootCategories())
     }
   }, [dispatch, rootCategories.length, loading])
 
-  const isVehicleCategory = (name) =>
-    (name || '').toLowerCase().match(/\b(motors?|vehicles?|cars?|auto)\b/)
-
   const handleCategoryClick = (category) => {
-    // Vehicles/Motors: go directly to filters + listings page
-    if (isVehicleCategory(category.name)) {
+    if (isVehicleCategoryName(category.name)) {
       navigate(`/categories/${category._id}/products`)
       return
     }
-    // For all other categories, always open the subcategory view.
-    // It will fetch children based on the normalized category tree.
     navigate(`/categories/${category._id}`)
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Browse Categories</h1>
-        <p className="text-gray-600">Select a category to view products</p>
-      </div>
+    <CategoryBrowseLayout showMessages={false}>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-5 sm:px-5">
+          <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Browse Categories</h1>
+          <p className="mt-1 text-sm text-slate-500">Select a category to explore listings</p>
+        </div>
 
-      {loading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          {[...Array(12)].map((_, i) => (
-            <CategorySkeleton key={i} />
-          ))}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+          {loading ? (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {[...Array(12)].map((_, i) => (
+                <CategorySkeleton key={i} />
+              ))}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+              {rootCategories.map((category) => (
+                <BrowseCategoryTile
+                  key={category._id}
+                  category={category}
+                  onClick={() => handleCategoryClick(category)}
+                />
+              ))}
+            </div>
+          )}
         </div>
-      ) : (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-          {rootCategories.map((category) => (
-            <CategoryCard
-              key={category._id}
-              category={category}
-              onClick={() => handleCategoryClick(category)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+      </div>
+    </CategoryBrowseLayout>
   )
 }
 
 export default CategoriesPage
-

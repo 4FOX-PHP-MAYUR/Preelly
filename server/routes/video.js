@@ -5,26 +5,28 @@ const path = require('path')
 const fs = require('fs')
 const FormData = require('form-data')
 const axios = require('axios')
-const ffmpeg = require('fluent-ffmpeg')
-// Try to detect ffmpeg/ffprobe binary locations and configure fluent-ffmpeg.
-let ffmpegAvailable = true
-try {
-  const which = require('which')
-  const ffmpegPath = which.sync('ffmpeg')
-  const ffprobePath = which.sync('ffprobe')
-  ffmpeg.setFfmpegPath(ffmpegPath)
-  ffmpeg.setFfprobePath(ffprobePath)
-  console.log('ffmpeg detected at:', ffmpegPath)
-} catch (err) {
-  ffmpegAvailable = false
-  console.warn('ffmpeg/ffprobe not detected on the server. Video processing features (compression, screenshots) will be disabled. Please install ffmpeg. See https://ffmpeg.org/download.html')
-}
+const {
+  ffmpeg,
+  configureFfmpeg,
+  isFfmpegAvailable,
+  requireFfmpeg,
+  getFfmpegInstallHint,
+} = require('../services/ffmpegConfig')
+
+configureFfmpeg()
+const ffmpegAvailable = isFfmpegAvailable()
 const mongoose = require('mongoose')
 const authMiddleware = require('../middleware/auth')
 const { resolveFiltersFromProductData } = require('../services/filterMatchingService')
 const Filter = require('../models/Filter')
 const Category = require('../models/Category')
 const CategoryFilter = require('../models/CategoryFilter')
+const { enrichVehicleProfile } = require('../services/vehicleEnrichmentService')
+const { resolveVehicleType } = require('../services/aiVehicleMappingService')
+const { detectVehicleColorsFromVideo } = require('../services/videoColorDetectionService')
+const { mergeFilterSelectionMaps, normalizeFilterSelections } = require('../utils/filterSelectionMerge')
+const { isAdsPostedFilterRoot } = require('../utils/adsPostedFilter')
+const { buildFilterSelectionsFromVehicleData } = require('../utils/vehicleFilterMatching')
 
 // Configure multer for video uploads
 const storage = multer.diskStorage({
@@ -56,8 +58,7 @@ const upload = multer({
 // Helper function to transcribe video using OpenAI Whisper API
 async function transcribeVideo(videoPath) {
   try {
-    // const apiKey = process.env.OPENAI_API_KEY
-    const apiKey ="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"
+    const apiKey = process.env.OPENAI_API_KEY
     if (!apiKey) {
       throw new Error('OpenAI API key not configured. Please set OPENAI_API_KEY in your .env file')
     }
@@ -252,32 +253,44 @@ async function fetchCategoryFiltersFromDB(categoryId, subcategoryId, childCatego
 function buildFilterPromptSection(dbFilters) {
   if (!dbFilters || !dbFilters.length) return ''
 
-  const lines = ['\n\nCATEGORY-SPECIFIC FILTERS (extract values matching these filters from the transcript):']
+  const lines = [
+    '\n\nCATEGORY-SPECIFIC FILTERS (all filters are MULTI-SELECT — return arrays):',
+  ]
   for (const filter of dbFilters) {
+    if (isAdsPostedFilterRoot(filter)) continue
+
+    const filterKey = `filter_${filter.slug || filter._id}`
     if (filter.options && filter.options.length) {
-      lines.push(`- filter_${filter.slug}: Pick EXACTLY one of: ${JSON.stringify(filter.options)}`)
+      lines.push(
+        `- ${filterKey}: Return a JSON ARRAY (can be empty []) of zero or more EXACT option strings from: ${JSON.stringify(filter.options)}. Include every value clearly mentioned or strongly implied in the transcript.`,
+      )
     } else if (filter.children && filter.children.length) {
       const childNames = filter.children.map((c) => c.name)
-      lines.push(`- filter_${filter.slug}: Pick EXACTLY one of: ${JSON.stringify(childNames)}`)
+      lines.push(
+        `- ${filterKey}: Return a JSON ARRAY of zero or more values chosen from: ${JSON.stringify(childNames)}`,
+      )
       for (const child of filter.children) {
         if (child.children && child.children.length) {
           const gcNames = child.children.map((gc) => gc.name)
-          lines.push(`  - If "${child.name}" is selected, also pick sub-value from: ${JSON.stringify(gcNames)}`)
+          lines.push(
+            `  - If "${child.name}" applies, you may also return filter_<slug>_sub as an array from: ${JSON.stringify(gcNames)}`,
+          )
         }
       }
     }
   }
-  lines.push('\nFor each category filter above, return a key like "filter_<slug>" with the matched value.')
-  lines.push('If the transcript does not mention information for a filter, omit that key.\n')
+  lines.push('\nFor each filter key above, always use a JSON array (never a single string).')
+  lines.push('Example: "filter_comfort-features": ["360 Camera", "Apple CarPlay"]')
+  lines.push('Do NOT invent color — omit color filters unless the seller clearly states a color in the transcript.\n')
   return lines.join('\n')
 }
 
 // Helper function to extract structured data from transcript using GPT
 async function extractDataFromTranscript(transcript, category, subcategory, dbFilters) {
   try {
-    const apiKey = "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"
+    const apiKey = process.env.OPENAI_API_KEY
     if (!apiKey) {
-      throw new Error('OpenAI API key not configured')
+      throw new Error('OpenAI API key not configured. Set OPENAI_API_KEY in .env')
     }
 
     const filterSection = buildFilterPromptSection(dbFilters)
@@ -305,7 +318,8 @@ Extract the following information if mentioned:
 - currency: Currency code (USD, AED, EUR, GBP, INR, SAR, etc.) - extract from transcript or default to "USD"
 - condition: EXACTLY one of: "Brand New", "Like New", "Good", "Fair", "Poor" (map similar terms)
 - brand: Brand name exactly as mentioned
-- color: Color name exactly as mentioned
+- color: Exterior/body color ONLY if the seller clearly says it in the video (do not guess from brand/model)
+- interiorColor: Interior color ONLY if clearly mentioned
 - material: Material exactly as mentioned
 - model: Model number/name exactly as mentioned
 - year: Year as a number (for vehicles, electronics, etc.)
@@ -351,7 +365,7 @@ Example format:
           }
         ],
         temperature: 0.3,
-        max_tokens: 1500
+        max_tokens: 2800
       },
       {
         headers: {
@@ -386,6 +400,30 @@ Example format:
  * Match GPT-extracted filter_* values back to actual DB filter IDs.
  * Returns { filterSelections: { filter_<slug>: id }, filterData: { slug: { filterId, value } } }
  */
+function normalizeExtractedFilterValues(rawVal) {
+  if (Array.isArray(rawVal)) return rawVal.map((v) => String(v).trim()).filter(Boolean)
+  if (typeof rawVal === 'string') {
+    const trimmed = rawVal.trim()
+    if (trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        if (Array.isArray(parsed)) return parsed.map((v) => String(v).trim()).filter(Boolean)
+      } catch {
+        // fall through
+      }
+    }
+    if (trimmed.includes(',')) {
+      return trimmed
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    }
+    return trimmed ? [trimmed] : []
+  }
+  if (rawVal === undefined || rawVal === null || rawVal === '') return []
+  return [String(rawVal).trim()].filter(Boolean)
+}
+
 function matchExtractedFiltersToDBIds(extractedData, dbFilters) {
   const filterSelections = {}
   const filterData = {}
@@ -394,46 +432,76 @@ function matchExtractedFiltersToDBIds(extractedData, dbFilters) {
   const normalize = (s) => String(s || '').trim().toLowerCase().replace(/[\s\-_]+/g, ' ')
 
   for (const filter of dbFilters) {
-    const key = `filter_${filter.slug}`
-    const rawVal = extractedData[key]
-    if (!rawVal) continue
+    if (isAdsPostedFilterRoot(filter)) continue
 
-    const normalizedVal = normalize(rawVal)
+    const filterKey = `filter_${filter.slug || filter._id}`
+    const rawVal =
+      extractedData[filterKey] ??
+      (filter.slug ? extractedData[`filter_${filter.slug}`] : null)
+    const rawValues = normalizeExtractedFilterValues(rawVal)
+    if (!rawValues.length) continue
 
-    // Explicit options: match against root.options
+    // Explicit options: match against root.options (single or multiselect)
     if (filter.options && filter.options.length) {
-      const match = filter.options.find((opt) => normalize(opt) === normalizedVal)
-      if (match) {
-        filterSelections[key] = match
-        filterData[filter.slug] = { value: match }
-        console.log(`[Transcribe] Matched filter ${filter.name}: "${match}" (explicit option)`)
+      const matched = []
+      for (const rv of rawValues) {
+        const normalizedVal = normalize(rv)
+        let match = filter.options.find((opt) => normalize(opt) === normalizedVal)
+        if (!match) {
+          match = filter.options.find((opt) => {
+            const n = normalize(opt)
+            return n.length >= 3 && (normalizedVal.includes(n) || n.includes(normalizedVal))
+          })
+        }
+        if (match && !matched.includes(match)) matched.push(match)
+      }
+      if (matched.length) {
+        filterSelections[filterKey] = matched
+        filterData[filter.slug || filter._id] = {
+          values: matched,
+          value: matched.join(', '),
+        }
+        console.log(`[Transcribe] Matched filter ${filter.name}: ${JSON.stringify(matched)}`)
       }
       continue
     }
 
-    // Cascade children: match against child names
+    // Cascade children: match multiple child IDs when GPT returns an array
     if (filter.children && filter.children.length) {
-      const matchedChild = filter.children.find((c) => normalize(c.name) === normalizedVal)
-      if (matchedChild) {
-        filterSelections[key] = matchedChild._id
-        filterData[filter.slug] = { filterId: matchedChild._id, value: matchedChild.name }
-        console.log(`[Transcribe] Matched filter ${filter.name}: "${matchedChild.name}" (child ID: ${matchedChild._id})`)
-
-        // Also check grandchildren if GPT extracted a sub-value
-        const subKey = `filter_${filter.slug}_sub`
-        const subVal = extractedData[subKey]
-        if (subVal && matchedChild.children && matchedChild.children.length) {
-          const matchedGC = matchedChild.children.find((gc) => normalize(gc.name) === normalize(subVal))
-          if (matchedGC) {
-            filterSelections[key] = matchedGC._id
-            filterData[filter.slug] = { filterId: matchedGC._id, value: matchedGC.name, parentId: matchedChild._id }
+      const matchedIds = []
+      const matchedNames = []
+      for (const rv of rawValues) {
+        const normalizedVal = normalize(rv)
+        let matchedChild = filter.children.find((c) => normalize(c.name) === normalizedVal)
+        if (!matchedChild) {
+          matchedChild = filter.children.find((c) => {
+            const n = normalize(c.name)
+            return n.length >= 3 && (normalizedVal.includes(n) || n.includes(normalizedVal))
+          })
+        }
+        if (matchedChild) {
+          const id = String(matchedChild._id)
+          if (!matchedIds.includes(id)) {
+            matchedIds.push(id)
+            matchedNames.push(matchedChild.name)
           }
         }
+      }
+      if (matchedIds.length) {
+        filterSelections[filterKey] = matchedIds
+        filterData[filter.slug || filter._id] = {
+          values: matchedIds,
+          value: matchedNames.join(', '),
+        }
+        console.log(`[Transcribe] Matched filter ${filter.name}: ${JSON.stringify(matchedNames)}`)
       }
     }
   }
 
-  return { filterSelections, filterData }
+  return {
+    filterSelections: normalizeFilterSelections(filterSelections),
+    filterData,
+  }
 }
 
 // @route   POST /api/video/transcribe
@@ -502,6 +570,9 @@ router.post('/transcribe', authMiddleware, upload.single('video'), async (req, r
           subcategory || validatedSubcategory?.name || '',
           dbFilters
         )
+        if (extractedData?.color && !extractedData.colorSource) {
+          extractedData.colorSource = 'transcript'
+        }
         console.log('Extracted data:', JSON.stringify(extractedData, null, 2))
       } catch (error) {
         console.error('Error extracting data from transcript:', error)
@@ -509,6 +580,35 @@ router.post('/transcribe', authMiddleware, upload.single('video'), async (req, r
       }
     } else {
       console.log('Skipping data extraction - no transcript available')
+    }
+
+    // Step 4b: Detect exterior/interior color from video frame (when not spoken in transcript)
+    let colorDetection = null
+    if (extractedData && videoPath && fs.existsSync(videoPath)) {
+      try {
+        colorDetection = await detectVehicleColorsFromVideo({
+          videoPath,
+          categoryFilters: dbFilters,
+          transcript: transcript || '',
+        })
+        if (
+          colorDetection?.exteriorColor &&
+          colorDetection.confidence >= 60 &&
+          colorDetection.source === 'video_vision'
+        ) {
+          extractedData.color = colorDetection.exteriorColor
+          extractedData.exteriorColor = colorDetection.exteriorColor
+          extractedData.colorSource = 'video_vision'
+          extractedData.colorConfidence = colorDetection.confidence
+        }
+        if (colorDetection?.interiorColor) {
+          extractedData.interiorColor = colorDetection.interiorColor
+          extractedData.interiorColorSource = 'video_vision'
+        }
+        console.log('[Transcribe] Color detection:', colorDetection)
+      } catch (colorErr) {
+        console.error('[Transcribe] Color detection failed:', colorErr.message)
+      }
     }
 
     // Step 5: Match GPT-extracted filter values to actual DB filter IDs
@@ -526,8 +626,12 @@ router.post('/transcribe', authMiddleware, upload.single('video'), async (req, r
           models: { Filter, Category, CategoryFilter },
         })
 
-        // Merge: GPT-extracted values take priority, heuristic fills gaps
-        const mergedSelections = { ...heuristicSelections, ...filterSelections }
+        // Merge: GPT + vision + heuristic (multiselect arrays combined)
+        const colorDerived = buildFilterSelectionsFromVehicleData(dbFilters, extractedData)
+        const mergedSelections = mergeFilterSelectionMaps(
+          mergeFilterSelectionMaps(heuristicSelections, filterSelections),
+          colorDerived,
+        )
 
         if (Object.keys(mergedSelections).length) {
           suggestedFilters = {
@@ -559,11 +663,39 @@ router.post('/transcribe', authMiddleware, upload.single('video'), async (req, r
       }
     }
 
+    // Step 6 (vehicles): AI specification enrichment after identity extraction
+    let vehicleEnrichment = null
+    let enrichmentError = null
+    const catName = category || validatedCategory?.name || ''
+    const subName = subcategory || validatedSubcategory?.name || ''
+    const isVehicleCategory = /vehicles?|motors?|cars?|auto/i.test(String(catName))
+    const hasVehicleIdentity =
+      extractedData &&
+      (extractedData.brand || extractedData.make) &&
+      extractedData.model
+
+    if (isVehicleCategory && hasVehicleIdentity) {
+      try {
+        const vehicleType = resolveVehicleType(subName, catName)
+        vehicleEnrichment = await enrichVehicleProfile({
+          extractedData,
+          input_text: transcript || '',
+          categoryFilters: dbFilters,
+          vehicleType,
+        })
+      } catch (enrichErr) {
+        console.error('[Transcribe] Vehicle enrichment failed:', enrichErr)
+        enrichmentError = enrichErr.message || 'Failed to enrich vehicle specifications'
+      }
+    }
+
     res.json({
       success: true,
       transcript: transcript || '',
       extractedData: extractedData || null,
+      colorDetection: colorDetection || null,
       suggestedFilters: suggestedFilters || null,
+      vehicleEnrichment: vehicleEnrichment || null,
       categoryValidation: {
         category: validatedCategory ? { id: String(validatedCategory._id), name: validatedCategory.name } : null,
         subcategory: validatedSubcategory ? { id: String(validatedSubcategory._id), name: validatedSubcategory.name } : null,
@@ -571,8 +703,9 @@ router.post('/transcribe', authMiddleware, upload.single('video'), async (req, r
       },
       errors: {
         transcription: transcriptionError || null,
-        extraction: extractionError || null
-      }
+        extraction: extractionError || null,
+        enrichment: enrichmentError,
+      },
     })
   } catch (error) {
     console.error('Error processing video:', error)
@@ -595,6 +728,10 @@ router.post('/screenshot', authMiddleware, upload.single('video'), async (req, r
   let videoPath = null
   
   try {
+    if (!requireFfmpeg(res)) {
+      return
+    }
+
     if (!req.file) {
       return res.status(400).json({ message: 'No video file uploaded' })
     }
@@ -656,9 +793,16 @@ router.post('/screenshot', authMiddleware, upload.single('video'), async (req, r
       fs.unlinkSync(videoPath)
     }
 
-    res.status(500).json({
-      message: error.message || 'Error extracting screenshot',
-      error: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    const isFfmpegMissing =
+      !ffmpegAvailable ||
+      /cannot find ffmpeg|ffmpeg\/ffprobe not available/i.test(String(error.message || ''))
+
+    res.status(isFfmpegMissing ? 503 : 500).json({
+      message: isFfmpegMissing
+        ? 'FFmpeg is not installed. Screenshot capture requires FFmpeg on the server.'
+        : error.message || 'Error extracting screenshot',
+      hint: isFfmpegMissing ? getFfmpegInstallHint() : undefined,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     })
   }
 })

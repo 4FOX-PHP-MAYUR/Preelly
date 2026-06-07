@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { selectIsAuthenticated, selectUser } from '../store/slices/authSlice'
 import { useChat } from '../components/Chat/ChatContext'
+import ChatMessageRichContent from '../components/Chat/ChatMessageRichContent'
 import { getMediaUrl } from '../utils/helpers'
 import { getSocket } from '../services/socket'
 import { chatService } from '../services/api'
@@ -399,7 +400,7 @@ function ChatThreadPage() {
                         : 'bg-white border-gray-200 text-gray-900 rounded-bl-none'
                     }`}
                   >
-                    <p className="leading-relaxed whitespace-pre-wrap">{msg.text}</p>
+                    <ChatMessageRichContent text={msg.text} bubbleVariant={isSelf ? 'primary' : 'neutral'} />
                     <span className={`block text-[11px] mt-1 flex items-center justify-end gap-1 ${isSelf ? (msg.readAt ? 'text-white/90' : 'text-white/80') : 'text-gray-400'}`}>
                       <span>{time}</span>
                       {isSelf && (

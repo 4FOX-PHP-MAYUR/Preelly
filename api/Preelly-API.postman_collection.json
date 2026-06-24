@@ -1,0 +1,5846 @@
+{
+  "info": {
+    "name": "Preelly / Marketplace API",
+    "description": "Generated from `server/swagger/allPaths.js` and route handlers. Default **baseUrl** is `http://localhost:8029` (see server `PORT`).\n\nSet **token** after `POST /api/auth/verify-otp` (email or WhatsApp), `POST /api/auth/verify-email-otp`, or signup verification.\n\nPath variables like `{{id}}`, `{{productId}}` are placeholders — replace with real MongoDB ObjectIds.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "protocol",
+      "value": "http"
+    },
+    {
+      "key": "host",
+      "value": "localhost"
+    },
+    {
+      "key": "port",
+      "value": "8029"
+    },
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8029"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "id",
+      "value": "507f1f77bcf86cd799439011"
+    },
+    {
+      "key": "productId",
+      "value": "507f1f77bcf86cd799439011"
+    },
+    {
+      "key": "sellerId",
+      "value": "507f1f77bcf86cd799439012"
+    },
+    {
+      "key": "categoryId",
+      "value": "507f1f77bcf86cd799439013"
+    },
+    {
+      "key": "filterId",
+      "value": "507f1f77bcf86cd799439014"
+    },
+    {
+      "key": "adminRoleId",
+      "value": "507f1f77bcf86cd799439015"
+    },
+    {
+      "key": "chatId",
+      "value": "507f1f77bcf86cd799439016"
+    },
+    {
+      "key": "messageId",
+      "value": "507f1f77bcf86cd799439017"
+    },
+    {
+      "key": "commentId",
+      "value": "507f1f77bcf86cd799439018"
+    },
+    {
+      "key": "deviceId",
+      "value": "postman-device-001"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /api/health",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "Health check (works without DB)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "OAuth",
+      "item": [
+        {
+          "name": "GET /api/auth/oauth/google",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/oauth/google",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "oauth",
+                "google"
+              ]
+            },
+            "description": "Start Google OAuth"
+          }
+        },
+        {
+          "name": "GET /api/auth/oauth/google/callback",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/oauth/google/callback",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "oauth",
+                "google",
+                "callback"
+              ]
+            },
+            "description": "Google OAuth callback"
+          }
+        },
+        {
+          "name": "GET /api/auth/oauth/facebook",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/oauth/facebook",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "oauth",
+                "facebook"
+              ]
+            },
+            "description": "Start Facebook OAuth"
+          }
+        },
+        {
+          "name": "GET /api/auth/oauth/facebook/callback",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/oauth/facebook/callback",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "oauth",
+                "facebook",
+                "callback"
+              ]
+            },
+            "description": "Facebook OAuth callback"
+          }
+        },
+        {
+          "name": "GET /api/auth/oauth/instagram",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/oauth/instagram",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "oauth",
+                "instagram"
+              ]
+            },
+            "description": "Start Instagram OAuth (link or login)"
+          }
+        },
+        {
+          "name": "GET /api/auth/oauth/instagram/callback",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/oauth/instagram/callback",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "oauth",
+                "instagram",
+                "callback"
+              ]
+            },
+            "description": "Instagram OAuth callback"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /api/auth/register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Register; sends email OTP (+ WhatsApp OTP when mobile OTP enabled)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"phone\": \"+971500000000\",\n  \"password\": \"secret12\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/send-email-otp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/send-email-otp",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "send-email-otp"
+              ]
+            },
+            "description": "Resend email verification OTP",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"jane@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/send-phone-otp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/send-phone-otp",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "send-phone-otp"
+              ]
+            },
+            "description": "Send signup mobile verification OTP via WhatsApp",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"918552849180\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/verify-email-otp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-email-otp",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "verify-email-otp"
+              ]
+            },
+            "description": "Verify email with OTP; returns JWT",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"jane@example.com\",\n  \"otp\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/verify-phone-otp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-phone-otp",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "verify-phone-otp"
+              ]
+            },
+            "description": "Verify signup mobile OTP (WhatsApp); returns JWT when fully verified",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"phone\": \"918552849180\",\n  \"otp\": \"123456\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/send-otp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/send-otp",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "send-otp"
+              ]
+            },
+            "description": "Send login/signup OTP via email or WhatsApp (login only for WhatsApp)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"email\",\n  \"email\": \"jane@example.com\",\n  \"mode\": \"login\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/send-otp (WhatsApp login)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/send-otp",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "send-otp"
+              ]
+            },
+            "description": "Send login OTP via WhatsApp (StreakMsg template). Requires existing user account.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"whatsapp\",\n  \"phone\": \"8552849180\",\n  \"phoneCountryCode\": \"91\",\n  \"phoneCountryIso\": \"IN\",\n  \"mode\": \"login\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/verify-otp",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-otp",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "verify-otp"
+              ]
+            },
+            "description": "Verify OTP and sign in (email or WhatsApp channel)",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"email\",\n  \"email\": \"jane@example.com\",\n  \"otp\": \"123456\",\n  \"mode\": \"login\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/verify-otp (WhatsApp login)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-otp",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "verify-otp"
+              ]
+            },
+            "description": "Verify WhatsApp login OTP and receive JWT.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"channel\": \"whatsapp\",\n  \"phone\": \"8552849180\",\n  \"phoneCountryCode\": \"91\",\n  \"phoneCountryIso\": \"IN\",\n  \"otp\": \"123456\",\n  \"mode\": \"login\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Deprecated — use send-otp + verify-otp",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Logout; clears auth cookie",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Profile",
+      "item": [
+        {
+          "name": "GET /api/profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/profile",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "profile"
+              ]
+            },
+            "description": "Current user profile (JWT)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "GET /api/categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "categories"
+              ],
+              "query": [
+                {
+                  "key": "parent_id",
+                  "value": "",
+                  "description": "Filter by parent category ObjectId"
+                }
+              ]
+            },
+            "description": "List categories (?parent_id=)"
+          }
+        },
+        {
+          "name": "GET /api/categories/property-categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/property-categories",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "categories",
+                "property-categories"
+              ]
+            },
+            "description": "Property categories with subcategories"
+          }
+        },
+        {
+          "name": "GET /api/v1/web/categories/property-categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/web/categories/property-categories",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "web",
+                "categories",
+                "property-categories"
+              ]
+            },
+            "description": "Property categories with subcategories (v1 web)"
+          }
+        },
+        {
+          "name": "GET /api/v1/mobile/categories/property-categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mobile/categories/property-categories",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "categories",
+                "property-categories"
+              ]
+            },
+            "description": "Property categories with subcategories (v1 mobile)"
+          }
+        },
+        {
+          "name": "GET /api/categories/roots",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/roots",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "categories",
+                "roots"
+              ]
+            },
+            "description": "Root categories with counts"
+          }
+        },
+        {
+          "name": "GET /api/categories/level-labels",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/level-labels?root=motors",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "categories",
+                "level-labels"
+              ],
+              "query": [
+                {
+                  "key": "root",
+                  "value": "motors",
+                  "description": "Root category slug"
+                }
+              ]
+            },
+            "description": "Level labels (?root=)"
+          }
+        },
+        {
+          "name": "GET /api/categories/:id/path",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/{{id}}/path",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "categories",
+                ":id",
+                "path"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Category breadcrumb path"
+          }
+        },
+        {
+          "name": "GET /api/categories/:id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/categories/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "categories",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Category by ID"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Filters",
+      "item": [
+        {
+          "name": "GET /api/v1/web/filters/:categoryId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/web/filters/{{categoryId}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "web",
+                "filters",
+                ":categoryId"
+              ],
+              "variable": [
+                {
+                  "key": "categoryId",
+                  "value": "507f1f77bcf86cd799439013"
+                }
+              ]
+            },
+            "description": "Active filters for category and subcategories (v1 web)"
+          }
+        },
+        {
+          "name": "GET /api/v1/mobile/filters/:categoryId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mobile/filters/{{categoryId}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "filters",
+                ":categoryId"
+              ],
+              "variable": [
+                {
+                  "key": "categoryId",
+                  "value": "507f1f77bcf86cd799439013"
+                }
+              ]
+            },
+            "description": "Active filters for category and subcategories (v1 mobile)"
+          }
+        },
+        {
+          "name": "GET /api/filters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/filters",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "filters"
+              ],
+              "query": [
+                {
+                  "key": "parentId",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List filters"
+          }
+        },
+        {
+          "name": "GET /api/category-filters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/category-filters?category_id=%7B%7BcategoryId%7D%7D",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "category-filters"
+              ],
+              "query": [
+                {
+                  "key": "category_id",
+                  "value": "{{categoryId}}",
+                  "description": "Category ObjectId"
+                },
+                {
+                  "key": "subcategory_id",
+                  "value": "{{categoryId}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Filters for category (?category_id= etc.)"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Web - Search",
+      "item": [
+        {
+          "name": "GET /api/v1/web/search",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "device-id",
+                "value": "{{deviceId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/web/search?keyword=land%20rover",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "web",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "keyword",
+                  "value": "land rover",
+                  "description": "Required"
+                },
+                {
+                  "key": "type",
+                  "value": "all",
+                  "description": "all | products | properties | categories | agents | agencies",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "disabled": true
+                },
+                {
+                  "key": "perCategoryLimit",
+                  "value": "5",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Global search with categorized results (web)\nRequires **device-id** header. Optional **Authorization: Bearer {{token}}** for logged-in history."
+          }
+        },
+        {
+          "name": "GET /api/v1/web/search/recent",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "device-id",
+                "value": "{{deviceId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/web/search/recent",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "web",
+                "search",
+                "recent"
+              ]
+            },
+            "description": "Recent searches for user or device (web)\nRequires **device-id** header. Optional **Authorization: Bearer {{token}}** for logged-in history."
+          }
+        },
+        {
+          "name": "DELETE /api/v1/web/search/recent",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "device-id",
+                "value": "{{deviceId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/web/search/recent",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "web",
+                "search",
+                "recent"
+              ]
+            },
+            "description": "Clear recent searches for user or device (web)\nRequires **device-id** header. Optional **Authorization: Bearer {{token}}** for logged-in history."
+          }
+        },
+        {
+          "name": "GET /api/v1/web/search/popular",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "device-id",
+                "value": "{{deviceId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/web/search/popular",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "web",
+                "search",
+                "popular"
+              ]
+            },
+            "description": "Popular searches by search count (web)\nRequires **device-id** header. Optional **Authorization: Bearer {{token}}** for logged-in history."
+          }
+        },
+        {
+          "name": "GET /api/v1/web/search/suggestions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "device-id",
+                "value": "{{deviceId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/web/search/suggestions?keyword=iph",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "web",
+                "search",
+                "suggestions"
+              ],
+              "query": [
+                {
+                  "key": "keyword",
+                  "value": "iph",
+                  "description": "Required"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Search keyword suggestions (web)\nRequires **device-id** header. Optional **Authorization: Bearer {{token}}** for logged-in history."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mobile - Search",
+      "item": [
+        {
+          "name": "GET /api/v1/mobile/search",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "device-id",
+                "value": "{{deviceId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mobile/search?keyword=land%20rover",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "keyword",
+                  "value": "land rover",
+                  "description": "Required"
+                },
+                {
+                  "key": "type",
+                  "value": "all",
+                  "description": "all | products | properties | categories | agents | agencies",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "disabled": true
+                },
+                {
+                  "key": "perCategoryLimit",
+                  "value": "5",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Global search with categorized results (mobile)\nRequires **device-id** header. Optional **Authorization: Bearer {{token}}** for logged-in history.\nMobile: set **X-Platform** to `ios` or `android`."
+          }
+        },
+        {
+          "name": "GET /api/v1/mobile/search/recent",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "device-id",
+                "value": "{{deviceId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mobile/search/recent",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "search",
+                "recent"
+              ]
+            },
+            "description": "Recent searches for user or device (mobile)\nRequires **device-id** header. Optional **Authorization: Bearer {{token}}** for logged-in history.\nMobile: set **X-Platform** to `ios` or `android`."
+          }
+        },
+        {
+          "name": "DELETE /api/v1/mobile/search/recent",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "device-id",
+                "value": "{{deviceId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mobile/search/recent",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "search",
+                "recent"
+              ]
+            },
+            "description": "Clear recent searches for user or device (mobile)\nRequires **device-id** header. Optional **Authorization: Bearer {{token}}** for logged-in history.\nMobile: set **X-Platform** to `ios` or `android`."
+          }
+        },
+        {
+          "name": "GET /api/v1/mobile/search/popular",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "device-id",
+                "value": "{{deviceId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mobile/search/popular",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "search",
+                "popular"
+              ]
+            },
+            "description": "Popular searches by search count (mobile)\nRequires **device-id** header. Optional **Authorization: Bearer {{token}}** for logged-in history.\nMobile: set **X-Platform** to `ios` or `android`."
+          }
+        },
+        {
+          "name": "GET /api/v1/mobile/search/suggestions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "device-id",
+                "value": "{{deviceId}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/mobile/search/suggestions?keyword=iph",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "mobile",
+                "search",
+                "suggestions"
+              ],
+              "query": [
+                {
+                  "key": "keyword",
+                  "value": "iph",
+                  "description": "Required"
+                },
+                {
+                  "key": "limit",
+                  "value": "10",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Search keyword suggestions (mobile)\nRequires **device-id** header. Optional **Authorization: Bearer {{token}}** for logged-in history.\nMobile: set **X-Platform** to `ios` or `android`."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Feed",
+      "item": [
+        {
+          "name": "GET /api/feed-data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/feed-data?page=1&limit=20",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "feed-data"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Optimized feed payload"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User",
+      "item": [
+        {
+          "name": "GET /api/user/reels-progress",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/reels-progress",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "reels-progress"
+              ]
+            },
+            "description": "Get reels scroll position"
+          }
+        },
+        {
+          "name": "PUT /api/user/reels-progress",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/reels-progress",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "reels-progress"
+              ]
+            },
+            "description": "Update reels scroll position",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"feedKey\": \"default\",\n  \"index\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/user/dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/dashboard",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "dashboard"
+              ]
+            },
+            "description": "Dashboard data"
+          }
+        },
+        {
+          "name": "GET /api/user/listings",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/listings?page=1&limit=10",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "listings"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "User listings"
+          }
+        },
+        {
+          "name": "GET /api/user/orders",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/orders",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "orders"
+              ]
+            },
+            "description": "User orders"
+          }
+        },
+        {
+          "name": "GET /api/user/wishlist",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/wishlist",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "wishlist"
+              ]
+            },
+            "description": "Wishlist"
+          }
+        },
+        {
+          "name": "GET /api/user/notifications",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/notifications?page=1&limit=20",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "notifications"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Notifications"
+          }
+        },
+        {
+          "name": "GET /api/user/:id/profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/{{id}}/profile",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                ":id",
+                "profile"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Public profile by user ID"
+          }
+        },
+        {
+          "name": "GET /api/user/:id/followers",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/{{id}}/followers?page=1&limit=20",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                ":id",
+                "followers"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Followers list"
+          }
+        },
+        {
+          "name": "GET /api/user/:id/following",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/{{id}}/following?page=1&limit=20",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                ":id",
+                "following"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Following list"
+          }
+        },
+        {
+          "name": "GET /api/user/profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/profile",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "profile"
+              ]
+            },
+            "description": "Current user profile"
+          }
+        },
+        {
+          "name": "POST /api/user/profile",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/profile",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "profile"
+              ]
+            },
+            "description": "Update profile (multipart: profilePic)\n\nUse **body → form-data**: profilePic (file), name, city, lat, lng, skip, gender, dob, addressLine1, etc.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "_readme",
+                  "value": "Add real file + fields per description above.",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT /api/user/profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/profile",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "profile"
+              ]
+            },
+            "description": "Update profile fields",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"phone\": \"+971500000000\",\n  \"avatar\": null,\n  \"displayName\": \"Jane\",\n  \"gender\": \"female\",\n  \"dob\": \"1990-01-15\",\n  \"address\": {\n    \"line1\": \"Street 1\",\n    \"line2\": \"\",\n    \"postalCode\": \"00000\",\n    \"country\": \"AE\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Interactions",
+      "item": [
+        {
+          "name": "POST /api/products/:id/like",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}/like",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id",
+                "like"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Like / unlike product"
+          }
+        },
+        {
+          "name": "POST /api/products/:id/view",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}/view",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id",
+                "view"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Record product view"
+          }
+        },
+        {
+          "name": "POST /api/products/:id/save",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}/save",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id",
+                "save"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Save / unsave product"
+          }
+        },
+        {
+          "name": "GET /api/user/saved",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/saved",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "saved"
+              ]
+            },
+            "description": "Saved products for current user"
+          }
+        },
+        {
+          "name": "POST /api/user/:id/follow",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/{{id}}/follow",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                ":id",
+                "follow"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Follow / unfollow user"
+          }
+        },
+        {
+          "name": "GET /api/products/:id/liked",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}/liked",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id",
+                "liked"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Whether current user liked product"
+          }
+        },
+        {
+          "name": "GET /api/products/:id/saved",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}/saved",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id",
+                "saved"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Whether current user saved product"
+          }
+        },
+        {
+          "name": "POST /api/products/:id/report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}/report",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id",
+                "report"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Report product",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"spam\",\n  \"description\": \"Optional details\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/products/:id/comments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}/comments",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id",
+                "comments"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List comments"
+          }
+        },
+        {
+          "name": "POST /api/products/:id/comments",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}/comments",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id",
+                "comments"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Add comment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Nice listing!\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/comments/:id/report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/comments/{{id}}/report",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "comments",
+                ":id",
+                "report"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Report comment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"spam\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/comments/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/comments/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "comments",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Delete comment"
+          }
+        },
+        {
+          "name": "POST /api/comments/:id/like",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/comments/{{id}}/like",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "comments",
+                ":id",
+                "like"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Like comment"
+          }
+        },
+        {
+          "name": "GET /api/products/:id/comments/count",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}/comments/count",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id",
+                "comments",
+                "count"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Comment count"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Chats",
+      "item": [
+        {
+          "name": "GET /api/chats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "chats"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "50",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List chats"
+          }
+        },
+        {
+          "name": "GET /api/chats/unread-count",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/unread-count",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "chats",
+                "unread-count"
+              ]
+            },
+            "description": "Unread message count"
+          }
+        },
+        {
+          "name": "GET /api/chats/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "chats",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Chat by ID"
+          }
+        },
+        {
+          "name": "POST /api/chats",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "chats"
+              ]
+            },
+            "description": "Create or open chat",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"sellerId\": \"{{sellerId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/chats (support)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "chats"
+              ]
+            },
+            "description": "Create or open support chat (same URL as product chat).",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"support\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/chats/:id/messages",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/{{id}}/messages",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "chats",
+                ":id",
+                "messages"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Send message",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Hello, is this still available?\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/chats/:chatId/messages/:messageId",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/{{chatId}}/messages/{{messageId}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "chats",
+                ":chatId",
+                "messages",
+                ":messageId"
+              ],
+              "variable": [
+                {
+                  "key": "chatId",
+                  "value": "507f1f77bcf86cd799439016"
+                },
+                {
+                  "key": "messageId",
+                  "value": "507f1f77bcf86cd799439017"
+                }
+              ]
+            },
+            "description": "Delete message"
+          }
+        },
+        {
+          "name": "PUT /api/chats/:id/read",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/{{id}}/read",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "chats",
+                ":id",
+                "read"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Mark chat as read"
+          }
+        },
+        {
+          "name": "DELETE /api/chats/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/chats/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "chats",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Delete chat"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "GET /api/products/price-range",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/price-range?categoryId=%7B%7BcategoryId%7D%7D",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                "price-range"
+              ],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}"
+                }
+              ]
+            },
+            "description": "Min/max price (?categoryId=)"
+          }
+        },
+        {
+          "name": "GET /api/products/facets",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/facets?categoryId=%7B%7BcategoryId%7D%7D",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                "facets"
+              ],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}"
+                },
+                {
+                  "key": "subcategoryId",
+                  "value": "{{categoryId}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Filter facets (?categoryId=, ?subcategoryId=)"
+          }
+        },
+        {
+          "name": "GET /api/products",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products?page=1&limit=10&categoryId=%7B%7BcategoryId%7D%7D&sortBy=newest",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}"
+                },
+                {
+                  "key": "subcategoryId",
+                  "value": "{{categoryId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "minPrice",
+                  "value": "0",
+                  "disabled": true
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "500000",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "land rover",
+                  "disabled": true
+                },
+                {
+                  "key": "sortBy",
+                  "value": "newest",
+                  "description": "newest | price_asc | price_desc"
+                },
+                {
+                  "key": "location",
+                  "value": "Dubai",
+                  "disabled": true
+                },
+                {
+                  "key": "filterIds",
+                  "value": "{{filterId}}",
+                  "description": "Comma-separated Filter ObjectIds",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List / filter / paginate"
+          }
+        },
+        {
+          "name": "GET /api/products/reels-feed",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/reels-feed?page=1&limit=10",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                "reels-feed"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "subcategoryId",
+                  "value": "{{categoryId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "location",
+                  "value": "Dubai",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "excludeUserId",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "excludeIds",
+                  "value": "",
+                  "description": "Comma-separated product ObjectIds",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Reels feed"
+          }
+        },
+        {
+          "name": "GET /api/products/:id/related",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}/related",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id",
+                "related"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "subcategoryId",
+                  "value": "{{categoryId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "location",
+                  "value": "Dubai",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Related products"
+          }
+        },
+        {
+          "name": "GET /api/products/search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/search?q=land%20rover",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                "search"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "land rover",
+                  "description": "Search text"
+                },
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "subcategoryId",
+                  "value": "{{categoryId}}",
+                  "disabled": true
+                },
+                {
+                  "key": "location",
+                  "value": "Dubai",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "limit",
+                  "value": "20",
+                  "disabled": true
+                },
+                {
+                  "key": "minPrice",
+                  "value": "0",
+                  "disabled": true
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "500000",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Search products"
+          }
+        },
+        {
+          "name": "GET /api/products/:id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Product by ID"
+          }
+        },
+        {
+          "name": "POST /api/products",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products"
+              ]
+            },
+            "description": "Create listing (multipart: video, images)",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "title",
+                  "value": "2022 Land Rover Discovery HSE",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Well maintained SUV with full service history and low mileage. Single owner, accident free.",
+                  "type": "text"
+                },
+                {
+                  "key": "price",
+                  "value": "185000",
+                  "type": "text"
+                },
+                {
+                  "key": "currency",
+                  "value": "AED",
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "value": "{{categoryId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "subcategory",
+                  "value": "{{categoryId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "location",
+                  "value": "Dubai Marina, Dubai, UAE",
+                  "type": "text"
+                },
+                {
+                  "key": "country",
+                  "value": "UAE",
+                  "type": "text"
+                },
+                {
+                  "key": "city",
+                  "value": "Dubai",
+                  "type": "text"
+                },
+                {
+                  "key": "area",
+                  "value": "Dubai Marina",
+                  "type": "text"
+                },
+                {
+                  "key": "brand",
+                  "value": "Land Rover",
+                  "type": "text"
+                },
+                {
+                  "key": "condition",
+                  "value": "Good",
+                  "type": "text"
+                },
+                {
+                  "key": "priceType",
+                  "value": "Fixed",
+                  "type": "text"
+                },
+                {
+                  "key": "adType",
+                  "value": "free",
+                  "type": "text"
+                },
+                {
+                  "key": "contactName",
+                  "value": "John Seller",
+                  "type": "text"
+                },
+                {
+                  "key": "contactPhone",
+                  "value": "+971501234567",
+                  "type": "text"
+                },
+                {
+                  "key": "cityid",
+                  "value": "{{filterId}}",
+                  "type": "text",
+                  "description": "Optional — Filter ObjectId"
+                },
+                {
+                  "key": "modelid",
+                  "value": "{{categoryId}}",
+                  "type": "text",
+                  "description": "Optional — Category ObjectId"
+                },
+                {
+                  "key": "trimid",
+                  "value": "{{categoryId}}",
+                  "type": "text",
+                  "description": "Optional — Category ObjectId"
+                },
+                {
+                  "key": "regionalspecsid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "yearid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "kilometers",
+                  "value": "45000",
+                  "type": "text"
+                },
+                {
+                  "key": "bodytypeid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "seatid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "isinsuredid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "productprice",
+                  "value": "185000",
+                  "type": "text"
+                },
+                {
+                  "key": "phonenumber",
+                  "value": "+971501234567",
+                  "type": "text"
+                },
+                {
+                  "key": "exteriorcolorid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "interiorcolor",
+                  "value": "Beige Leather",
+                  "type": "text"
+                },
+                {
+                  "key": "warrantyid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fueltypeid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "doorsid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "numberofcylenderid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "transmissiontypeid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "horsepowerid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "steeringsideid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "enginecapacityid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "driverassistancesafetyid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "entertainmenttechnologyid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "comforfconvenienceid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "exteriorid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "locateyouritem",
+                  "value": "Near Marina Mall",
+                  "type": "text"
+                },
+                {
+                  "key": "buildingstreetname",
+                  "value": "King Salman Bin Abdulaziz Al Saud St",
+                  "type": "text"
+                },
+                {
+                  "key": "video",
+                  "type": "file",
+                  "description": "Required — upload 1 video file"
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "description": "Upload at least 1 image (or rely on auto screenshots)"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT /api/products/:id/resubmit",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}/resubmit",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id",
+                "resubmit"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Resubmit rejected listing"
+          }
+        },
+        {
+          "name": "PUT /api/products/:id",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Update listing (multipart)",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "status",
+                  "value": "active",
+                  "type": "text",
+                  "disabled": true,
+                  "description": "Owner/admin only"
+                },
+                {
+                  "key": "title",
+                  "value": "2022 Land Rover Discovery HSE",
+                  "type": "text"
+                },
+                {
+                  "key": "description",
+                  "value": "Well maintained SUV with full service history and low mileage. Single owner, accident free.",
+                  "type": "text"
+                },
+                {
+                  "key": "price",
+                  "value": "185000",
+                  "type": "text"
+                },
+                {
+                  "key": "currency",
+                  "value": "AED",
+                  "type": "text"
+                },
+                {
+                  "key": "category",
+                  "value": "{{categoryId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "subcategory",
+                  "value": "{{categoryId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "location",
+                  "value": "Dubai Marina, Dubai, UAE",
+                  "type": "text"
+                },
+                {
+                  "key": "country",
+                  "value": "UAE",
+                  "type": "text"
+                },
+                {
+                  "key": "city",
+                  "value": "Dubai",
+                  "type": "text"
+                },
+                {
+                  "key": "area",
+                  "value": "Dubai Marina",
+                  "type": "text"
+                },
+                {
+                  "key": "brand",
+                  "value": "Land Rover",
+                  "type": "text"
+                },
+                {
+                  "key": "condition",
+                  "value": "Good",
+                  "type": "text"
+                },
+                {
+                  "key": "priceType",
+                  "value": "Fixed",
+                  "type": "text"
+                },
+                {
+                  "key": "adType",
+                  "value": "free",
+                  "type": "text"
+                },
+                {
+                  "key": "contactName",
+                  "value": "John Seller",
+                  "type": "text"
+                },
+                {
+                  "key": "contactPhone",
+                  "value": "+971501234567",
+                  "type": "text"
+                },
+                {
+                  "key": "cityid",
+                  "value": "{{filterId}}",
+                  "type": "text",
+                  "description": "Optional — Filter ObjectId"
+                },
+                {
+                  "key": "modelid",
+                  "value": "{{categoryId}}",
+                  "type": "text",
+                  "description": "Optional — Category ObjectId"
+                },
+                {
+                  "key": "trimid",
+                  "value": "{{categoryId}}",
+                  "type": "text",
+                  "description": "Optional — Category ObjectId"
+                },
+                {
+                  "key": "regionalspecsid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "yearid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "kilometers",
+                  "value": "45000",
+                  "type": "text"
+                },
+                {
+                  "key": "bodytypeid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "seatid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "isinsuredid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "productprice",
+                  "value": "185000",
+                  "type": "text"
+                },
+                {
+                  "key": "phonenumber",
+                  "value": "+971501234567",
+                  "type": "text"
+                },
+                {
+                  "key": "exteriorcolorid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "interiorcolor",
+                  "value": "Beige Leather",
+                  "type": "text"
+                },
+                {
+                  "key": "warrantyid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "fueltypeid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "doorsid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "numberofcylenderid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "transmissiontypeid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "horsepowerid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "steeringsideid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "enginecapacityid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "driverassistancesafetyid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "entertainmenttechnologyid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "comforfconvenienceid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "exteriorid",
+                  "value": "{{filterId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "locateyouritem",
+                  "value": "Near Marina Mall",
+                  "type": "text"
+                },
+                {
+                  "key": "buildingstreetname",
+                  "value": "King Salman Bin Abdulaziz Al Saud St",
+                  "type": "text"
+                },
+                {
+                  "key": "video",
+                  "type": "file",
+                  "disabled": true,
+                  "description": "Optional replacement video"
+                },
+                {
+                  "key": "images",
+                  "type": "file",
+                  "disabled": true,
+                  "description": "Optional additional images"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/products/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/products/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "products",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Delete listing"
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI",
+      "item": [
+        {
+          "name": "POST /api/ai/enhance-description",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/ai/enhance-description",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "ai",
+                "enhance-description"
+              ]
+            },
+            "description": "Enhance listing description",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Used sedan\",\n  \"description\": \"Runs well, low mileage.\",\n  \"category\": \"Motors\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/listings/ai-extract",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/listings/ai-extract",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "listings",
+                "ai-extract"
+              ]
+            },
+            "description": "Extract car listing from input_text",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input_text\": \"2020 Toyota Camry, 45000 km, full service history, AED 45000\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Video",
+      "item": [
+        {
+          "name": "POST /api/video/transcribe",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/video/transcribe",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "video",
+                "transcribe"
+              ]
+            },
+            "description": "Transcribe video (multipart)\n\n**form-data**: `video` (file) + optional categoryId, subcategoryId, category, subcategory, childCategoryId.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "_readme",
+                  "value": "Add real file + fields per description above.",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/video/screenshot",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/video/screenshot",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "video",
+                "screenshot"
+              ]
+            },
+            "description": "Screenshot from video (multipart)\n\n**form-data**: `video` (file) + `timestamp` (e.g. 2.5).",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "_readme",
+                  "value": "Add real file + fields per description above.",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "GET /api/admin/products/pending",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/products/pending?page=1&limit=20",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "products",
+                "pending"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Pending products"
+          }
+        },
+        {
+          "name": "GET /api/admin/products",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/products?page=1&limit=20",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "products"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "disabled": true
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "All products (admin)"
+          }
+        },
+        {
+          "name": "PUT /api/admin/products/:id/approve",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/products/{{id}}/approve",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "products",
+                ":id",
+                "approve"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Approve product"
+          }
+        },
+        {
+          "name": "PUT /api/admin/products/:id/reject",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/products/{{id}}/reject",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "products",
+                ":id",
+                "reject"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Reject product",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Policy violation\",\n  \"rejectionCategory\": \"Content\",\n  \"rejectionCategories\": [\n    \"Content\"\n  ],\n  \"reasons\": [\n    \"Inappropriate content\"\n  ],\n  \"rejectionSelections\": [\n    {\n      \"category\": \"Content\",\n      \"reasons\": [\n        \"Inappropriate content\"\n      ]\n    }\n  ],\n  \"customReason\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/admin/products/rejection-reasons",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/products/rejection-reasons",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "products",
+                "rejection-reasons"
+              ]
+            },
+            "description": "Rejection reason options"
+          }
+        },
+        {
+          "name": "PUT /api/admin/products/:id/status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/products/{{id}}/status",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "products",
+                ":id",
+                "status"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Set product status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/admin/stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/stats",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "stats"
+              ]
+            },
+            "description": "Dashboard statistics"
+          }
+        },
+        {
+          "name": "GET /api/admin/users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users?page=1&limit=20",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "role",
+                  "value": "user",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List users"
+          }
+        },
+        {
+          "name": "POST /api/admin/users",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "users"
+              ]
+            },
+            "description": "Create user",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Admin Created\",\n  \"email\": \"newuser@example.com\",\n  \"phone\": \"+971511111111\",\n  \"password\": \"secret12\",\n  \"role\": \"user\",\n  \"status\": \"active\",\n  \"adminRole\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "PUT /api/admin/users/:id/verify",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{id}}/verify",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "users",
+                ":id",
+                "verify"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Verify / unverify user",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isVerified\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "PUT /api/admin/users/:id/role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{id}}/role",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "users",
+                ":id",
+                "role"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Set user role",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"user\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "PUT /api/admin/users/:id/status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{id}}/status",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "users",
+                ":id",
+                "status"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Set user status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "PUT /api/admin/users/:id/admin-role",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/users/{{id}}/admin-role",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "users",
+                ":id",
+                "admin-role"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Assign admin role",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"adminRole\": \"{{adminRoleId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/admin/comments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/comments?page=1&limit=50&status=pending",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "comments"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "status",
+                  "value": "pending"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Comments for moderation"
+          }
+        },
+        {
+          "name": "PUT /api/admin/comments/:id/approve",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/comments/{{id}}/approve",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "comments",
+                ":id",
+                "approve"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Approve comment"
+          }
+        },
+        {
+          "name": "PUT /api/admin/comments/:id/reject",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/comments/{{id}}/reject",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "comments",
+                ":id",
+                "reject"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Reject comment"
+          }
+        },
+        {
+          "name": "GET /api/admin/reported-comments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reported-comments",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "reported-comments"
+              ]
+            },
+            "description": "Reported comments"
+          }
+        },
+        {
+          "name": "PUT /api/admin/reported-comments/comment/:commentId/action",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/reported-comments/comment/{{commentId}}/action",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "reported-comments",
+                "comment",
+                ":commentId",
+                "action"
+              ],
+              "variable": [
+                {
+                  "key": "commentId",
+                  "value": "507f1f77bcf86cd799439018"
+                }
+              ]
+            },
+            "description": "Resolve reported comment",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"action\": \"ignore\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/admin/support-unread-count",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/support-unread-count",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "support-unread-count"
+              ]
+            },
+            "description": "Support unread count"
+          }
+        },
+        {
+          "name": "GET /api/admin/contacts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/contacts?page=1&limit=50&type=support",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "contacts"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "type",
+                  "value": "support"
+                },
+                {
+                  "key": "activeOnly",
+                  "value": "false",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Support contacts / threads"
+          }
+        },
+        {
+          "name": "GET /api/admin/categories",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories?page=1&limit=100",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "categories"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Categories (paginated)"
+          }
+        },
+        {
+          "name": "GET /api/admin/categories/children",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories/children?parentId=%7B%7BcategoryId%7D%7D",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "categories",
+                "children"
+              ],
+              "query": [
+                {
+                  "key": "parentId",
+                  "value": "{{categoryId}}"
+                }
+              ]
+            },
+            "description": "Category children (?parentId=)"
+          }
+        },
+        {
+          "name": "GET /api/admin/categories/nested-for-filters",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories/nested-for-filters",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "categories",
+                "nested-for-filters"
+              ]
+            },
+            "description": "Nested categories for filters UI"
+          }
+        },
+        {
+          "name": "POST /api/admin/categories/import-excel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories/import-excel",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "categories",
+                "import-excel"
+              ]
+            },
+            "description": "Import categories from Excel (multipart)\n\n**form-data**: `file` (Excel). Optional: targetCategoryId, rootCategoryId, subCategoryId.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "_readme",
+                  "value": "Add real file + fields per description above.",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /api/admin/categories/debug-indexes",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories/debug-indexes",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "categories",
+                "debug-indexes"
+              ],
+              "query": [
+                {
+                  "key": "slug",
+                  "value": "motors",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Debug MongoDB indexes (?slug=)"
+          }
+        },
+        {
+          "name": "POST /api/admin/categories",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "categories"
+              ]
+            },
+            "description": "Create category",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Category\",\n  \"slug\": \"new-category\",\n  \"parentId\": null,\n  \"sortOrder\": 0,\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/admin/categories/tree",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories/tree",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "categories",
+                "tree"
+              ]
+            },
+            "description": "Full category tree"
+          }
+        },
+        {
+          "name": "GET /api/admin/categories/:id/ancestors",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories/{{id}}/ancestors",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "categories",
+                ":id",
+                "ancestors"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Category ancestors"
+          }
+        },
+        {
+          "name": "GET /api/admin/categories/:id/path",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories/{{id}}/path",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "categories",
+                ":id",
+                "path"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Category path"
+          }
+        },
+        {
+          "name": "PATCH /api/admin/categories/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "categories",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Update category",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated name\",\n  \"slug\": \"updated-slug\",\n  \"parentId\": null,\n  \"sortOrder\": 1,\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/admin/categories/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "categories",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Soft-delete category (+ descendants)"
+          }
+        },
+        {
+          "name": "GET /api/admin/categories/all",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/categories/all?includeDeleted=false",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "categories",
+                "all"
+              ],
+              "query": [
+                {
+                  "key": "includeDeleted",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "All categories (?includeDeleted=)"
+          }
+        },
+        {
+          "name": "GET /api/admin/filters",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/filters?page=1&limit=100",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "filters"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "100"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Filters (paginated)"
+          }
+        },
+        {
+          "name": "GET /api/admin/filters/tree",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/filters/tree",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "filters",
+                "tree"
+              ]
+            },
+            "description": "Filter tree"
+          }
+        },
+        {
+          "name": "GET /api/admin/filters/children",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/filters/children?parentId=%7B%7BfilterId%7D%7D",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "filters",
+                "children"
+              ],
+              "query": [
+                {
+                  "key": "parentId",
+                  "value": "{{filterId}}"
+                }
+              ]
+            },
+            "description": "Filter children (?parentId=)"
+          }
+        },
+        {
+          "name": "POST /api/admin/filters/import-excel",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/filters/import-excel",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "filters",
+                "import-excel"
+              ]
+            },
+            "description": "Import filters Excel (multipart)\n\n**form-data**: `file` (Excel). Optional: categoryId, targetCategoryId, subcategoryId, childCategoryId.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "_readme",
+                  "value": "Add real file + fields per description above.",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/admin/filters/import",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/filters/import",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "filters",
+                "import"
+              ]
+            },
+            "description": "Import filters (alias)\n\n**form-data**: `file` (Excel). Optional: categoryId, targetCategoryId, subcategoryId, childCategoryId.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "_readme",
+                  "value": "Add real file + fields per description above.",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /api/admin/filters",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/filters",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "filters"
+              ]
+            },
+            "description": "Create filter (multipart: thumbImage)\n\n**multipart**: fields + optional `thumbImage` file.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "_readme",
+                  "value": "Add real file + fields per description above.",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/admin/filters/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/filters/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "filters",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Update filter (multipart)\n\n**multipart**: optional `thumbImage`; JSON fields as form fields.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "_readme",
+                  "value": "Add real file + fields per description above.",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/admin/filters/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/filters/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "filters",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Soft-delete filter"
+          }
+        },
+        {
+          "name": "GET /api/admin/dealers",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/dealers?page=1&limit=20",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "dealers"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "List dealers"
+          }
+        },
+        {
+          "name": "GET /api/admin/dealers/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/dealers/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "dealers",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Dealer by ID"
+          }
+        },
+        {
+          "name": "POST /api/admin/dealers",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/dealers",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "dealers"
+              ]
+            },
+            "description": "Create dealer (multipart: dealer_image)\n\n**multipart**: form fields + optional `dealer_image` file.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "_readme",
+                  "value": "Add real file + fields per description above.",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/admin/dealers/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/dealers/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "dealers",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Update dealer (multipart)\n\n**multipart**: optional `dealer_image`.",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "_readme",
+                  "value": "Add real file + fields per description above.",
+                  "type": "text",
+                  "disabled": true
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "PUT /api/admin/dealers/:id/status",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/dealers/{{id}}/status",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "dealers",
+                ":id",
+                "status"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Toggle dealer status",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/admin/dealers/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/dealers/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "dealers",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Delete dealer"
+          }
+        },
+        {
+          "name": "GET /api/admin/category-filters",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/category-filters?categoryId=%7B%7BcategoryId%7D%7D",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "category-filters"
+              ],
+              "query": [
+                {
+                  "key": "categoryId",
+                  "value": "{{categoryId}}"
+                }
+              ]
+            },
+            "description": "Category–filter assignments"
+          }
+        },
+        {
+          "name": "POST /api/admin/category-filters",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/category-filters",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "category-filters"
+              ]
+            },
+            "description": "Assign filters to category",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"categoryId\": \"{{categoryId}}\",\n  \"filterIds\": [\n    \"{{filterId}}\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/admin/roles",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/roles",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "roles"
+              ]
+            },
+            "description": "List admin roles"
+          }
+        },
+        {
+          "name": "GET /api/admin/roles/:id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/roles/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "roles",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Role by ID"
+          }
+        },
+        {
+          "name": "POST /api/admin/roles",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/roles",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "roles"
+              ]
+            },
+            "description": "Create role",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role_name\": \"Support Agent\",\n  \"description\": \"Can view support\",\n  \"status\": \"active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "PATCH /api/admin/roles/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/roles/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "roles",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Update role",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role_name\": \"Support Agent\",\n  \"description\": \"\",\n  \"status\": \"active\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/admin/roles/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/roles/{{id}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "roles",
+                ":id"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Delete role"
+          }
+        },
+        {
+          "name": "GET /api/admin/roles/:id/permissions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/roles/{{id}}/permissions",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "roles",
+                ":id",
+                "permissions"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Permissions for role"
+          }
+        },
+        {
+          "name": "PUT /api/admin/roles/:id/permissions",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/roles/{{id}}/permissions",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "roles",
+                ":id",
+                "permissions"
+              ],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Update role permissions",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"permissions\": [\n    {\n      \"module_name\": \"Dashboard\",\n      \"can_view\": true,\n      \"can_create\": false,\n      \"can_edit\": false,\n      \"can_delete\": false\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "GET /api/admin/modules",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/modules",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "modules"
+              ]
+            },
+            "description": "Permission modules list"
+          }
+        }
+      ]
+    }
+  ]
+}

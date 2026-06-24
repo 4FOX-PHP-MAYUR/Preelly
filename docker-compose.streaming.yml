@@ -12,23 +12,24 @@ services:
 
   api:
     build:
-      context: ./server
+      context: ./api
       dockerfile: Dockerfile
     restart: unless-stopped
     ports:
-      - '5002:5002'
+      - '8029:8029'
     environment:
       NODE_ENV: production
-      PORT: 5002
+      PORT: 8029
       MONGO_URI: mongodb://mongo:27017/olx_reels
-      BASE_URL: http://localhost:5002
-      FRONTEND_URL: http://localhost:3002
+      BASE_URL: http://localhost:8029
+      FRONTEND_URL: http://localhost:8031
+      ADMIN_URL: http://localhost:8030
       VIDEO_STORAGE_PROVIDER: local
       FFMPEG_PATH: /usr/bin/ffmpeg
       FFPROBE_PATH: /usr/bin/ffprobe
       MAX_STREAMING_UPLOAD_MB: 500
     volumes:
-      - ./server/uploads:/app/uploads
+      - ./api/uploads:/app/uploads
     depends_on:
       - mongo
 
@@ -38,10 +39,24 @@ services:
       dockerfile: Dockerfile.web
     restart: unless-stopped
     ports:
-      - '3002:3002'
+      - '8031:8031'
     environment:
-      VITE_API_URL: http://localhost:5002/api
-      VITE_SOCKET_URL: http://localhost:5002
+      VITE_API_URL: http://localhost:8029/api
+      VITE_SOCKET_URL: http://localhost:8029
+      VITE_ADMIN_URL: http://localhost:8030
+    depends_on:
+      - api
+
+  admin:
+    build:
+      context: .
+      dockerfile: Dockerfile.admin
+    restart: unless-stopped
+    ports:
+      - '8030:8030'
+    environment:
+      VITE_API_URL: http://localhost:8029/api
+      VITE_SOCKET_URL: http://localhost:8029
     depends_on:
       - api
 

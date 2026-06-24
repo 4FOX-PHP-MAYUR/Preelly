@@ -1,0 +1,17 @@
+FROM node:20-bookworm-slim AS build
+WORKDIR /app
+COPY admin/package*.json ./admin/
+COPY front/package*.json ./front/
+COPY package.json ./
+RUN npm ci --workspace=admin
+COPY admin ./admin
+COPY front/src/shared ./front/src/shared
+WORKDIR /app/admin
+RUN npm run build
+
+FROM node:20-bookworm-slim
+WORKDIR /app
+RUN npm install -g serve
+COPY --from=build /app/admin/dist ./dist
+EXPOSE 8030
+CMD ["serve", "-s", "dist", "-l", "8030"]

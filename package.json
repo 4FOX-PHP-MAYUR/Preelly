@@ -1,38 +1,26 @@
 {
-  "name": "olx-dubizzle-reels",
+  "name": "preelly",
   "version": "1.0.0",
-  "description": "Marketplace platform with Instagram Reels-style product listings",
+  "description": "Preelly marketplace platform — api, front, and admin monorepo",
   "private": true,
+  "workspaces": [
+    "api",
+    "front",
+    "admin"
+  ],
   "scripts": {
-    "dev": "vite",
-    "dev:api": "cd server && npm run dev",
-    "dev:all": "npm run dev:api & sleep 2 && npm run dev",
-    "build": "vite build",
-    "preview": "vite preview",
-    "server": "cd server && npm run dev"
-  },
-  "dependencies": {
-    "@reduxjs/toolkit": "^2.0.1",
-    "axios": "^1.6.2",
-    "hls.js": "^1.6.16",
-    "lucide-react": "^0.294.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "react-hook-form": "^7.48.2",
-    "react-hot-toast": "^2.4.1",
-    "react-intersection-observer": "^9.5.3",
-    "react-player": "^2.13.0",
-    "react-redux": "^9.0.4",
-    "react-router-dom": "^6.20.0",
-    "socket.io-client": "^4.8.1"
-  },
-  "devDependencies": {
-    "@types/react": "^18.2.43",
-    "@types/react-dom": "^18.2.17",
-    "@vitejs/plugin-react": "^4.2.1",
-    "autoprefixer": "^10.4.16",
-    "postcss": "^8.4.32",
-    "tailwindcss": "^3.3.6",
-    "vite": "^5.4.21"
+    "dev": "npm run dev --workspace=front",
+    "dev:front": "npm run dev --workspace=front",
+    "dev:admin": "npm run dev --workspace=admin",
+    "dev:api": "npm run dev --workspace=api",
+    "dev:all": "npm run dev:api & sleep 2 && npm run dev:front",
+    "dev:full": "npm run dev:api & sleep 2 && npm run dev:front & npm run dev:admin",
+    "build": "npm run build --workspace=front && npm run build --workspace=admin",
+    "build:prod": "npm run build --workspace=front && npm run build --workspace=admin",
+    "build:front": "npm run build --workspace=front",
+    "build:admin": "npm run build --workspace=admin",
+    "start:api": "NODE_ENV=production npm run start --workspace=api",
+    "start:prod": "pm2 start ecosystem.config.js --env production",
+    "deploy": "bash deploy/deploy.sh"
   }
 }

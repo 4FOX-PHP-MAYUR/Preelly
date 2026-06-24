@@ -1,11 +1,11 @@
-# Preelly - OLX/Dubizzle × Instagram Reels
+# Preelly
 
-A modern marketplace platform that combines the functionality of OLX/Dubizzle with Instagram Reels-style video product listings.
+A modern marketplace platform with Instagram Reels-style video product listings.
 
 ## 🚀 Features
 
 - **Reels-Style Feed**: Auto-playing product videos in vertical scroll
-- **Category Browsing**: OLX-style category grid with subcategories
+- **Category Browsing**: Category grid with subcategories
 - **Product Details**: Comprehensive product pages with video, images, seller info, and map
 - **Authentication**: JWT-based login/signup system
 - **Post Ads**: Upload videos, images, and create listings
@@ -52,20 +52,10 @@ npm run server
 ## 📁 Project Structure
 
 ```
-olx-dubizzle/
-├── src/
-│   ├── components/      # Reusable components
-│   ├── pages/          # Page components
-│   ├── store/          # Redux store & slices
-│   ├── services/       # API services
-│   ├── utils/          # Utility functions
-│   └── hooks/          # Custom hooks
-├── server/             # Backend API
-│   ├── models/         # MongoDB models
-│   ├── routes/         # API routes
-│   ├── middleware/     # Auth middleware
-│   └── controllers/    # Route controllers
-└── public/             # Static assets
+preelly/
+├── api/                # Backend API, docs, and scripts
+├── front/              # Customer app (+ shared UI in front/src/shared)
+└── admin/              # Admin panel
 ```
 
 ## 📝 API Endpoints
@@ -139,10 +129,10 @@ olx-dubizzle/
 
 ## 🎨 UI Components
 
-- CategoryGrid - OLX-style category layout
+- CategoryGrid - Category layout
 - ReelsFeed - Instagram Reels-style product feed
 - ProductCard - Video product card with auto-play
-- ProductDetail - OLX-style product detail page
+- ProductDetail - Product detail page
 - PostAdForm - Product creation form
 
 ## 🔒 Environment Variables

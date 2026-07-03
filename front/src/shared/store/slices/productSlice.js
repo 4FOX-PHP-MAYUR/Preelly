@@ -13,6 +13,7 @@ export const fetchProducts = createAsyncThunk(
       userId,
       search,
       location,
+      cityId,
       minPrice,
       maxPrice,
       year,
@@ -45,6 +46,7 @@ export const fetchProducts = createAsyncThunk(
       if (userId) params.userId = userId
       if (search) params.search = search
       if (location) params.location = location
+      if (cityId) params.cityId = cityId
       if (minPrice !== undefined && minPrice !== null && minPrice !== '') params.minPrice = minPrice
       if (maxPrice !== undefined && maxPrice !== null && maxPrice !== '') params.maxPrice = maxPrice
       if (year !== undefined && year !== null && year !== '') params.year = year

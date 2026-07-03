@@ -73,7 +73,7 @@ function CategoryDynamicFilters({
   if (loading) {
     return (
       <div className="flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-6 text-sm text-slate-600">
-        <Loader2 className="h-4 w-4 animate-spin text-primary-600" />
+        <Loader2 className="h-4 w-4 animate-spin text-brand" />
         Loading filters for this category…
       </div>
     )
@@ -118,8 +118,8 @@ function CategoryDynamicFilters({
                   onClick={() => toggleFilterId(id)}
                   className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
                     active
-                      ? 'bg-primary-600 text-white shadow-sm'
-                      : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:ring-primary-200 hover:text-primary-700'
+                      ? 'bg-brand text-white shadow-sm shadow-brand/25'
+                      : 'bg-white text-[#64748B] ring-1 ring-[#E4E7EF] hover:text-brand hover:ring-brand/30'
                   }`}
                 >
                   {opt.label}

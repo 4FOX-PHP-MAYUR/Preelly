@@ -1,1 +1,0 @@
-import{j as t}from"./index-CMAl4mWp.js";function n({src:i="/images/verification-illustration.png",alt:a="Verification illustration"}){return t.jsx("div",{className:"mx-auto flex w-full max-w-[320px] items-center justify-center",children:t.jsx("img",{src:i,alt:a,className:"h-auto w-full object-contain",loading:"eager"})})}export{n as O};

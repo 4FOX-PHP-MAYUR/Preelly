@@ -81,6 +81,41 @@ api.interceptors.response.use(
   }
 )
 
+/** Build multipart body once per key (avoids duplicate currency etc. on the wire). */
+function buildProductMultipartFormData(productData) {
+  const formData = new FormData()
+  if (!productData || typeof productData !== 'object') return formData
+
+  const entries = new Map()
+  Object.keys(productData).forEach((key) => {
+    const value = productData[key]
+    if (value === undefined || value === null) return
+    entries.set(key, value)
+  })
+
+  entries.forEach((value, key) => {
+    if (key === 'images' || key === 'video') {
+      if (Array.isArray(value)) {
+        value.forEach((file) => {
+          if (file) formData.append(key, file)
+        })
+      } else {
+        formData.append(key, value)
+      }
+      return
+    }
+
+    if (typeof value === 'object' && !(value instanceof File) && !(value instanceof Blob)) {
+      formData.append(key, JSON.stringify(value))
+      return
+    }
+
+    formData.append(key, String(value))
+  })
+
+  return formData
+}
+
 const asAuthOptional = async (promiseFactory, fallbackData) => {
   try {
     return await promiseFactory()
@@ -139,6 +174,16 @@ export const categoryService = {
   /** Get level labels for cascading dropdowns. rootName optional: if provided returns { root, labels }, else full map. */
   getLevelLabels: (rootName) =>
     api.get('/categories/level-labels', { params: rootName ? { root: rootName } : {} }),
+  /** Property category tree (parents + nested subcategories). */
+  getPropertyCategories: (config) => api.get('/v1/web/categories/property-categories', config),
+  /** Classifieds category tree (parents + nested subcategories). */
+  getClassifiedCategories: (config) => api.get('/v1/classifieds/categories', config),
+}
+
+// Emirates / cities (public web API — `emirates` collection)
+export const emirateService = {
+  listActiveEmirates: (config) => api.get('/v1/web/emirates', config),
+  getEmirateById: (id, config) => api.get(`/v1/web/emirates/${id}`, config),
 }
 
 // Product service
@@ -161,46 +206,13 @@ export const productService = {
     return api.get('/products/facets', { params })
   },
   createProduct: (productData) => {
-    const formData = new FormData()
-    Object.keys(productData).forEach((key) => {
-      if (key === 'images' || key === 'video') {
-        if (Array.isArray(productData[key])) {
-          productData[key].forEach((file) => formData.append(key, file))
-        } else if (productData[key]) {
-          formData.append(key, productData[key])
-        }
-      } else if (productData[key] !== undefined && productData[key] !== null) {
-        // Handle nested objects/arrays by stringifying them
-        if (typeof productData[key] === 'object' && !(productData[key] instanceof File)) {
-          formData.append(key, JSON.stringify(productData[key]))
-        } else {
-          formData.append(key, productData[key])
-        }
-      }
-    })
+    const formData = buildProductMultipartFormData(productData)
     return api.post('/products', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
   updateProduct: (id, productData) => {
-    const formData = new FormData()
-    Object.keys(productData).forEach((key) => {
-      if (key === 'images' || key === 'video') {
-        if (Array.isArray(productData[key])) {
-          productData[key].forEach((file) => formData.append(key, file))
-        } else if (productData[key]) {
-          formData.append(key, productData[key])
-        }
-      } else if (productData[key] !== undefined && productData[key] !== null) {
-        // Handle nested objects/arrays by stringifying them
-        if (typeof productData[key] === 'object' && !(productData[key] instanceof File)) {
-          formData.append(key, JSON.stringify(productData[key]))
-        } else {
-          formData.append(key, String(productData[key]))
-        }
-      }
-    })
-    
+    const formData = buildProductMultipartFormData(productData)
     return api.put(`/products/${id}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })

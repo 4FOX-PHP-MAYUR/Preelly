@@ -18,8 +18,8 @@ function CategoryFilterChips({ activeChip = 'all', onChange }) {
             onClick={() => onChange?.(chip.id)}
             className={`rounded-full px-4 py-2 text-sm font-semibold transition ${
               active
-                ? 'bg-primary-600 text-white shadow-sm'
-                : 'bg-white text-slate-600 ring-1 ring-slate-200 hover:text-primary-700 hover:ring-primary-200'
+                ? 'bg-brand text-white shadow-sm shadow-brand/25'
+                : 'bg-white text-[#64748B] ring-1 ring-[#E4E7EF] hover:text-brand hover:ring-brand/30'
             }`}
           >
             {chip.label}

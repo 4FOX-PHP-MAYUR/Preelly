@@ -45,6 +45,46 @@ const parseJSONField = (field) => {
   }
 }
 
+/** Multer turns duplicate multipart keys into arrays — collapse to a single scalar. */
+function collapseDuplicateMultipartScalars(body) {
+  if (!body || typeof body !== 'object') return body
+  for (const key of Object.keys(body)) {
+    const val = body[key]
+    if (!Array.isArray(val) || val.length === 0) continue
+    if (key === 'images' || key === 'existingImages') continue
+    if (key.startsWith('filter_')) continue
+    if (val.every((item) => item !== null && typeof item !== 'object')) {
+      body[key] = val[val.length - 1]
+    }
+  }
+  return body
+}
+
+function asScalarString(value) {
+  if (value === undefined || value === null || value === '') return null
+  if (Array.isArray(value)) {
+    const last = value[value.length - 1]
+    return last != null && last !== '' ? String(last).trim() : null
+  }
+  return String(value).trim()
+}
+
+/** Parse existingImages from multipart body; null means "append to DB images". */
+function parseExistingImagesPayload(body) {
+  if (body.existingImages === undefined || body.existingImages === null || body.existingImages === '') {
+    return null
+  }
+  try {
+    const raw =
+      typeof body.existingImages === 'string'
+        ? JSON.parse(body.existingImages)
+        : body.existingImages
+    return Array.isArray(raw) ? raw.filter(Boolean).map(String) : null
+  } catch {
+    return null
+  }
+}
+
 // Normalize MongoDB ObjectId to canonical string (same format as saved storage)
 const toCanonicalId = (id) => {
   if (id == null || id === '') return ''
@@ -233,9 +273,16 @@ router.get('/facets', async (req, res) => {
     const row = Array.isArray(result) && result.length ? result[0] : null
 
     const cities = (row?.cities || [])
-      .map((c) => String(c?._id || '').trim())
+      .map((c) => {
+        const id = String(c?._id || '').trim()
+        if (!id) return null
+        return {
+          value: id,
+          label: id,
+          count: Number(c?.count) > 0 ? Number(c.count) : 0,
+        }
+      })
       .filter(Boolean)
-      .map((s) => ({ value: s, label: s }))
 
     const years = (row?.years || [])
       .map((y) => y?._id)
@@ -435,6 +482,28 @@ router.get('/', async (req, res) => {
     }
     if (location && location.trim() !== '') {
       query.location = new RegExp(location.trim(), 'i')
+    }
+
+    const cityIdParam = req.query.cityId ?? req.query.city_id ?? null
+    if (cityIdParam && mongoose.Types.ObjectId.isValid(String(cityIdParam))) {
+      const Emirate = require('../models/Emirate')
+      const cityObjId = new mongoose.Types.ObjectId(String(cityIdParam))
+      const emirate = await Emirate.findOne({
+        _id: cityObjId,
+        isDeleted: { $ne: true },
+      })
+        .select('name')
+        .lean()
+
+      const cityMatchOr = [{ cityId: cityObjId }, { city: String(cityIdParam) }]
+      if (emirate?.name) {
+        const escaped = String(emirate.name).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        const nameRx = new RegExp(escaped, 'i')
+        cityMatchOr.push({ city: nameRx }, { location: nameRx })
+      }
+
+      query.$and = query.$and || []
+      query.$and.push({ $or: cityMatchOr })
     }
 
     if (minPrice || maxPrice) {
@@ -1473,6 +1542,8 @@ router.post(
         })
       }
 
+      collapseDuplicateMultipartScalars(req.body)
+
       const { values: vehicleFieldValues, errors: vehicleFieldErrors } =
         await parseAndResolveProductVehicleFields(req.body)
       if (vehicleFieldErrors.length) {
@@ -2108,6 +2179,8 @@ router.put(
         })
       }
 
+      collapseDuplicateMultipartScalars(req.body)
+
       const { values: vehicleFieldValues, errors: vehicleFieldErrors } =
         await parseAndResolveProductVehicleFields(req.body)
       if (vehicleFieldErrors.length) {
@@ -2177,22 +2250,25 @@ router.put(
         }
       }
 
-      // Validation: Either video OR at least 1 image required
-      // Note: Image validation removed - handled on frontend only
-      // Maximum 20 images check
+      // Maximum 20 images check — respect existingImages when client replaces kept photos
       if (req.files?.images) {
-        const existingImages = productDoc.images || []
-        const totalImages = existingImages.length + req.files.images.length
+        const keptExistingImages = parseExistingImagesPayload(req.body)
+        const baseImageCount =
+          keptExistingImages !== null
+            ? keptExistingImages.length
+            : (productDoc.images || []).length
+        const totalImages = baseImageCount + req.files.images.length
         if (totalImages > 20) {
           return res.status(400).json({ message: 'Maximum 20 photos allowed' })
         }
       }
 
       // Update fields
-      if (title) productDoc.title = title.trim()
-      if (description) productDoc.description = description.trim()
-      if (price) productDoc.price = Number(price)
-      if (currency) productDoc.currency = currency
+      if (title) productDoc.title = asScalarString(title)
+      if (description) productDoc.description = asScalarString(description)
+      if (price) productDoc.price = Number(Array.isArray(price) ? price[price.length - 1] : price)
+      const currencyValue = asScalarString(currency)
+      if (currencyValue) productDoc.currency = currencyValue
       // Category cannot be changed after posting (unless admin)
       if (category && isAdmin) {
         productDoc.category = category
@@ -2325,7 +2401,13 @@ router.put(
       }
 
       // ---- IMAGES UPDATE ----
-      if (req.files?.images?.length > 0) {
+      const keptExistingImages = parseExistingImagesPayload(req.body)
+      if (keptExistingImages !== null) {
+        const newImages = (req.files?.images || []).map(
+          (file) => `/uploads/images/${file.filename}`
+        )
+        productDoc.images = [...keptExistingImages, ...newImages].slice(0, 20)
+      } else if (req.files?.images?.length > 0) {
         const newImages = req.files.images.map(
           (file) => `/uploads/images/${file.filename}`
         )

@@ -57,6 +57,10 @@ import {
   omitAdsPostedFromSelections,
   resolveAdsPostedSelectionForDate,
 } from '@shared/utils/adsPostedFilter'
+import {
+  buildPostAdFormValuesFromProduct,
+  restoreProductFilterSelections,
+} from '@shared/utils/restoreProductToPostAdForm'
 
 const TOTAL_STEPS = 11
 
@@ -3420,51 +3424,23 @@ function PostAdPage() {
           }
         }
         
-        // Populate form
-        const formValues = {
-          title: product.title || '',
-          description: product.description || '',
-          price: product.price || 0,
-          currency: product.currency || MARKETPLACE_CURRENCY,
-          category: product.category?._id || product.category || '',
-          subcategory: '',
-          childCategory: product.subcategory?._id || product.subcategory || '',
-          country: product.country || '',
-          city: product.city || '',
-          area: product.area || product.location || '',
-          brand: product.brand || '',
-          condition: product.condition ? toFilterArray(product.condition) : [],
-          material: product.material || '',
-          color: product.color ? toFilterArray(product.color) : [],
-          priceType: product.priceType || 'Fixed',
-          contactName: product.contactName || user?.name || '',
-          contactPhone: product.contactPhone || user?.phone || '',
-          make: product.make || '',
-          model: product.model || '',
-          year: product.year ?? '',
-          mileage: product.mileage ?? '',
-          transmission: product.transmission ? toFilterArray(product.transmission) : [],
-          fuelType: product.fuelType ? toFilterArray(product.fuelType) : [],
-          ...product.dimensions && { dimensions: product.dimensions },
-          ...product.usageDuration && { usageDuration: product.usageDuration },
-          ...product.deliveryOptions && { deliveryOptions: product.deliveryOptions },
-          ...product.contactOptions && { contactOptions: product.contactOptions },
-        }
-        
-        Object.keys(formValues).forEach(key => {
+        // Populate form with the same fields used in post-ad
+        const formValues = buildPostAdFormValuesFromProduct(product, user)
+        Object.keys(formValues).forEach((key) => {
           setValue(key, formValues[key])
         })
 
-        // Restore persisted dynamic fields (including category filter selections) from additionalFields
-        const extras = product?.additionalFields
-        if (extras && typeof extras === 'object') {
-          Object.keys(extras).forEach((k) => {
-            if (extras[k] !== undefined && extras[k] !== null) {
-              setValue(k, extras[k])
-            }
+        if (product.ai_raw_response) {
+          setAiListingExtraction(product.ai_raw_response)
+        } else if (product.display_data || product.filter_data) {
+          setAiListingExtraction({
+            display_data: product.display_data,
+            filter_data: product.filter_data,
+            missing_fields: product.missing_fields || [],
           })
         }
 
+        let restoredCategoryPath = false
         if (product.category) {
           const categoryId = product.category._id || product.category
           setSelectedCategory(categoryId)
@@ -3489,6 +3465,19 @@ function PostAdPage() {
                 opts.push(Array.isArray(childRes.data) ? childRes.data : [])
               }
               setLevelOptions(opts)
+              restoredCategoryPath = true
+
+              const rootId = truncatedPathCategories[0]?._id
+              const subId = truncatedPathCategories[1]?._id
+              if (rootId) {
+                const filtersRes = await categoryService.getCategoryFilters({
+                  categoryId: rootId,
+                  ...(subId ? { subcategoryId: subId } : {}),
+                })
+                const list = Array.isArray(filtersRes?.data?.filters) ? filtersRes.data.filters : []
+                setValue('__categoryFilters', list, { shouldDirty: false, shouldTouch: false })
+                restoreProductFilterSelections(product, setValue)
+              }
             } else {
               const category = categories.find((cat) => cat._id === categoryId)
               if (category) setSubcategories(category.subcategories || [])
@@ -3497,6 +3486,10 @@ function PostAdPage() {
             const category = categories.find((cat) => cat._id === categoryId)
             if (category) setSubcategories(category.subcategories || [])
           }
+        }
+
+        if (!restoredCategoryPath && product.category) {
+          restoreProductFilterSelections(product, setValue)
         }
 
         // Set brandChoice for edit mode: if existing brand is in the category brand options, pre-select it;
@@ -3552,6 +3545,9 @@ function PostAdPage() {
             originalUrl: product.video
           })
         }
+
+        setCurrentStep(4)
+        window.scrollTo(0, 0)
       } catch (error) {
         console.error('Error loading product:', error)
         toast.error(error.response?.data?.message || 'Failed to load product data')
@@ -3960,6 +3956,11 @@ function PostAdPage() {
 
   const handlePostAdBack = () => {
     if (currentStep === 3) {
+      if (isEditMode) {
+        setCurrentStep(4)
+        window.scrollTo(0, 0)
+        return
+      }
       const hasSubs = (levelOptions[1] || []).length > 0
       setCurrentStep(2)
       setCategoryPhase(hasSubs ? 'subcategory' : 'root')
@@ -4224,7 +4225,11 @@ function PostAdPage() {
         contactName: data.contactName,
         contactPhone: data.contactPhone,
         images: newImages.length > 0 ? newImages : undefined,
-        existingImages: existingImageUrls.length > 0 ? existingImageUrls : undefined,
+        existingImages: isEditMode
+          ? existingImageUrls
+          : existingImageUrls.length > 0
+            ? existingImageUrls
+            : undefined,
         video: newVideo || undefined,
         existingVideo: existingVideoUrl || undefined,
         ...(aiMergedCarListing
@@ -4273,6 +4278,7 @@ function PostAdPage() {
         // Helpers / UI-only
         'brandChoice',
         'acceptRules',
+        'currency',
         '__categoryFilters',
         '__categoryFilterFieldKeys',
         '__categoryFiltersLoading',
@@ -4565,11 +4571,11 @@ function PostAdPage() {
                 {isSubmitting ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    Posting...
+                    {isEditMode ? 'Saving...' : 'Posting...'}
                   </>
                 ) : (
                   <>
-                    Post Ad
+                    {isEditMode ? 'Save Changes' : 'Post Ad'}
                     <ChevronRight className="w-4 h-4" />
                   </>
                 )}

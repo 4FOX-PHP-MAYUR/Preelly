@@ -60,6 +60,14 @@ export function isVehicleCategoryName(name) {
   return /\b(motors?|vehicles?|cars?|auto)\b/i.test(name || '')
 }
 
+export function isPropertyCategoryName(name) {
+  return /\b(property|properties|real\s*estate)\b/i.test(name || '')
+}
+
+export function isClassifiedsCategoryName(name) {
+  return /\b(classifieds?)\b/i.test(name || '')
+}
+
 export function CategoryBadge({ category, compact = false }) {
   const Icon = getCategoryIcon(category?.name)
   const sizeClass = compact ? 'h-4 w-4' : 'h-5 w-5'

@@ -7,36 +7,22 @@ import { productService } from '@shared/services/api'
 import { categoryService } from '@shared/services/api'
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
 import CategoryFilterChips from '../components/Categories/CategoryFilterChips'
-import CategoryListingCard from '../components/Categories/CategoryListingCard'
-import CategoryDynamicFilters from '../components/Categories/CategoryDynamicFilters'
-import { CategoryBadge, matchesListingChip } from '../components/Categories/categoryBrowseShared'
-import MotorsCategoryCascadingDropdowns from '../components/Filters/MotorsCategoryCascadingDropdowns'
-import MotorsFiltersBar from '../components/Filters/MotorsFiltersBar'
-import CategoryHierarchyFiltersBar from '../components/Filters/CategoryHierarchyFiltersBar'
-import { X } from 'lucide-react'
-
-const VEHICLE_CATEGORY_NAMES = ['Motors', 'Motor', 'Vehicles', 'Vehicle', 'Cars', 'Auto']
-
-function buildPriceOptions(priceRange) {
-  const { min = 0, max = 100000 } = priceRange
-  const options = [{ value: '', label: 'Select' }]
-  const steps = [
-    [min, 5000],
-    [5000, 10000],
-    [10000, 25000],
-    [25000, 50000],
-    [50000, 100000],
-    [100000, 200000],
-    [200000, 500000],
-    [500000, max],
-  ].filter(([a, b]) => a < max)
-  steps.forEach(([lo, hi]) => {
-    const label =
-      hi >= 1000 ? `${(lo / 1000).toFixed(0)}k - ${(hi / 1000).toFixed(0)}k` : `${lo} - ${hi}`
-    options.push({ value: `${lo}-${hi}`, label })
-  })
-  return options
-}
+import {
+  CategoryBadge,
+  matchesListingChip,
+  isVehicleCategoryName,
+  isPropertyCategoryName,
+  isClassifiedsCategoryName,
+} from '../components/Categories/categoryBrowseShared'
+import AdvancedFilterPanel from '../components/Listing/AdvancedFilterPanel'
+import ListingToolbar from '../components/Listing/ListingToolbar'
+import ProductGrid from '../components/Listing/ProductGrid'
+import { useCategoryApiTree } from '../hooks/useCategoryApiTree'
+import { useEmirateCities } from '../hooks/useEmirateCities'
+import {
+  buildCityFilterOptions,
+  resolveCityNameById,
+} from '@shared/utils/buildCityFilterOptions'
 
 function buildYearOptions() {
   const currentYear = new Date().getFullYear()
@@ -117,14 +103,17 @@ function CategoryProductsPage() {
   const [facetYears, setFacetYears] = useState([])
   const [facetMileageRange, setFacetMileageRange] = useState({ min: 0, max: 0 })
 
-  // Vehicle bar state
-  const [city, setCity] = useState('')
+  // Location filter (emirates / cities table id)
+  const [cityId, setCityId] = useState('')
   const [makeModel, setMakeModel] = useState('')
   const [priceRangeSelect, setPriceRangeSelect] = useState('')
   const [year, setYear] = useState('')
   const [kms, setKms] = useState('')
   const [sortBy, setSortBy] = useState('newest')
-  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+  const [showMobileFilters, setShowMobileFilters] = useState(false)
+  const [showFiltersPanel, setShowFiltersPanel] = useState(true)
+  const [apiParentId, setApiParentId] = useState('')
+  const [bedrooms, setBedrooms] = useState('')
   const makeModelDebounceRef = useRef(null)
 
   // Advanced filters (vehicle hierarchy: subcategory -> brand -> model -> trim)
@@ -160,10 +149,20 @@ function CategoryProductsPage() {
     selectedHierarchy.trim || selectedHierarchy.model || selectedHierarchy.brand || ''
 
   const isVehicleCategory =
-    selectedCategory &&
-    VEHICLE_CATEGORY_NAMES.some((name) =>
-      (selectedCategory.name || '').toLowerCase().includes(name.toLowerCase())
-    )
+    selectedCategory && isVehicleCategoryName(selectedCategory.name)
+
+  const isPropertyCategory =
+    selectedCategory && isPropertyCategoryName(selectedCategory.name)
+
+  const isClassifiedsCategory =
+    selectedCategory && isClassifiedsCategoryName(selectedCategory.name)
+
+  const useApiCategoryTree = isPropertyCategory || isClassifiedsCategory
+
+  const { categories: apiCategories, loading: apiCategoriesLoading, error: apiCategoriesError } =
+    useCategoryApiTree(useApiCategoryTree ? selectedCategory?.name : '')
+
+  const { emirates, loading: emiratesLoading, error: emiratesError } = useEmirateCities()
 
   const selectedSubcategory = subcategories?.find((s) => String(s._id) === String(selectedHierarchy.subcategory))
   const isBicycleSubcategory =
@@ -177,10 +176,24 @@ function CategoryProductsPage() {
   const modelFilter = selectedHierarchyLabels.model
   const trimFilter = selectedHierarchyLabels.trim
 
-  const cities = facetCities
+  const cities = useMemo(
+    () => buildCityFilterOptions(emirates, facetCities),
+    [emirates, facetCities],
+  )
+  const selectedCityName = useMemo(
+    () => resolveCityNameById(cityId, emirates),
+    [cityId, emirates],
+  )
   const yearOptions = facetYears.length ? facetYears : buildYearOptions()
   const kmsOptions = buildKmsOptionsFromRange(facetMileageRange)
-  const priceOptions = buildPriceOptions(priceRange)
+
+  const priceMinMax = useMemo(() => {
+    if (priceRangeSelect) {
+      const [minP, maxP] = priceRangeSelect.split('-').map(Number)
+      if (!isNaN(minP) && !isNaN(maxP)) return { min: minP, max: maxP }
+    }
+    return { min: priceRange.min, max: priceRange.max }
+  }, [priceRangeSelect, priceRange])
 
   useEffect(() => {
     // Avoid duplicate category fetches on initial load / dev StrictMode.
@@ -269,11 +282,18 @@ function CategoryProductsPage() {
       model: q.get('model') || '',
       trim: q.get('trim') || '',
     })
+    setCityId(q.get('cityId') || '')
   }, [categoryId, location.search, routeSubcategoryId])
 
   useEffect(() => {
     setSelectedFilterIds([])
+    setApiParentId('')
+    setBedrooms('')
   }, [categoryId, subcategoryFilterId, filterChildCategoryId])
+
+  useEffect(() => {
+    setCityId('')
+  }, [categoryId])
 
   // NOTE: removed automatic URL sync to avoid navigation loops that could trigger
   // repeated fetches. Subcategory is read from either query string or route param.
@@ -374,7 +394,11 @@ function CategoryProductsPage() {
 
       const params = { page: pageNum, limit: 20, categoryId, sortBy }
       if (subcategoryFilterId && subcategoryFilterId.trim()) params.subcategoryId = subcategoryFilterId.trim()
-      if (city && city.trim()) params.location = city.trim()
+      if (cityId && String(cityId).trim()) {
+        params.cityId = String(cityId).trim()
+      } else if (selectedCityName) {
+        params.location = selectedCityName
+      }
       // Prefer hierarchy IDs when available; they are the most reliable filter keys.
       // Send label-based filters only when corresponding IDs are not selected.
       if (!selectedHierarchy.brand && makeFilter && makeFilter.trim()) params.make = makeFilter.trim()
@@ -384,7 +408,11 @@ function CategoryProductsPage() {
       if (selectedHierarchy.brand) params.brandId = selectedHierarchy.brand
       if (selectedHierarchy.model) params.modelId = selectedHierarchy.model
       if (selectedHierarchy.trim) params.trimId = selectedHierarchy.trim
-      const searchParts = [makeModel, keywords].filter((s) => s && String(s).trim())
+      const searchParts = [makeModel, keywords]
+        .filter((s) => s && String(s).trim())
+      if (bedrooms && (isPropertyCategory || isClassifiedsCategory)) {
+        searchParts.push(`${bedrooms} bedroom`)
+      }
       if (searchParts.length) params.search = searchParts.join(' ').trim()
       if (priceRangeSelect) {
         const [minP, maxP] = priceRangeSelect.split('-').map(Number)
@@ -411,7 +439,8 @@ function CategoryProductsPage() {
     [
       categoryId,
       subcategoryFilterId,
-      city,
+      cityId,
+      selectedCityName,
       makeModel,
       keywords,
       priceRangeSelect,
@@ -429,6 +458,9 @@ function CategoryProductsPage() {
       selectedHierarchy.model,
       selectedHierarchy.trim,
       selectedFilterIds,
+      bedrooms,
+      isPropertyCategory,
+      isClassifiedsCategory,
       dispatch,
     ]
   )
@@ -442,7 +474,7 @@ function CategoryProductsPage() {
   }, [
     categoryId,
     subcategoryFilterId,
-    city,
+    cityId,
     priceRangeSelect,
     year,
     kms,
@@ -457,6 +489,7 @@ function CategoryProductsPage() {
     selectedHierarchy.model,
     selectedHierarchy.trim,
     selectedFilterIds,
+    bedrooms,
     fetchWithFilters,
   ])
 
@@ -501,45 +534,128 @@ function CategoryProductsPage() {
     if (hasMore && !loading) fetchWithFilters(page + 1, true)
   }
 
-  const handleOpenAdvancedFilters = () => setShowAdvancedFilters(true)
+  const handleOpenFilters = useCallback(() => {
+    const isDesktop =
+      typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+    if (isDesktop) setShowFiltersPanel(true)
+    else setShowMobileFilters(true)
+  }, [])
 
-  const clearAdvancedFilters = () => {
-    setSelectedHierarchy({
-      subcategory: '',
-      brand: '',
+  const handleCityChange = useCallback(
+    (nextCityId) => {
+      const id = String(nextCityId || '').trim()
+      setCityId(id)
+      const q = new URLSearchParams(location.search || '')
+      if (id) q.set('cityId', id)
+      else q.delete('cityId')
+      navigate(
+        {
+          pathname: `/categories/${categoryId}/products`,
+          search: q.toString() ? `?${q.toString()}` : '',
+        },
+        { replace: true },
+      )
+    },
+    [navigate, location.search, categoryId],
+  )
+
+  const handleSubcategoryChange = (id) => {
+    syncSubcategoryToUrl(id, { brandId: '', modelId: '', trimId: '', make: '', model: '', trim: '' })
+    setSelectedHierarchy({ subcategory: id, brand: '', model: '', trim: '' })
+    setSelectedHierarchyLabels({ brand: '', model: '', trim: '' })
+  }
+
+  const handleBrandChange = (id, meta) => {
+    setSelectedHierarchy((prev) => ({ ...prev, brand: id, model: '', trim: '' }))
+    setSelectedHierarchyLabels({
+      brand: normalizeBrandLabel(meta?.label || ''),
       model: '',
       trim: '',
     })
+    syncSubcategoryToUrl(selectedHierarchy.subcategory, {
+      brandId: id,
+      modelId: '',
+      trimId: '',
+      make: normalizeBrandLabel(meta?.label || ''),
+      model: '',
+      trim: '',
+    })
+  }
+
+  const handleModelChange = (id, meta) => {
+    setSelectedHierarchy((prev) => ({ ...prev, model: id, trim: '' }))
+    setSelectedHierarchyLabels((prev) => ({
+      ...prev,
+      model: normalizeModelOrTrimLabel(meta?.label || ''),
+      trim: '',
+    }))
+    syncSubcategoryToUrl(selectedHierarchy.subcategory, {
+      brandId: selectedHierarchy.brand,
+      modelId: id,
+      trimId: '',
+      make: makeFilter,
+      model: normalizeModelOrTrimLabel(meta?.label || ''),
+      trim: '',
+    })
+  }
+
+  const handleTrimChange = (id, meta) => {
+    setSelectedHierarchy((prev) => ({ ...prev, trim: id }))
+    setSelectedHierarchyLabels((prev) => ({
+      ...prev,
+      trim: normalizeModelOrTrimLabel(meta?.label || ''),
+    }))
+    syncSubcategoryToUrl(selectedHierarchy.subcategory, {
+      brandId: selectedHierarchy.brand,
+      modelId: selectedHierarchy.model,
+      trimId: id,
+      make: makeFilter,
+      model: modelFilter,
+      trim: normalizeModelOrTrimLabel(meta?.label || ''),
+    })
+  }
+
+  const handleApiParentChange = (parentId) => {
+    setApiParentId(parentId)
+    handleSubcategoryChange(parentId)
+  }
+
+  const handleApiSubcategoryChange = (subId) => {
+    const effective = subId || apiParentId
+    if (effective) handleSubcategoryChange(effective)
+  }
+
+  const handlePriceRangeChange = (lo, hi) => {
+    setPriceRangeSelect(`${lo}-${hi}`)
+  }
+
+  const clearAdvancedFilters = () => {
+    setSelectedHierarchy({ subcategory: '', brand: '', model: '', trim: '' })
+    setSelectedHierarchyLabels({ brand: '', model: '', trim: '' })
     setMakeModel('')
     setCondition('')
     setTransmission('')
     setFuelType('')
     setKeywords('')
     setSelectedFilterIds([])
-    setShowAdvancedFilters(false)
+    setApiParentId('')
+    setBedrooms('')
+    setPriceRangeSelect('')
+    setCityId('')
+    setYear('')
+    setKms('')
+    setShowMobileFilters(false)
     fetchWithFilters(1, false)
   }
 
   const applyAdvancedFilters = () => {
-    setShowAdvancedFilters(false)
+    setShowMobileFilters(false)
     fetchWithFilters(1, false)
   }
 
   const filteredProducts = useMemo(
     () => products.filter((p) => matchesListingChip(p, activeChip)),
     [products, activeChip],
-  )
-
-  const featuredProducts = useMemo(
-    () =>
-      [...products]
-        .sort((a, b) => {
-          if (a.adType === 'premium' && b.adType !== 'premium') return -1
-          if (b.adType === 'premium' && a.adType !== 'premium') return 1
-          return new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-        })
-        .slice(0, 3),
-    [products],
   )
 
   const categoryForUi =
@@ -556,370 +672,254 @@ function CategoryProductsPage() {
       ? 'Loading listings…'
       : `${filteredProducts.length} listing${filteredProducts.length !== 1 ? 's' : ''} found`
 
+  const breadcrumbLabel = selectedSubcategory?.name
+    ? `${categoryForUi.name} › ${selectedSubcategory.name}`
+    : categoryForUi.name
+
+  const gridColumns = showFiltersPanel ? 2 : 3
+
+  const apiSubcategoryId = useMemo(() => {
+    if (!useApiCategoryTree || !apiParentId) return ''
+    const parent = apiCategories.find((c) => String(c._id) === String(apiParentId))
+    if (!parent) return ''
+    const match = (parent.subcategories || []).find((s) => String(s._id) === String(subcategoryFilterId))
+    return match ? subcategoryFilterId : ''
+  }, [useApiCategoryTree, apiParentId, apiCategories, subcategoryFilterId])
+
+  useEffect(() => {
+    if (!useApiCategoryTree || !apiCategories.length) return
+    const subId = subcategoryFilterId
+    if (!subId) return
+    const asParent = apiCategories.find((c) => String(c._id) === String(subId))
+    if (asParent) {
+      setApiParentId(subId)
+      return
+    }
+    for (const parent of apiCategories) {
+      const child = (parent.subcategories || []).find((s) => String(s._id) === String(subId))
+      if (child) {
+        setApiParentId(parent._id)
+        return
+      }
+    }
+  }, [useApiCategoryTree, apiCategories, subcategoryFilterId])
+
+  const filterPanelProps = useMemo(
+    () => ({
+      isVehicleCategory,
+      isPropertyCategory,
+      isClassifiedsCategory,
+      isBicycleSubcategory,
+      useApiCategoryTree,
+      apiCategories,
+      apiCategoriesLoading,
+      apiCategoriesError,
+      apiParentId,
+      apiSubcategoryId,
+      subcategories,
+      selectedHierarchy,
+      sortBy,
+      cityId,
+      cities,
+      citiesLoading: emiratesLoading,
+      citiesError: emiratesError,
+      priceRange,
+      priceMin: priceMinMax.min,
+      priceMax: priceMinMax.max,
+      year,
+      yearOptions,
+      kms,
+      kmsOptions,
+      condition,
+      transmission,
+      fuelType,
+      keywords,
+      bedrooms,
+      categoryId,
+      subcategoryFilterId,
+      filterChildCategoryId,
+      selectedFilterIds,
+    }),
+    [
+      isVehicleCategory,
+      isPropertyCategory,
+      isClassifiedsCategory,
+      isBicycleSubcategory,
+      useApiCategoryTree,
+      apiCategories,
+      apiCategoriesLoading,
+      apiCategoriesError,
+      apiParentId,
+      apiSubcategoryId,
+      subcategories,
+      selectedHierarchy,
+      sortBy,
+      cityId,
+      cities,
+      emiratesLoading,
+      emiratesError,
+      priceRange,
+      priceMinMax,
+      year,
+      yearOptions,
+      kms,
+      kmsOptions,
+      condition,
+      transmission,
+      fuelType,
+      keywords,
+      bedrooms,
+      categoryId,
+      subcategoryFilterId,
+      filterChildCategoryId,
+      selectedFilterIds,
+    ],
+  )
+
+  const filterPanel = showFiltersPanel ? (
+    <AdvancedFilterPanel
+      className="h-full"
+      {...filterPanelProps}
+      onSortChange={setSortBy}
+      onCityChange={handleCityChange}
+      onPriceRangeChange={handlePriceRangeChange}
+      onYearChange={setYear}
+      onKmsChange={setKms}
+      onConditionChange={setCondition}
+      onTransmissionChange={setTransmission}
+      onFuelTypeChange={setFuelType}
+      onKeywordsChange={setKeywords}
+      onBedroomsChange={setBedrooms}
+      onSubcategoryChange={handleSubcategoryChange}
+      onBrandChange={handleBrandChange}
+      onModelChange={handleModelChange}
+      onTrimChange={handleTrimChange}
+      onApiParentChange={handleApiParentChange}
+      onApiSubcategoryChange={handleApiSubcategoryChange}
+      onFilterIdsChange={setSelectedFilterIds}
+      onApply={applyAdvancedFilters}
+      onReset={clearAdvancedFilters}
+    />
+  ) : null
+
   return (
-    <CategoryBrowseLayout activeCategoryId={categoryId} featuredProducts={featuredProducts}>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <div className="shrink-0 border-b border-slate-200 bg-white px-4 py-4 sm:px-5">
+    <CategoryBrowseLayout
+      activeCategoryId={categoryId}
+      variant="listing"
+      filterPanel={filterPanel}
+    >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#F7F8FC]">
+        <div className="shrink-0 border-b border-[#E8EBF2] bg-white/95 px-4 py-3 backdrop-blur-sm sm:px-6">
           <CategoryFilterChips activeChip={activeChip} onChange={setActiveChip} />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5">
-          <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-            <div className="flex items-center gap-3">
+        <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div className="flex items-start gap-3">
               <CategoryBadge category={categoryForUi} />
               <div>
-                <button
-                  type="button"
-                  onClick={() => navigate('/categories')}
-                  className="text-xs font-medium text-slate-400 transition hover:text-primary-700"
-                >
-                  ← Categories
-                </button>
-                <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">{categoryForUi.name}</h1>
-                <p className="text-sm text-slate-500">{listingCountLabel}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              <span className="text-sm text-slate-500">Sort by</span>
-              <select
-                value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none transition focus:border-primary-400"
-              >
-                <option value="newest">Newest</option>
-                <option value="price_asc">Price: Low to High</option>
-                <option value="price_desc">Price: High to Low</option>
-              </select>
-            </div>
-          </div>
-
-          {(isVehicleCategory || categoryLoading) && (
-            <div className="mb-5">
-              {isVehicleCategory ? (
-                <MotorsFiltersBar
-                city={city}
-                subcategories={subcategories}
-                selectedHierarchy={selectedHierarchy}
-                onChangeCity={setCity}
-                onSubcategoryChange={(id) => {
-                  syncSubcategoryToUrl(id, { brandId: '', modelId: '', trimId: '', make: '', model: '', trim: '' })
-                  setSelectedHierarchy({
-                    subcategory: id,
-                    brand: '',
-                    model: '',
-                    trim: '',
-                  })
-                  setSelectedHierarchyLabels({ brand: '', model: '', trim: '' })
-                }}
-                onBrandChange={(id, meta) => {
-                  setSelectedHierarchy((prev) => ({
-                    ...prev,
-                    brand: id,
-                    model: '',
-                    trim: '',
-                  }))
-                  setSelectedHierarchyLabels({
-                    brand: normalizeBrandLabel(meta?.label || ''),
-                    model: '',
-                    trim: '',
-                  })
-                  syncSubcategoryToUrl(selectedHierarchy.subcategory, {
-                    brandId: id,
-                    modelId: '',
-                    trimId: '',
-                    make: normalizeBrandLabel(meta?.label || ''),
-                    model: '',
-                    trim: '',
-                  })
-                }}
-                onModelChange={(id, meta) => {
-                  setSelectedHierarchy((prev) => ({
-                    ...prev,
-                    model: id,
-                    trim: '',
-                  }))
-                  setSelectedHierarchyLabels((prev) => ({
-                    ...prev,
-                    model: normalizeModelOrTrimLabel(meta?.label || ''),
-                    trim: '',
-                  }))
-                  syncSubcategoryToUrl(selectedHierarchy.subcategory, {
-                    brandId: selectedHierarchy.brand,
-                    modelId: id,
-                    trimId: '',
-                    make: makeFilter,
-                    model: normalizeModelOrTrimLabel(meta?.label || ''),
-                    trim: '',
-                  })
-                }}
-                onTrimChange={(id, meta) => {
-                  setSelectedHierarchy((prev) => ({
-                    ...prev,
-                    trim: id,
-                  }))
-                  setSelectedHierarchyLabels((prev) => ({
-                    ...prev,
-                    trim: normalizeModelOrTrimLabel(meta?.label || ''),
-                  }))
-                  syncSubcategoryToUrl(selectedHierarchy.subcategory, {
-                    brandId: selectedHierarchy.brand,
-                    modelId: selectedHierarchy.model,
-                    trimId: id,
-                    make: makeFilter,
-                    model: modelFilter,
-                    trim: normalizeModelOrTrimLabel(meta?.label || ''),
-                  })
-                }}
-                priceRange={priceRangeSelect}
-                year={year}
-                kms={kms}
-                onChangePriceRange={setPriceRangeSelect}
-                onChangeYear={setYear}
-                onChangeKms={setKms}
-                cities={cities}
-                priceOptions={priceOptions}
-                yearOptions={yearOptions}
-                kmsOptions={kmsOptions}
-                onOpenAdvancedFilters={handleOpenAdvancedFilters}
-              />
-            ) : (
-              <CategoryHierarchyFiltersBar
-                subcategories={subcategories}
-                selectedHierarchy={selectedHierarchy}
-                onSubcategoryChange={(id) => {
-                  syncSubcategoryToUrl(id, { brandId: '', modelId: '', trimId: '', make: '', model: '', trim: '' })
-                  setSelectedHierarchy({
-                    subcategory: id,
-                    brand: '',
-                    model: '',
-                    trim: '',
-                  })
-                  setSelectedHierarchyLabels({ brand: '', model: '', trim: '' })
-                }}
-                onBrandChange={(id, meta) => {
-                  setSelectedHierarchy((prev) => ({
-                    ...prev,
-                    brand: id,
-                    model: '',
-                    trim: '',
-                  }))
-                  setSelectedHierarchyLabels((prev) => ({ ...prev, brand: meta?.label || '', model: '', trim: '' }))
-                  syncSubcategoryToUrl(selectedHierarchy.subcategory, {
-                    brandId: id,
-                    modelId: '',
-                    trimId: '',
-                    make: meta?.label || '',
-                    model: '',
-                    trim: '',
-                  })
-                }}
-                onModelChange={(id, meta) => {
-                  setSelectedHierarchy((prev) => ({
-                    ...prev,
-                    model: id,
-                    trim: '',
-                  }))
-                  setSelectedHierarchyLabels((prev) => ({ ...prev, model: meta?.label || '', trim: '' }))
-                  syncSubcategoryToUrl(selectedHierarchy.subcategory, {
-                    brandId: selectedHierarchy.brand,
-                    modelId: id,
-                    trimId: '',
-                    make: makeFilter,
-                    model: meta?.label || '',
-                    trim: '',
-                  })
-                }}
-                onTrimChange={(id, meta) => {
-                  setSelectedHierarchy((prev) => ({
-                    ...prev,
-                    trim: id,
-                  }))
-                  setSelectedHierarchyLabels((prev) => ({ ...prev, trim: meta?.label || '' }))
-                  syncSubcategoryToUrl(selectedHierarchy.subcategory, {
-                    brandId: selectedHierarchy.brand,
-                    modelId: selectedHierarchy.model,
-                    trimId: id,
-                    make: makeFilter,
-                    model: modelFilter,
-                    trim: meta?.label || '',
-                  })
-                }}
-                onOpenAdvancedFilters={handleOpenAdvancedFilters}
-              />
-            )}
-            </div>
-          )}
-
-          {loading && products.length === 0 ? (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="overflow-hidden rounded-3xl border border-slate-200 bg-white animate-pulse">
-                  <div className="h-52 bg-slate-100" />
-                  <div className="space-y-3 p-4">
-                    <div className="h-4 rounded bg-slate-100 w-3/4" />
-                    <div className="h-3 rounded bg-slate-100 w-1/2" />
-                    <div className="h-6 rounded bg-slate-100 w-1/3" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : filteredProducts.length === 0 ? (
-            <div className="rounded-3xl border border-slate-200 bg-white p-12 text-center shadow-sm">
-              <h3 className="text-xl font-bold text-slate-900 mb-2">No listings found</h3>
-              <p className="text-slate-500 mb-4">Try adjusting filters or choose another category chip.</p>
-              {activeChip !== 'all' ? (
-                <button
-                  type="button"
-                  onClick={() => setActiveChip('all')}
-                  className="rounded-full bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-700"
-                >
-                  Show all items
-                </button>
-              ) : null}
-            </div>
-          ) : (
-            <>
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                {filteredProducts.map((product) => (
-                  <CategoryListingCard key={product._id} product={product} />
-                ))}
-              </div>
-              {hasMore && (
-                <div className="mt-8 text-center">
+                <nav className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs font-medium text-[#94A3B8]">
                   <button
                     type="button"
-                    onClick={loadMore}
-                    disabled={loading}
-                    className="rounded-full bg-primary-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+                    onClick={() => navigate('/categories')}
+                    className="transition hover:text-brand"
                   >
-                    {loading ? 'Loading...' : 'Load More'}
+                    Categories
                   </button>
-                </div>
-              )}
-            </>
-          )}
+                  <span className="text-[#CBD5E1]" aria-hidden>
+                    ›
+                  </span>
+                  <span className="text-[#475569]">{breadcrumbLabel}</span>
+                </nav>
+                <h1 className="text-2xl font-bold tracking-tight text-[#0F172A] sm:text-3xl">
+                  {categoryForUi.name}
+                </h1>
+                <p className="mt-1 text-sm text-[#64748B]">{listingCountLabel}</p>
+              </div>
+            </div>
+            <ListingToolbar
+              sortBy={sortBy}
+              onSortChange={setSortBy}
+              onOpenFilters={handleOpenFilters}
+              onToggleFiltersPanel={() => setShowFiltersPanel((v) => !v)}
+              showFiltersPanel={showFiltersPanel}
+              filtersOpen={showMobileFilters}
+            />
+          </div>
+
+          <ProductGrid
+            products={filteredProducts}
+            loading={loading}
+            columns={gridColumns}
+            emptyState={
+              <div className="rounded-2xl border border-[#E8EBF2] bg-white p-12 text-center shadow-sm">
+                <h3 className="mb-2 text-xl font-bold text-[#0F172A]">No listings found</h3>
+                <p className="mb-4 text-[#64748B]">Try adjusting filters or choose another category chip.</p>
+                {activeChip !== 'all' ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveChip('all')}
+                    className="rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-md shadow-brand/25 transition hover:bg-brand-700 hover:shadow-brand/35"
+                  >
+                    Show all items
+                  </button>
+                ) : null}
+              </div>
+            }
+          />
+
+          {hasMore && filteredProducts.length > 0 ? (
+            <div className="mt-8 text-center">
+              <button
+                type="button"
+                onClick={loadMore}
+                disabled={loading}
+                className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white shadow-md shadow-brand/25 transition hover:bg-brand-700 hover:shadow-brand/35 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {loading ? 'Loading...' : 'Load More'}
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
 
-        {/* Advanced filters drawer (condition, transmission, fuel type, keywords) — responsive */}
-        {showAdvancedFilters && (
-          <>
-            <div
-              className="fixed inset-0 bg-black/50 z-40"
-              onClick={() => setShowAdvancedFilters(false)}
-              aria-hidden="true"
+      {showMobileFilters ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[80] bg-[#0F172A]/45 backdrop-blur-[2px] lg:hidden"
+            onClick={() => setShowMobileFilters(false)}
+            aria-label="Close filters overlay"
+          />
+          <div className="fixed inset-y-0 right-0 z-[90] w-full max-w-[420px] animate-drawer-slide-in shadow-2xl lg:hidden">
+            <AdvancedFilterPanel
+              className="h-full"
+              showClose
+              onClose={() => setShowMobileFilters(false)}
+              {...filterPanelProps}
+              onSortChange={setSortBy}
+              onCityChange={handleCityChange}
+              onPriceRangeChange={handlePriceRangeChange}
+              onYearChange={setYear}
+              onKmsChange={setKms}
+              onConditionChange={setCondition}
+              onTransmissionChange={setTransmission}
+              onFuelTypeChange={setFuelType}
+              onKeywordsChange={setKeywords}
+              onBedroomsChange={setBedrooms}
+              onSubcategoryChange={handleSubcategoryChange}
+              onBrandChange={handleBrandChange}
+              onModelChange={handleModelChange}
+              onTrimChange={handleTrimChange}
+              onApiParentChange={handleApiParentChange}
+              onApiSubcategoryChange={handleApiSubcategoryChange}
+              onFilterIdsChange={setSelectedFilterIds}
+              onApply={applyAdvancedFilters}
+              onReset={clearAdvancedFilters}
             />
-            <div className="fixed right-0 top-0 h-full w-full max-w-md bg-white shadow-xl z-50 p-6 overflow-y-auto flex flex-col">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-semibold text-gray-900">Advanced Filters</h2>
-                <button
-                  onClick={() => setShowAdvancedFilters(false)}
-                  className="p-2 text-gray-500 hover:text-gray-700 rounded-lg hover:bg-gray-100"
-                  aria-label="Close filters"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <p className="text-sm text-slate-500 mb-4">
-                Refine by subcategory, brand, and admin-managed filters for this category.
-              </p>
-
-              <div className="flex-1 space-y-6">
-                <div>
-                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">Category tree</p>
-                  <MotorsCategoryCascadingDropdowns
-                  rootLabel="Subcategory"
-                  subcategories={subcategories}
-                  selectedHierarchy={selectedHierarchy}
-                  onSubcategoryChange={(id) => {
-                    syncSubcategoryToUrl(id, { brandId: '', modelId: '', trimId: '', make: '', model: '', trim: '' })
-                    setSelectedHierarchy({
-                      subcategory: id,
-                      brand: '',
-                      model: '',
-                      trim: '',
-                    })
-                    setSelectedHierarchyLabels({ brand: '', model: '', trim: '' })
-                  }}
-                  onBrandChange={(id, meta) => {
-                    setSelectedHierarchy((prev) => ({
-                      ...prev,
-                      brand: id,
-                      model: '',
-                      trim: '',
-                    }))
-                    setSelectedHierarchyLabels((prev) => ({ ...prev, brand: meta?.label || '', model: '', trim: '' }))
-                    syncSubcategoryToUrl(selectedHierarchy.subcategory, {
-                      brandId: id,
-                      modelId: '',
-                      trimId: '',
-                      make: meta?.label || '',
-                      model: '',
-                      trim: '',
-                    })
-                  }}
-                  onModelChange={(id, meta) => {
-                    setSelectedHierarchy((prev) => ({
-                      ...prev,
-                      model: id,
-                      trim: '',
-                    }))
-                    setSelectedHierarchyLabels((prev) => ({ ...prev, model: meta?.label || '', trim: '' }))
-                    syncSubcategoryToUrl(selectedHierarchy.subcategory, {
-                      brandId: selectedHierarchy.brand,
-                      modelId: id,
-                      trimId: '',
-                      make: makeFilter,
-                      model: meta?.label || '',
-                      trim: '',
-                    })
-                  }}
-                  onTrimChange={(id, meta) => {
-                    setSelectedHierarchy((prev) => ({
-                      ...prev,
-                      trim: id,
-                    }))
-                    setSelectedHierarchyLabels((prev) => ({ ...prev, trim: meta?.label || '' }))
-                    syncSubcategoryToUrl(selectedHierarchy.subcategory, {
-                      brandId: selectedHierarchy.brand,
-                      modelId: selectedHierarchy.model,
-                      trimId: id,
-                      make: makeFilter,
-                      model: modelFilter,
-                      trim: meta?.label || '',
-                    })
-                  }}
-                />
-                </div>
-
-                <CategoryDynamicFilters
-                  categoryId={categoryId}
-                  subcategoryId={subcategoryFilterId}
-                  childCategoryId={filterChildCategoryId}
-                  selectedFilterIds={selectedFilterIds}
-                  onChange={setSelectedFilterIds}
-                />
-              </div>
-
-              <div className="mt-6 flex flex-col gap-3 border-t border-slate-200 pt-4 sm:flex-row">
-                <button
-                  type="button"
-                  onClick={applyAdvancedFilters}
-                  className="flex-1 px-4 py-2.5 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors"
-                >
-                  Apply Filters
-                </button>
-                <button
-                  type="button"
-                  onClick={clearAdvancedFilters}
-                  className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-                >
-                  Clear All
-                </button>
-              </div>
-            </div>
-          </>
-        )}
+          </div>
+        </>
+      ) : null}
     </CategoryBrowseLayout>
   )
 }

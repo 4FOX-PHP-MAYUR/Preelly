@@ -33,6 +33,8 @@ function CategoryBrowseLayout({
   activeCategoryId = null,
   featuredProducts = [],
   showMessages = true,
+  variant = 'default',
+  filterPanel = null,
 }) {
   const dispatch = useDispatch()
   const navigate = useNavigate()
@@ -79,8 +81,22 @@ function CategoryBrowseLayout({
       ? ['Luxury Cars', 'Sports Cars', 'SUVs', 'Classic Cars']
       : rootCategories.slice(0, 4).map((c) => c.name)
 
+  const isListingVariant = variant === 'listing'
+  const showRightFilters = isListingVariant && filterPanel
+  const showDefaultRightPanel = !isListingVariant
+
+  const accent = {
+    pageBg: isListingVariant ? 'bg-[#F7F8FC]' : 'bg-[#f7f8fa]',
+    btn: isListingVariant ? 'bg-brand hover:bg-brand-700' : 'bg-primary-600 hover:bg-primary-700',
+    btnShadow: isListingVariant ? 'shadow-sm shadow-brand/20' : '',
+    link: isListingVariant ? 'hover:text-brand' : 'hover:text-primary-700',
+    activeCategory: isListingVariant ? 'bg-brand-50 text-brand' : 'bg-primary-50 text-primary-800',
+    badge: isListingVariant ? 'bg-brand' : 'bg-primary-600',
+    border: isListingVariant ? 'border-[#E8EBF2]' : 'border-slate-200',
+  }
+
   return (
-    <div className="viewport-below-header overflow-hidden bg-[#f7f8fa]">
+    <div className={`viewport-below-header overflow-hidden ${accent.pageBg}`}>
       {mobileMenuOpen && (
         <>
           <button
@@ -107,7 +123,7 @@ function CategoryBrowseLayout({
             <Link
               to="/post-ad"
               onClick={() => setMobileMenuOpen(false)}
-              className="mb-7 flex items-center justify-center gap-2 rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-700"
+              className={`mb-7 flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition ${accent.btn} ${accent.btnShadow}`}
             >
               <Plus className="h-4 w-4" />
               Post Your Ad
@@ -117,7 +133,7 @@ function CategoryBrowseLayout({
               <Link
                 to="/categories"
                 onClick={() => setMobileMenuOpen(false)}
-                className="mb-3 inline-block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition hover:text-primary-700"
+                className={`mb-3 inline-block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition ${accent.link}`}
               >
                 Categories
               </Link>
@@ -133,7 +149,7 @@ function CategoryBrowseLayout({
                         setMobileMenuOpen(false)
                       }}
                       className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                        isActive ? 'bg-primary-50 text-primary-800' : 'hover:bg-slate-50'
+                        isActive ? accent.activeCategory : 'hover:bg-slate-50'
                       }`}
                     >
                       <CategoryBadge category={category} compact />
@@ -157,7 +173,7 @@ function CategoryBrowseLayout({
                     <Icon className="h-4 w-4 shrink-0 text-slate-500" />
                     <span className="flex-1">{label}</span>
                     {badge != null ? (
-                      <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-primary-600 px-1.5 text-[11px] font-bold text-white">
+                      <span className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white ${accent.badge}`}>
                         {Math.min(badge, 99)}
                       </span>
                     ) : null}
@@ -169,8 +185,16 @@ function CategoryBrowseLayout({
         </>
       )}
 
-      <div className="flex h-full flex-col lg:grid lg:grid-cols-[270px_minmax(0,1fr)_320px]">
-        <aside className="hidden min-h-0 flex-col overflow-y-auto border-r border-slate-200 bg-white p-5 lg:flex">
+      <div
+        className={`flex h-full flex-col ${
+          isListingVariant
+            ? showRightFilters
+              ? 'lg:grid lg:grid-cols-[minmax(240px,280px)_minmax(0,1fr)_min(400px,28vw)]'
+              : 'lg:grid lg:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]'
+            : 'lg:grid lg:grid-cols-[270px_minmax(0,1fr)_320px]'
+        }`}
+      >
+        <aside className={`hidden min-h-0 flex-col overflow-y-auto border-r bg-white p-5 lg:flex lg:w-full ${accent.border}`}>
           <div className="mb-5">
             <Link to="/">
               <BrandLogo variant="light" className="h-8 w-auto" />
@@ -180,7 +204,7 @@ function CategoryBrowseLayout({
 
           <Link
             to="/post-ad"
-            className="mb-7 flex items-center justify-center gap-2 rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-700"
+            className={`mb-7 flex items-center justify-center gap-2 rounded-2xl px-4 py-3 text-sm font-semibold text-white transition ${accent.btn} ${accent.btnShadow}`}
           >
             <Plus className="h-4 w-4" />
             Post Your Ad
@@ -189,7 +213,7 @@ function CategoryBrowseLayout({
           <div className="mb-8">
             <Link
               to="/categories"
-              className="mb-3 inline-block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition hover:text-primary-700"
+              className={`mb-3 inline-block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition ${accent.link}`}
             >
               Categories
             </Link>
@@ -202,7 +226,7 @@ function CategoryBrowseLayout({
                     type="button"
                     onClick={() => handleCategoryNav(category)}
                     className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                      isActive ? 'bg-primary-50 text-primary-800' : 'hover:bg-slate-50'
+                      isActive ? accent.activeCategory : 'hover:bg-slate-50'
                     }`}
                   >
                     <CategoryBadge category={category} compact />
@@ -228,7 +252,7 @@ function CategoryBrowseLayout({
                   <Icon className="h-4 w-4 shrink-0 text-slate-500" />
                   <span className="flex-1">{label}</span>
                   {badge != null ? (
-                    <span className="inline-flex h-6 min-w-[24px] items-center justify-center rounded-full bg-primary-600 px-1.5 text-[11px] font-bold text-white">
+                    <span className={`inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-1.5 text-[11px] font-bold text-white ${accent.badge}`}>
                       {Math.min(badge, 99)}
                     </span>
                   ) : null}
@@ -247,7 +271,7 @@ function CategoryBrowseLayout({
                   key={label}
                   type="button"
                   onClick={() => navigate(`/search?q=${encodeURIComponent(label)}`)}
-                  className="block text-left text-sm text-slate-600 transition hover:text-primary-700"
+                  className={`block text-left text-sm text-slate-600 transition ${accent.link}`}
                 >
                   {label}
                 </button>
@@ -257,7 +281,7 @@ function CategoryBrowseLayout({
         </aside>
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center gap-2 overflow-x-auto border-b border-slate-200 bg-white px-3 py-2 lg:hidden">
+          <div className={`flex shrink-0 items-center gap-2 overflow-x-auto border-b bg-white px-3 py-2 lg:hidden ${accent.border}`}>
             <button
               type="button"
               onClick={() => setMobileMenuOpen(true)}
@@ -268,7 +292,7 @@ function CategoryBrowseLayout({
             </button>
             <Link
               to="/post-ad"
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-primary-600 px-3 py-2 text-sm font-semibold text-white"
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-white ${accent.btn}`}
             >
               <Plus className="h-4 w-4" />
               Post Ad
@@ -290,22 +314,32 @@ function CategoryBrowseLayout({
           {children}
         </section>
 
-        <aside className="hidden min-h-0 overflow-y-auto border-l border-slate-200 bg-white p-5 lg:block">
-          <div>
-            <p className="mb-4 text-lg font-semibold text-slate-900">Trending</p>
-            <div className="flex flex-wrap gap-2">
-              {TRENDING_TOPICS.map((topic) => (
-                <button
-                  key={topic}
-                  type="button"
-                  onClick={() => navigate(`/search?q=${encodeURIComponent(topic)}`)}
-                  className="rounded-full bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:text-primary-700"
-                >
-                  {topic}
-                </button>
-              ))}
-            </div>
-          </div>
+        <aside
+          className={`${
+            showRightFilters || showDefaultRightPanel
+              ? 'hidden min-h-0 overflow-y-auto border-l border-slate-200 bg-white lg:block'
+              : 'hidden'
+          } ${showRightFilters ? 'p-0' : 'p-5'}`}
+        >
+          {showRightFilters ? (
+            filterPanel
+          ) : showDefaultRightPanel ? (
+            <>
+              <div>
+                <p className="mb-4 text-lg font-semibold text-slate-900">Trending</p>
+                <div className="flex flex-wrap gap-2">
+                  {TRENDING_TOPICS.map((topic) => (
+                    <button
+                      key={topic}
+                      type="button"
+                      onClick={() => navigate(`/search?q=${encodeURIComponent(topic)}`)}
+                      className="rounded-full bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:text-primary-700"
+                    >
+                      {topic}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
           <div className="mt-8">
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -404,6 +438,8 @@ function CategoryBrowseLayout({
                 )}
               </div>
             </div>
+          ) : null}
+            </>
           ) : null}
         </aside>
       </div>

@@ -9,6 +9,19 @@ export default {
   theme: {
     extend: {
       colors: {
+        brand: {
+          DEFAULT: '#0000FF',
+          50: '#E6E6FF',
+          100: '#CCCCFF',
+          200: '#9999FF',
+          300: '#6666FF',
+          400: '#3333FF',
+          500: '#0000FF',
+          600: '#0000FF',
+          700: '#0000DD',
+          800: '#0000BB',
+          900: '#000099',
+        },
         primary: {
           50: '#f0f9ff',
           100: '#e0f2fe',
@@ -29,9 +42,14 @@ export default {
       },
       animation: {
         'slide-in-right': 'slide-in-right 0.25s ease-out',
+        'drawer-slide-in': 'drawer-slide-in 0.28s cubic-bezier(0.32, 0.72, 0, 1)',
       },
       keyframes: {
         'slide-in-right': {
+          from: { transform: 'translateX(100%)' },
+          to: { transform: 'translateX(0)' },
+        },
+        'drawer-slide-in': {
           from: { transform: 'translateX(100%)' },
           to: { transform: 'translateX(0)' },
         },

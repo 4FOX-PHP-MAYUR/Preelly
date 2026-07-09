@@ -20,6 +20,7 @@ function CategoriesListPage() {
   const [search, setSearch] = useState('')
   const [filterParentId, setFilterParentId] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [rootOnly, setRootOnly] = useState(false)
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
 
@@ -51,13 +52,18 @@ function CategoriesListPage() {
     p = 1,
     searchTerm = '',
     parentId = filterParentId,
-    status = statusFilter
+    status = statusFilter,
+    rootOnlyFilter = rootOnly
   ) => {
     try {
       setLoading(true)
       const params = { limit: LIMIT, page: p }
       if (searchTerm && searchTerm.trim()) params.search = searchTerm.trim()
-      if (parentId) params.parentId = parentId
+      if (rootOnlyFilter) {
+        params.rootOnly = 'true'
+      } else if (parentId) {
+        params.parentId = parentId
+      }
       const res = await adminService.getAdminCategories(params)
       const data = res.data || {}
       let items = data.categories || data.data || []
@@ -120,14 +126,27 @@ function CategoriesListPage() {
 
   const handleSearch = (e) => {
     e.preventDefault()
-    fetchCategories(1, search, filterParentId, statusFilter)
+    fetchCategories(1, search, filterParentId, statusFilter, rootOnly)
   }
 
   const clearFilters = () => {
     setSearch('')
     setFilterParentId('')
     setStatusFilter('all')
-    fetchCategories(1, '', '', 'all')
+    setRootOnly(false)
+    fetchCategories(1, '', '', 'all', false)
+  }
+
+  const handleRootOnlyChange = (e) => {
+    const value = e.target.value === 'root'
+    setRootOnly(value)
+    if (value) setFilterParentId('')
+  }
+
+  const handleParentFilterChange = (e) => {
+    const value = e.target.value
+    setFilterParentId(value)
+    if (value) setRootOnly(false)
   }
 
   const handleToggleStatus = async (row) => {
@@ -204,7 +223,7 @@ function CategoriesListPage() {
     }
   }
 
-  const hasActiveFilters = search || filterParentId || statusFilter !== 'all'
+  const hasActiveFilters = search || filterParentId || statusFilter !== 'all' || rootOnly
 
   const parentFilterOptions = [
     { value: '', label: 'All parent categories' },
@@ -288,8 +307,19 @@ function CategoriesListPage() {
             type: 'select',
             label: 'Parent category',
             value: filterParentId,
-            onChange: (e) => setFilterParentId(e.target.value),
+            onChange: handleParentFilterChange,
             options: parentFilterOptions,
+          },
+          {
+            key: 'rootOnly',
+            type: 'select',
+            label: 'Show Root Category',
+            value: rootOnly ? 'root' : '',
+            onChange: handleRootOnlyChange,
+            options: [
+              { value: '', label: 'All categories' },
+              { value: 'root', label: 'Root categories only' },
+            ],
           },
           {
             key: 'status',
@@ -347,6 +377,11 @@ function CategoriesListPage() {
               const p = categories.find((c) => String(c._id) === String(r.parentId))
               return p ? p.name : 'Root'
             },
+          },
+          {
+            key: 'order',
+            title: 'Order',
+            render: (r) => r.xOrder ?? 0,
           },
           {
             key: 'status',

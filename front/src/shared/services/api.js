@@ -180,6 +180,20 @@ export const categoryService = {
   getClassifiedCategories: (config) => api.get('/v1/classifieds/categories', config),
 }
 
+// Category-scoped dynamic post-ad form (admin-configured fields, public web API)
+export const dynamicFormService = {
+  /**
+   * @param {{ categoryId: string, categoryFilterId?: string, childCategoryId?: string }} payload
+   */
+  getDynamicForm: (payload, config) => api.post('/v1/web/dynamic-form', payload, config),
+  /**
+   * Invokes a FormField's admin-configured functionName (e.g. "getTrimByID") with the
+   * current values of its dependency fields, returning that field's fresh options.
+   * @param {{ functionName: string, params: Record<string, string> }} payload
+   */
+  callFieldFunction: (payload, config) => api.post('/v1/web/dynamic-form/field-function', payload, config),
+}
+
 // Emirates / cities (public web API — `emirates` collection)
 export const emirateService = {
   listActiveEmirates: (config) => api.get('/v1/web/emirates', config),
@@ -207,14 +221,19 @@ export const productService = {
   },
   createProduct: (productData) => {
     const formData = buildProductMultipartFormData(productData)
+    // Video upload + server-side compression/screenshot extraction routinely exceeds
+    // the default 30s instance timeout, aborting the request client-side before the
+    // backend can respond — matches the timeout used for other video-processing calls.
     return api.post('/products', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000,
     })
   },
   updateProduct: (id, productData) => {
     const formData = buildProductMultipartFormData(productData)
     return api.put(`/products/${id}`, formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000,
     })
   },
   resubmitProduct: (id) => api.put(`/products/${id}/resubmit`),
@@ -425,14 +444,14 @@ export const adminService = {
   getAdminCategoryNestedForFilters: () => api.get('/admin/categories/nested-for-filters'),
   getAdminCategoryTree: () => api.get('/admin/categories/tree'),
   createAdminCategory: (data) => {
-    const hasFile = data?.category_image instanceof File
+    const hasFile = data?.category_image instanceof File || data?.categoryImage instanceof File
     if (!hasFile) return api.post('/admin/categories', data)
     const formData = new FormData()
     Object.keys(data || {}).forEach((key) => {
       const value = data[key]
       if (value === undefined || value === null) return
-      if (key === 'category_image' && value instanceof File) {
-        formData.append('category_image', value)
+      if ((key === 'category_image' || key === 'categoryImage') && value instanceof File) {
+        formData.append(key, value)
       } else if (value !== '') {
         formData.append(key, value)
       }
@@ -442,17 +461,17 @@ export const adminService = {
     })
   },
   updateAdminCategory: (id, data) => {
-    const hasFile = data?.category_image instanceof File
+    const hasFile = data?.category_image instanceof File || data?.categoryImage instanceof File
     if (!hasFile) {
-      const { category_image, ...rest } = data || {}
+      const { category_image, categoryImage, ...rest } = data || {}
       return api.patch(`/admin/categories/${id}`, rest)
     }
     const formData = new FormData()
     Object.keys(data || {}).forEach((key) => {
       const value = data[key]
       if (value === undefined || value === null) return
-      if (key === 'category_image' && value instanceof File) {
-        formData.append('category_image', value)
+      if ((key === 'category_image' || key === 'categoryImage') && value instanceof File) {
+        formData.append(key, value)
       } else {
         formData.append(key, value)
       }

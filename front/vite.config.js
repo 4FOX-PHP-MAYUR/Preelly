@@ -8,6 +8,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     envDir: path.resolve(__dirname, '../api'),
+    define: {
+      'import.meta.env.VITE_BACKEND_URL': JSON.stringify(backendUrl),
+    },
     plugins: [react()],
     resolve: {
       alias: {

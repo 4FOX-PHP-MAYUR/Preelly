@@ -1150,7 +1150,7 @@ function flattenCategoryTreeInOrder(nodes) {
 // Fetch all matching categories, build tree by parent_id, flatten in hierarchy order, then paginate
 router.get('/categories', adminMiddleware, async (req, res) => {
   try {
-    const { page = 1, limit = 100, search, parentId: filterParentId } = req.query
+    const { page = 1, limit = 100, search, parentId: filterParentId, rootOnly } = req.query
     const skip = Math.max(0, (Number(page) - 1) * Number(limit))
     const limitNum = Math.max(1, Math.min(500, Number(limit)))
     const query = { isDeleted: false }
@@ -1210,8 +1210,11 @@ router.get('/categories', adminMiddleware, async (req, res) => {
     // Build tree from flat list (by parent_id), then flatten in hierarchy order
     const tree = buildCategoryTreeFromFlat(merged)
     let ordered = flattenCategoryTreeInOrder(tree)
-    // Filter by parent category if requested
-    if (filterParentId && filterParentId !== 'all' && filterParentId !== '') {
+    // Filter to root categories only, if requested
+    if (rootOnly === 'true' || rootOnly === true) {
+      ordered = ordered.filter((c) => !c.parentId)
+    } else if (filterParentId && filterParentId !== 'all' && filterParentId !== '') {
+      // Filter by parent category if requested
       ordered = ordered.filter((c) => c.parentId && String(c.parentId) === String(filterParentId))
     }
     const total = ordered.length
@@ -1249,7 +1252,7 @@ router.get('/categories/children', adminMiddleware, async (req, res) => {
 router.get('/categories/nested-for-filters', adminMiddleware, async (req, res) => {
   try {
     const flat = await Category.find({ isDeleted: false })
-      .sort({ sortOrder: 1, name: 1 })
+      .sort({ xOrder: 1, name: 1 })
       .lean()
     const payload = buildNestedCategoryTreeForFilters(flat)
     res.json(payload)
@@ -1305,9 +1308,10 @@ router.get('/categories/debug-indexes', adminMiddleware, async (req, res) => {
   }
 })
 
-function resolveCategoryImage(req) {
-  if (req.file) return `/uploads/images/${req.file.filename}`
-  const raw = req.body?.image
+function resolveCategoryImage(req, fieldname = 'category_image', bodyKey = 'image') {
+  const file = req.files?.[fieldname]?.[0] || (fieldname === 'category_image' ? req.file : null)
+  if (file) return `/uploads/images/${file.filename}`
+  const raw = req.body?.[bodyKey]
   if (raw !== undefined && raw !== null && String(raw).trim() !== '') {
     return String(raw).trim()
   }
@@ -1318,17 +1322,21 @@ function resolveCategoryImage(req) {
 router.post(
   '/categories',
   adminMiddleware,
-  upload.single('category_image'),
+  upload.fields([
+    { name: 'category_image', maxCount: 1 },
+    { name: 'categoryImage', maxCount: 1 },
+  ]),
   async (req, res) => {
   try {
-    const { name, slug, parentId, sortOrder = 0, isActive = true } = req.body
+    const { name, slug, parentId, sortOrder = 0, isActive = true, colorCode, xOrder } = req.body
     if (!name) return res.status(400).json({ message: 'name is required' })
     if (parentId) {
       if (!Types.ObjectId.isValid(parentId)) return res.status(400).json({ message: 'Invalid parentId' })
       const parent = await Category.findById(parentId).select('_id isDeleted path')
       if (!parent || parent.isDeleted) return res.status(400).json({ message: 'Parent not found or deleted' })
     }
-    const image = resolveCategoryImage(req)
+    const image = resolveCategoryImage(req, 'category_image', 'image')
+    const categoryImage = resolveCategoryImage(req, 'categoryImage', 'categoryImage')
     const category = new Category({
       name,
       slug: slug || undefined,
@@ -1336,6 +1344,9 @@ router.post(
       sortOrder,
       isActive,
       ...(image ? { image, icon: image } : {}),
+      ...(categoryImage ? { categoryImage } : {}),
+      ...(colorCode !== undefined && String(colorCode).trim() !== '' ? { colorCode: String(colorCode).trim() } : {}),
+      ...(xOrder !== undefined && String(xOrder).trim() !== '' ? { xOrder: Number(xOrder) } : {}),
     })
     await category.save()
     res.status(201).json(category)
@@ -1394,14 +1405,17 @@ router.get('/categories/:id/path', adminMiddleware, async (req, res) => {
 router.patch(
   '/categories/:id',
   adminMiddleware,
-  upload.single('category_image'),
+  upload.fields([
+    { name: 'category_image', maxCount: 1 },
+    { name: 'categoryImage', maxCount: 1 },
+  ]),
   async (req, res) => {
   try {
     const { id } = req.params
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
     const category = await Category.findById(id)
     if (!category) return res.status(404).json({ message: 'Category not found' })
-    const { name, slug, parentId, sortOrder, isActive, clear_image } = req.body
+    const { name, slug, parentId, sortOrder, isActive, clear_image, clear_categoryImage, colorCode, xOrder } = req.body
     if (parentId !== undefined) {
       if (parentId) {
         if (!Types.ObjectId.isValid(parentId)) return res.status(400).json({ message: 'Invalid parentId' })
@@ -1418,17 +1432,30 @@ router.patch(
     if (slug !== undefined) category.slug = slug
     if (sortOrder !== undefined) category.sortOrder = sortOrder
     if (isActive !== undefined) category.isActive = isActive
-    if (req.file) {
-      const image = resolveCategoryImage(req)
+    if (req.files?.category_image?.[0]) {
+      const image = resolveCategoryImage(req, 'category_image', 'image')
       category.image = image
       category.icon = image
     } else if (clear_image === 'true' || clear_image === true) {
       category.image = null
       category.icon = null
     } else if (req.body.image !== undefined) {
-      const image = resolveCategoryImage(req)
+      const image = resolveCategoryImage(req, 'category_image', 'image')
       category.image = image
       category.icon = image
+    }
+    if (req.files?.categoryImage?.[0]) {
+      category.categoryImage = resolveCategoryImage(req, 'categoryImage', 'categoryImage')
+    } else if (clear_categoryImage === 'true' || clear_categoryImage === true) {
+      category.categoryImage = null
+    } else if (req.body.categoryImage !== undefined) {
+      category.categoryImage = resolveCategoryImage(req, 'categoryImage', 'categoryImage')
+    }
+    if (colorCode !== undefined) {
+      category.colorCode = String(colorCode).trim() !== '' ? String(colorCode).trim() : null
+    }
+    if (xOrder !== undefined) {
+      category.xOrder = String(xOrder).trim() !== '' ? Number(xOrder) : 0
     }
     await category.save()
     res.json(category)
@@ -1471,7 +1498,7 @@ router.delete('/categories/:id', adminMiddleware, async (req, res) => {
       const includeDeleted = req.query.includeDeleted === 'true'
       const filter = includeDeleted ? {} : { isDeleted: false }
       // Fetch normalized categories
-      const categories = await Category.find(filter).sort({ sortOrder: 1, name: 1 }).lean()
+      const categories = await Category.find(filter).sort({ xOrder: 1, name: 1 }).lean()
       // Also include legacy embedded subcategories (if any) so admin sees everything
       const rawColl = require('mongoose').connection.collection('categories')
       const legacyParents = await rawColl.find({ subcategories: { $exists: true, $ne: [] } }).toArray()
@@ -1805,6 +1832,63 @@ const importFiltersExcelHandler = async (req, res) => {
 router.post('/filters/import-excel', adminMiddleware, uploadAny.single('file'), importFiltersExcelHandler)
 router.post('/filters/import', adminMiddleware, uploadAny.single('file'), importFiltersExcelHandler)
 
+// Resolve a selected category-level id (categoryId/subcategoryId/childCategoryId,
+// whichever is the deepest one provided) into the full ancestor chain used to
+// populate Filter.categoryId/subcategoryId/childCategoryId. Shared by POST and PATCH
+// so create and update assign categories the same way.
+async function resolveFilterCategoryChain(body) {
+  const { categoryId, subcategoryId, subcategory_id, childCategoryId, child_category_id } = body
+  const rawSubcategoryId = subcategoryId ?? subcategory_id
+  const rawChildCategoryId = childCategoryId ?? child_category_id
+  const candidateLevelId =
+    (rawChildCategoryId !== undefined && String(rawChildCategoryId).trim() !== '' && rawChildCategoryId) ||
+    (rawSubcategoryId !== undefined && String(rawSubcategoryId).trim() !== '' && rawSubcategoryId) ||
+    (categoryId !== undefined && String(categoryId).trim() !== '' && categoryId) ||
+    null
+
+  if (!candidateLevelId) return { provided: false }
+
+  if (!Types.ObjectId.isValid(String(candidateLevelId))) {
+    return { provided: true, error: 'Invalid category level id' }
+  }
+  const selected = await Category.findOne({
+    _id: candidateLevelId,
+    isDeleted: { $ne: true },
+  })
+    .select('_id parentId path')
+    .lean()
+  if (!selected) return { provided: true, error: 'Selected category level not found or deleted' }
+
+  // Always keep assignment at the selected level id.
+  const assignCategoryObjId = new Types.ObjectId(String(selected._id))
+
+  // Build ancestor chain by traversing parentId — more reliable than `path`
+  // which can be stale/empty on older category documents.
+  const chainIds = []
+  {
+    let cur = selected
+    const seen = new Set()
+    while (cur && cur._id) {
+      const curIdStr = String(cur._id)
+      if (seen.has(curIdStr)) break
+      seen.add(curIdStr)
+      chainIds.push(curIdStr)
+      if (!cur.parentId) break
+      // eslint-disable-next-line no-await-in-loop
+      cur = await Category.findById(cur.parentId).select('_id parentId').lean()
+    }
+  }
+  const chain = chainIds.length ? chainIds.reverse() : [...(selected.path || []), selected._id].map((id) => String(id))
+
+  return {
+    provided: true,
+    assignCategoryObjId,
+    filterCategoryObjId: chain[0] ? new Types.ObjectId(chain[0]) : null,
+    filterSubcategoryObjId: chain[1] ? new Types.ObjectId(chain[1]) : null,
+    filterChildCategoryObjId: chain[2] ? new Types.ObjectId(chain[2]) : null,
+  }
+}
+
 // POST /api/admin/filters
 router.post(
   '/filters',
@@ -1820,11 +1904,6 @@ router.post(
         isActive = true,
         colorCode,
         color_code,
-        categoryId,
-        subcategoryId,
-        subcategory_id,
-        childCategoryId,
-        child_category_id,
       } = req.body
       if (!name) return res.status(400).json({ message: 'name is required' })
 
@@ -1834,57 +1913,13 @@ router.post(
         if (!parent || parent.isDeleted) return res.status(400).json({ message: 'Parent not found or deleted' })
       }
 
-      // filter.categoryId (main/root) + filter.subcategoryId (selected sub level)
-      let assignCategoryObjId = null
-      let filterCategoryObjId = null
-      let filterSubcategoryObjId = null
-      let filterChildCategoryObjId = null
+      const chainResult = await resolveFilterCategoryChain(req.body)
+      if (chainResult.error) return res.status(400).json({ message: chainResult.error })
 
-      const rawSubcategoryId = subcategoryId ?? subcategory_id
-      const rawChildCategoryId = childCategoryId ?? child_category_id
-      const candidateLevelId =
-        (rawChildCategoryId !== undefined && String(rawChildCategoryId).trim() !== '' && rawChildCategoryId) ||
-        (rawSubcategoryId !== undefined && String(rawSubcategoryId).trim() !== '' && rawSubcategoryId) ||
-        (categoryId !== undefined && String(categoryId).trim() !== '' && categoryId) ||
-        null
-
-      if (candidateLevelId) {
-        if (!Types.ObjectId.isValid(String(candidateLevelId))) {
-          return res.status(400).json({ message: 'Invalid category level id' })
-        }
-        const selected = await Category.findOne({
-          _id: candidateLevelId,
-          isDeleted: { $ne: true },
-        })
-          .select('_id parentId path')
-          .lean()
-        if (!selected) return res.status(400).json({ message: 'Selected category level not found or deleted' })
-
-        // Always keep assignment at the selected level id.
-        assignCategoryObjId = new Types.ObjectId(String(selected._id))
-
-        // Build ancestor chain by traversing parentId — more reliable than `path`
-        // which can be stale/empty on older category documents.
-        const chainIds = []
-        {
-          let cur = selected
-          const seen = new Set()
-          while (cur && cur._id) {
-            const curIdStr = String(cur._id)
-            if (seen.has(curIdStr)) break
-            seen.add(curIdStr)
-            chainIds.push(curIdStr)
-            if (!cur.parentId) break
-            // eslint-disable-next-line no-await-in-loop
-            cur = await Category.findById(cur.parentId).select('_id parentId').lean()
-          }
-        }
-        const chain = chainIds.length ? chainIds.reverse() : [...(selected.path || []), selected._id].map((id) => String(id))
-
-        if (chain[0]) filterCategoryObjId = new Types.ObjectId(chain[0])
-        if (chain[1]) filterSubcategoryObjId = new Types.ObjectId(chain[1])
-        if (chain[2]) filterChildCategoryObjId = new Types.ObjectId(chain[2])
-      }
+      const assignCategoryObjId = chainResult.assignCategoryObjId || null
+      const filterCategoryObjId = chainResult.filterCategoryObjId || null
+      const filterSubcategoryObjId = chainResult.filterSubcategoryObjId || null
+      const filterChildCategoryObjId = chainResult.filterChildCategoryObjId || null
 
       let thumbImage
       if (req.file) {
@@ -1939,7 +1974,7 @@ router.patch(
       const filterDoc = await Filter.findById(id)
       if (!filterDoc) return res.status(404).json({ message: 'Filter not found' })
 
-      const { name, slug, parentId, sortOrder, isActive, colorCode, color_code, clearThumb } = req.body
+      const { name, slug, parentId, sortOrder, isActive, colorCode, color_code, clearThumb, clearCategory } = req.body
 
       if (parentId !== undefined) {
         if (parentId) {
@@ -1972,7 +2007,37 @@ router.patch(
         filterDoc.thumbImage = null
       }
 
+      let assignCategoryObjId
+      if (clearCategory === 'true') {
+        filterDoc.categoryId = null
+        filterDoc.subcategoryId = null
+        filterDoc.childCategoryId = null
+        assignCategoryObjId = null
+      } else {
+        const chainResult = await resolveFilterCategoryChain(req.body)
+        if (chainResult.error) return res.status(400).json({ message: chainResult.error })
+        if (chainResult.provided) {
+          filterDoc.categoryId = chainResult.filterCategoryObjId || null
+          filterDoc.subcategoryId = chainResult.filterSubcategoryObjId || null
+          filterDoc.childCategoryId = chainResult.filterChildCategoryObjId || null
+          assignCategoryObjId = chainResult.assignCategoryObjId || null
+        }
+      }
+
       await filterDoc.save()
+
+      // Keep the CategoryFilter pivot in sync with the category-level assignment.
+      if (assignCategoryObjId !== undefined) {
+        await CategoryFilter.deleteMany({ filterId: filterDoc._id })
+        if (assignCategoryObjId) {
+          try {
+            await CategoryFilter.create({ categoryId: assignCategoryObjId, filterId: filterDoc._id })
+          } catch (err) {
+            if (err?.code !== 11000) throw err
+          }
+        }
+      }
+
       res.json(filterDoc)
     } catch (error) {
       console.error('Error updating filter:', error)

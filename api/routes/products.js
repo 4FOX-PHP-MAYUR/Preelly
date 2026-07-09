@@ -1590,6 +1590,8 @@ router.post(
         vehicleSpecifications,
         missing_fields,
         ai_raw_response,
+        // Multi-select dynamic ("checkbox") fields, grouped as [{ title, values }]
+        features,
       } = req.body
       
       // Get all other dynamic fields from body
@@ -1609,6 +1611,7 @@ router.post(
         'vehicleSpecifications',
         'missing_fields',
         'ai_raw_response',
+        'features',
         ...HANDLED_REQUEST_KEYS,
       ]
       const dynamicFields = {}
@@ -1800,6 +1803,7 @@ router.post(
           ? parseJSONField(missing_fields)
           : [],
         ai_raw_response: parseJSONField(ai_raw_response) || null,
+        features: Array.isArray(parseJSONField(features)) ? parseJSONField(features) : [],
       }
       applyProductVehicleFields(productData, vehicleFieldValues)
       productData.adConfig = adTypes[productData.adType] || adTypes.free
@@ -2214,6 +2218,9 @@ router.put(
         country,
         city,
         area,
+        latitude,
+        longitude,
+        locationAddress,
         brand,
         condition,
         material,
@@ -2280,6 +2287,9 @@ router.put(
       if (country) productDoc.country = country
       if (city) productDoc.city = city
       if (area) productDoc.area = area
+      if (latitude !== undefined) productDoc.latitude = latitude !== null && latitude !== '' ? Number(latitude) : null
+      if (longitude !== undefined) productDoc.longitude = longitude !== null && longitude !== '' ? Number(longitude) : null
+      if (locationAddress !== undefined) productDoc.locationAddress = locationAddress || null
       
       // Basic details
       if (brand !== undefined) productDoc.brand = brand || null
@@ -2506,7 +2516,7 @@ router.put(
         }
 
         // Parse AI JSON payloads and other JSON-serialized fields.
-        const jsonFields = new Set(['display_data', 'filter_data', 'specifications', 'missing_fields', 'ai_raw_response'])
+        const jsonFields = new Set(['display_data', 'filter_data', 'specifications', 'missing_fields', 'ai_raw_response', 'features'])
         const storeValue = (() => {
           if (jsonFields.has(key)) {
             const parsed = parseJSONField(fieldValue)

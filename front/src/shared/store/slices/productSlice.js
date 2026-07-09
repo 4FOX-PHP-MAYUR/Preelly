@@ -176,7 +176,10 @@ export const updateProduct = createAsyncThunk(
       const response = await productService.updateProduct(id, productData)
       return response.data
     } catch (error) {
-      return rejectWithValue(error.response?.data?.message || 'Failed to update product')
+      const payload = error.response?.data
+      const message =
+        (typeof payload === 'string' ? payload : payload?.message) || 'Failed to update product'
+      return rejectWithValue({ message, angleChecklist: payload?.angleChecklist })
     }
   }
 )

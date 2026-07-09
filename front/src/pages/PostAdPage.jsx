@@ -1,7 +1,7 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { useForm, Controller } from 'react-hook-form'
+import { useForm } from 'react-hook-form'
 import { createProduct, updateProduct, fetchProductById, fetchProducts } from '@shared/store/slices/productSlice'
 import { getRouteAbortSignal } from '@shared/services/apiScope'
 import {
@@ -26,6 +26,7 @@ import {
   Image as ImageIcon,
   Loader2,
   Camera,
+  Pencil,
   Car,
   Building2,
   Shirt,
@@ -33,13 +34,18 @@ import {
   LayoutGrid,
   Smartphone,
   Newspaper,
+  Calendar,
+  Gauge,
+  Globe,
+  Plus,
+  Check,
+  Pause,
+  Play,
+  Trash2,
 } from 'lucide-react'
 import { getCategoryImageUrl, getMediaUrl } from '@shared/utils/helpers'
-import { 
-  getFieldsForCategory, 
-  getBrandOptionsForCategory, 
-  getFieldConfig,
-  FIELD_TYPES,
+import {
+  getBrandOptionsForCategory,
   isVehicleSubcategoryBicycle,
   CONDITION_OPTIONS,
   getLevelLabels,
@@ -49,8 +55,6 @@ import { categoryService } from '@shared/services/api'
 import { applyTranscriptFilterSelections } from '@shared/utils/applyTranscriptFilterSelections'
 import { applyAiVehicleFormPrefill, syncBrandChoiceFromMake } from '@shared/utils/applyAiVehicleFormPrefill'
 import { toFilterArray, mergeFilterValues, scalarFromMultiSelect } from '@shared/utils/filterValueUtils'
-import FilterMultiSelect from '../components/PostAd/FilterMultiSelect'
-import { buildFilterMultiselectOptions } from '@shared/utils/flattenFilterOptions'
 import {
   applyAdsPostedToFormData,
   isAdsPostedFilterRoot,
@@ -61,14 +65,31 @@ import {
   buildPostAdFormValuesFromProduct,
   restoreProductFilterSelections,
 } from '@shared/utils/restoreProductToPostAdForm'
+import {
+  selectDynamicFormIsReadyToSubmit,
+  selectDynamicFormAllFields,
+  selectDynamicFormValues,
+  setFieldValue as setDynamicFieldValue,
+  resetDynamicForm,
+} from '@shared/store/slices/dynamicFormSlice'
+import { DynamicCategoryFormSection } from '../features/postAdCategoryForm/components/DynamicCategoryFormSection'
+import { FieldRenderer } from '../features/postAdCategoryForm/components/FieldRenderer'
+import { LocationMapPicker } from '../features/postAdCategoryForm/components/LocationMapPicker'
+import { FIELD_KIND, getFieldKind } from '@shared/utils/dynamicFormFieldKind'
+import { resolveFieldDisplayValue } from '@shared/utils/dynamicFormDisplay'
+import { savePostAdDraft, loadPostAdDraft, clearPostAdDraft } from '@shared/utils/postAdDraftStore'
 
-const TOTAL_STEPS = 11
+const TOTAL_STEPS = 6
+
+/** The auth gate (internal step 1) is invisible to already-authenticated, verified
+ *  users, so it isn't counted as a numbered step in the URL/progress UI — the
+ *  category screen (internal step 2) is what users see and reads as "step 1" there. */
+const DISPLAY_TOTAL_STEPS = TOTAL_STEPS - 1
+const toDisplayStep = (internalStep) => Math.max(1, internalStep - 1)
+const toInternalStep = (displayStep) => displayStep + 1
 
 /** All listings use UAE Dirham (Dubai / UAE marketplace). */
 const MARKETPLACE_CURRENCY = 'AED'
-
-/** Shared responsive step card title (steps 4–10). */
-const STEP_CARD_TITLE = 'text-xl sm:text-2xl font-bold text-gray-900 mb-4 sm:mb-6'
 
 // Step 1: Authentication Check
 function Step1Auth({ user, onNext }) {
@@ -130,21 +151,22 @@ function getCategoryCardTheme(name) {
   return match || { bg: '#F4F6F8', ring: 'ring-slate-300', iconClass: 'text-slate-500', Icon: LayoutGrid }
 }
 
+/** Card background is the admin-configured `category.colorCode`; the hardcoded
+ *  theme only fills in for categories that don't have one set yet. */
 function CategoryPickerCard({ category, selected, onSelect }) {
   const theme = getCategoryCardTheme(category?.name)
   const Icon = theme.Icon
   const imageSrc = getCategoryImageUrl(category)
   const [imageFailed, setImageFailed] = useState(false)
+  const bgColor = /^#[0-9A-Fa-f]{3,8}$/.test(category?.colorCode || '') ? category.colorCode : theme.bg
 
   return (
     <button
       type="button"
       onClick={() => onSelect(category._id)}
-      style={{ backgroundColor: theme.bg }}
-      className={`group relative flex aspect-[1.05/1] w-full min-w-0 flex-col justify-between rounded-xl p-4 text-left transition-all sm:rounded-2xl sm:p-5 md:p-6 ${
-        selected
-          ? `ring-2 ${theme.ring} shadow-sm scale-[1.02]`
-          : 'hover:shadow-md hover:scale-[1.01]'
+      style={{ backgroundColor: bgColor }}
+      className={`group relative flex aspect-square w-full min-w-0 flex-col justify-between rounded-2xl p-4 text-left transition-all sm:p-5 ${
+        selected ? 'shadow-md scale-[1.02] ring-2 ring-black/10' : 'hover:shadow-md hover:scale-[1.01]'
       }`}
     >
       <div className="flex items-start justify-start">
@@ -152,14 +174,14 @@ function CategoryPickerCard({ category, selected, onSelect }) {
           <img
             src={imageSrc}
             alt=""
-            className="h-10 w-10 sm:h-11 sm:w-11 object-contain"
+            className="h-10 w-10 object-contain"
             onError={() => setImageFailed(true)}
           />
         ) : (
-          <Icon className={`h-10 w-10 sm:h-11 sm:w-11 ${theme.iconClass}`} strokeWidth={2} />
+          <Icon className={`h-10 w-10 ${theme.iconClass}`} strokeWidth={2} />
         )}
       </div>
-      <span className="text-[15px] sm:text-base font-medium text-gray-800 leading-snug">
+      <span className="text-base font-medium text-gray-800 leading-snug">
         {category.name}
       </span>
     </button>
@@ -309,13 +331,6 @@ const VIDEO_TIPS = [
   'Use good lighting for a clear view',
 ]
 
-function getListingDetailsHeading(categoryName = '', subcategoryName = '') {
-  const combined = `${categoryName} ${subcategoryName}`.toLowerCase()
-  if (/motor|vehicle|car|auto/.test(combined)) return 'Tell us about your car'
-  if (/property|apartment|villa|real estate|home/.test(combined)) return 'Tell us about your property'
-  return 'Tell us about your listing'
-}
-
 function PostAdListingBreadcrumb({ items = [] }) {
   return (
     <nav className="mb-6 sm:mb-8 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500" aria-label="Breadcrumb">
@@ -435,12 +450,6 @@ function Step3VideoUpload({
   const captureVideoInputRef = useRef(null)
   const savedVideoPositionRef = useRef(null)
   const videoPreviewSrc = useVideoPreviewSrc(videoFile)
-
-  const selectedCategoryObjForPrompt = categories.find((cat) => String(cat._id) === String(selectedCategory))
-  const categoryNameForPrompt = selectedCategoryObjForPrompt?.name || ''
-  const subcategoryNameForPrompt =
-    subcategories?.find((sub) => String(sub._id) === String(watch('subcategory')))?.name || ''
-  const pageHeading = getListingDetailsHeading(categoryNameForPrompt, subcategoryNameForPrompt)
 
   const handleVideoUpload = async (e) => {
     const file = e.target.files[0]
@@ -658,6 +667,7 @@ function Step3VideoUpload({
       if (errors) {
         if (errors.transcription) {
           console.error('Transcription error:', errors.transcription)
+          toast.error(`Video transcription failed: ${errors.transcription}`, { duration: 6000 })
         }
         if (errors.extraction) {
           console.error('Extraction error:', errors.extraction)
@@ -1037,7 +1047,40 @@ function Step3VideoUpload({
         toast.success('Video transcribed successfully!', { id: 'transcribe' })
       }
 
+      // Auto-capture a set of listing photos from the video so the user doesn't have
+      // to do it manually, then jump straight to the next step once there's enough
+      // to review (title/description were already auto-filled above).
+      let capturedCount = 0
+      try {
+        toast.loading('Capturing photos from your video...', { id: 'auto-capture' })
+        const shotsRes = await videoService.autoCaptureScreenshots(file)
+        const captured = Array.isArray(shotsRes.data?.screenshots) ? shotsRes.data.screenshots : []
+        capturedCount = captured.length
+        if (capturedCount > 0) {
+          const newImages = captured.map((shot) => ({
+            url: shot.url,
+            name: `screenshot-${Math.floor(shot.timestamp || 0)}s.jpg`,
+            isScreenshot: true,
+            originalUrl: shot.url,
+            timestamp: shot.timestamp,
+          }))
+          setImageFiles((prev) => [...prev, ...newImages])
+          toast.success(`Captured ${capturedCount} photos from your video!`, { id: 'auto-capture' })
+        } else {
+          toast.dismiss('auto-capture')
+        }
+      } catch (captureError) {
+        console.error('Auto screenshot capture failed:', captureError)
+        toast.dismiss('auto-capture')
+      }
+
       setUploadStage('ready')
+
+      const titleReady = (watch('title') || '').trim().length >= 10
+      const descriptionReady = (watch('description') || '').trim().length >= 30
+      if (capturedCount > 0 && titleReady && descriptionReady) {
+        onNext()
+      }
     } catch (error) {
       console.error('Error processing video:', error)
       toast.dismiss('transcribe')
@@ -1226,7 +1269,8 @@ function Step3VideoUpload({
       return
     }
     const nonScreenshotImages = imageFiles.filter((file) => !file.isScreenshot)
-    if (nonScreenshotImages.length === 0 && screenshots.length === 0) {
+    const screenshotImages = imageFiles.filter((file) => file.isScreenshot)
+    if (nonScreenshotImages.length === 0 && screenshotImages.length === 0) {
       toast.error('Please upload at least 1 image or capture a screenshot')
       return
     }
@@ -1249,11 +1293,13 @@ function Step3VideoUpload({
       )}
 
       <div className="text-center mb-5 sm:mb-6 w-full">
-        <h2 className="post-ad-step-heading">{pageHeading}</h2>
-        <p className="post-ad-step-subheading">Select the area that suits your ad best.</p>
+        <h2 className="post-ad-step-heading">Create or upload your reel and watch the magic happen</h2>
+        <p className="post-ad-step-subheading">
+          Upload your video and let AI auto-fill the details, so you can save time and get started faster.
+        </p>
       </div>
 
-      <PostAdListingBreadcrumb items={breadcrumbItems} />
+      <PostAdListingBreadcrumb items={[...breadcrumbItems, 'upload video']} />
 
       <div className="space-y-5 sm:space-y-6 w-full">
         <div>
@@ -1296,10 +1342,10 @@ function Step3VideoUpload({
 
         {!videoFile ? (
           <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4">
-            <label className="flex min-h-[160px] w-full flex-1 cursor-pointer flex-col items-center justify-center rounded-2xl border border-[#2563eb] bg-white px-3 py-6 transition hover:bg-blue-50/40 sm:min-h-[180px] sm:max-h-[220px] sm:py-8 md:min-h-[200px]">
-              <UploadCloud className="mb-3 h-9 w-9 text-[#2563eb] sm:mb-4 sm:h-11 sm:w-11" strokeWidth={1.5} />
-              <span className="text-sm font-semibold text-gray-900 sm:text-[15px]">Upload Video</span>
-              <span className="mt-1 text-xs text-gray-500 sm:mt-1.5 sm:text-sm">Max video duration 2 mins</span>
+            <label className="flex min-h-[200px] w-full flex-1 cursor-pointer flex-col items-center justify-center rounded-3xl border border-[#2563eb] bg-white px-3 py-8 transition hover:bg-blue-50/40 sm:min-h-[260px] sm:py-10 md:min-h-[280px]">
+              <UploadCloud className="mb-4 h-10 w-10 text-[#2563eb] sm:mb-5 sm:h-14 sm:w-14" strokeWidth={1.5} />
+              <span className="text-base font-semibold text-gray-900 sm:text-lg">Upload Video</span>
+              <span className="mt-1.5 text-xs text-gray-500 sm:text-sm">Max video duration 2 mins</span>
               <input
                 type="file"
                 className="hidden"
@@ -1313,11 +1359,11 @@ function Step3VideoUpload({
               type="button"
               onClick={() => captureVideoInputRef.current?.click()}
               disabled={isProcessing}
-              className="flex min-h-[160px] w-full flex-1 flex-col items-center justify-center rounded-2xl border border-[#2563eb] bg-white px-3 py-6 transition hover:bg-blue-50/40 disabled:opacity-50 sm:min-h-[180px] sm:max-h-[220px] sm:py-8 md:min-h-[200px]"
+              className="flex min-h-[200px] w-full flex-1 flex-col items-center justify-center rounded-3xl border border-[#2563eb] bg-white px-3 py-8 transition hover:bg-blue-50/40 disabled:opacity-50 sm:min-h-[260px] sm:py-10 md:min-h-[280px]"
             >
-              <Camera className="mb-3 h-9 w-9 text-[#2563eb] sm:mb-4 sm:h-11 sm:w-11" strokeWidth={1.5} />
-              <span className="text-sm font-semibold text-gray-900 sm:text-[15px]">Capture Video</span>
-              <span className="mt-1 text-xs text-gray-500 sm:mt-1.5 sm:text-sm">Max video duration 2 mins</span>
+              <Camera className="mb-4 h-10 w-10 text-[#2563eb] sm:mb-5 sm:h-14 sm:w-14" strokeWidth={1.5} />
+              <span className="text-base font-semibold text-gray-900 sm:text-lg">Capture Video</span>
+              <span className="mt-1.5 text-xs text-gray-500 sm:text-sm">Max video duration 2 mins</span>
             </button>
             <input
               ref={captureVideoInputRef}
@@ -2060,73 +2106,510 @@ function Step3VideoUpload({
   )
 }
 
-// Step 4: Basic Details (renamed from Step3)
-function Step4BasicDetails({ register, watch, setValue, getValues, control, errors, categories, selectedCategory, subcategories }) {
+// Step 4: Title & Photos Review — shown right after AI video transcription finishes.
+// Sub-view of Step4TitlePhotosReview: scrub the video to a moment and crop that frame in,
+// replacing whichever photo tile's pencil icon was clicked.
+const CROP_THUMBNAIL_COUNT = 10
+
+function PhotoCropFromVideo({ videoFile, onBack, onCrop }) {
+  const videoRef = useRef(null)
+  const thumbVideoRef = useRef(null)
+  const videoSrc = useVideoPreviewSrc(videoFile)
+  const [duration, setDuration] = useState(0)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [isCropping, setIsCropping] = useState(false)
+  const [thumbnails, setThumbnails] = useState([])
+  const [thumbsLoading, setThumbsLoading] = useState(false)
+
+  // Generate a filmstrip of evenly-spaced frames client-side (canvas capture from a
+  // hidden video element) so the user can tap a frame instead of dragging a bare slider.
+  // Falls back to the plain slider below if the canvas capture is blocked (tainted
+  // canvas on a cross-origin video source).
+  useEffect(() => {
+    if (!duration || !videoSrc) return
+    let cancelled = false
+
+    const generateThumbnails = async () => {
+      const video = thumbVideoRef.current
+      if (!video) return
+      setThumbsLoading(true)
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      const results = []
+
+      for (let i = 0; i < CROP_THUMBNAIL_COUNT; i++) {
+        if (cancelled) return
+        const time = (duration * i) / (CROP_THUMBNAIL_COUNT - 1)
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise((resolve, reject) => {
+            const onSeeked = () => {
+              video.removeEventListener('seeked', onSeeked)
+              try {
+                canvas.width = video.videoWidth || 160
+                canvas.height = video.videoHeight || 90
+                ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+                results.push({ time, dataUrl: canvas.toDataURL('image/jpeg', 0.6) })
+                resolve()
+              } catch (err) {
+                reject(err)
+              }
+            }
+            video.addEventListener('seeked', onSeeked)
+            video.currentTime = time
+          })
+        } catch {
+          break
+        }
+      }
+
+      if (!cancelled) {
+        setThumbnails(results)
+        setThumbsLoading(false)
+      }
+    }
+
+    generateThumbnails()
+    return () => {
+      cancelled = true
+    }
+  }, [duration, videoSrc])
+
+  const seekTo = (time) => {
+    setCurrentTime(time)
+    if (videoRef.current) {
+      videoRef.current.pause()
+      videoRef.current.currentTime = time
+    }
+  }
+
+  const handleSeek = (e) => {
+    seekTo(Number(e.target.value))
+  }
+
+  const togglePlay = () => {
+    const video = videoRef.current
+    if (!video) return
+    if (video.paused) video.play()
+    else video.pause()
+  }
+
+  const activeThumbIndex = thumbnails.length
+    ? thumbnails.reduce(
+        (closest, thumb, i) =>
+          Math.abs(thumb.time - currentTime) < Math.abs(thumbnails[closest].time - currentTime) ? i : closest,
+        0,
+      )
+    : -1
+
+  const handleCropThis = async () => {
+    setIsCropping(true)
+    try {
+      toast.loading('Capturing frame...', { id: 'crop-frame' })
+      const res = await videoService.captureScreenshot(videoFile, currentTime)
+      const { screenshot } = res.data
+      const BASE_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8029'
+      const screenshotUrl = screenshot.url.startsWith('http') ? screenshot.url : `${BASE_URL}${screenshot.url}`
+      onCrop({
+        url: screenshotUrl,
+        name: `screenshot-${Math.floor(screenshot.timestamp)}s.jpg`,
+        isScreenshot: true,
+        originalUrl: screenshot.url,
+        timestamp: screenshot.timestamp,
+      })
+      toast.success('Photo updated!', { id: 'crop-frame' })
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Failed to capture frame', { id: 'crop-frame' })
+    } finally {
+      setIsCropping(false)
+    }
+  }
+
+  return (
+    <div className="post-ad-step-shell-narrow pb-32 sm:pb-36">
+      <div className="text-center mb-5 sm:mb-6 w-full">
+        <h2 className="post-ad-step-heading">Crop photo from video</h2>
+        <p className="post-ad-step-subheading">Move the slider to generate image</p>
+      </div>
+
+      <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-black">
+        <video
+          ref={videoRef}
+          src={videoSrc}
+          className="w-full h-full object-cover"
+          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+          onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => setIsPlaying(false)}
+          playsInline
+        />
+        <button
+          type="button"
+          onClick={togglePlay}
+          disabled={!duration}
+          className="absolute inset-0 flex items-center justify-center"
+          aria-label={isPlaying ? 'Pause video' : 'Play video'}
+        >
+          {!isPlaying && (
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white">
+              <Play className="h-6 w-6 translate-x-0.5" fill="currentColor" />
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Hidden video used only to extract frame thumbnails for the filmstrip below. */}
+      <video ref={thumbVideoRef} src={videoSrc} className="hidden" playsInline muted />
+
+      {thumbnails.length > 0 ? (
+        <>
+          <div className="w-full mt-4 flex gap-1 overflow-x-auto pb-1">
+            {thumbnails.map((thumb, i) => (
+              <button
+                key={thumb.time}
+                type="button"
+                onClick={() => seekTo(thumb.time)}
+                className={`relative shrink-0 h-16 w-16 sm:h-20 sm:w-20 overflow-hidden rounded-lg border-2 transition-colors ${
+                  i === activeThumbIndex ? 'border-blue-600' : 'border-transparent'
+                }`}
+              >
+                <img src={thumb.dataUrl} alt="" className="w-full h-full object-cover" />
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <span className="flex h-6 w-6 items-center justify-center rounded-md bg-white/90 shadow">
+                    <Pause className="h-3.5 w-3.5 text-gray-800" fill="currentColor" />
+                  </span>
+                </span>
+              </button>
+            ))}
+          </div>
+
+          <div className="w-full mt-2 flex items-center justify-center gap-1">
+            {thumbnails.map((thumb, i) => {
+              const distance = Math.abs(i - activeThumbIndex)
+              const opacity = i === activeThumbIndex ? 1 : Math.max(0.25, 1 - distance * 0.3)
+              const scale = i === activeThumbIndex ? 1 : Math.max(0.85, 1 - distance * 0.05)
+              return (
+                <button
+                  key={`preview-${thumb.time}`}
+                  type="button"
+                  onClick={() => seekTo(thumb.time)}
+                  style={{ opacity, transform: `scale(${scale})` }}
+                  className="h-10 w-10 shrink-0 overflow-hidden rounded-md transition-all sm:h-12 sm:w-12"
+                >
+                  <img src={thumb.dataUrl} alt="" className="w-full h-full object-cover" />
+                </button>
+              )
+            })}
+          </div>
+        </>
+      ) : thumbsLoading ? (
+        <div className="w-full mt-4 flex gap-1 overflow-x-auto pb-1">
+          {Array.from({ length: CROP_THUMBNAIL_COUNT }).map((_, i) => (
+            <div key={i} className="h-16 w-16 shrink-0 animate-pulse rounded-lg bg-gray-200 sm:h-20 sm:w-20" />
+          ))}
+        </div>
+      ) : (
+        <div className="w-full mt-4">
+          <input
+            type="range"
+            min={0}
+            max={duration || 0}
+            step={0.1}
+            value={currentTime}
+            onChange={handleSeek}
+            disabled={!duration}
+            className="w-full accent-blue-600"
+          />
+        </div>
+      )}
+
+      <div className="w-full flex gap-3 mt-6">
+        <button type="button" onClick={onBack} className="btn-secondary flex-1">
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={handleCropThis}
+          disabled={isCropping || !duration}
+          className="flex-1 rounded-xl px-8 py-3.5 text-[15px] font-semibold text-white transition disabled:opacity-50"
+          style={{ backgroundColor: POST_AD_BLUE }}
+        >
+          {isCropping ? 'Cropping...' : 'Crop this'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+function Step4TitlePhotosReview({ register, errors, imageFiles, setImageFiles, videoFile, breadcrumbItems = [], onBack, onNext }) {
+  const [isAutoCapturing, setIsAutoCapturing] = useState(false)
+  const [editingIndex, setEditingIndex] = useState(null)
+
+  const handleAddPhotos = (e) => {
+    const files = Array.from(e.target.files)
+    const newImageFiles = files.filter((file) => {
+      if (!file.type.startsWith('image/')) return false
+      if (file.size > 10 * 1024 * 1024) {
+        toast.error(`${file.name} exceeds 10MB limit`)
+        return false
+      }
+      return true
+    })
+    setImageFiles((prev) => [...prev, ...newImageFiles])
+  }
+
+  const handleScreenGrab = async () => {
+    if (!videoFile) {
+      toast.error('Video not loaded')
+      return
+    }
+    setIsAutoCapturing(true)
+    try {
+      toast.loading('Capturing screenshots from your video...', { id: 'auto-screenshot' })
+      const res = await videoService.autoCaptureScreenshots(videoFile)
+      const captured = Array.isArray(res.data?.screenshots) ? res.data.screenshots : []
+      if (!captured.length) {
+        toast.error('No screenshots could be captured from this video.', { id: 'auto-screenshot' })
+        return
+      }
+      const newImages = captured.map((shot) => ({
+        url: shot.url,
+        name: `screenshot-${Math.floor(shot.timestamp || 0)}s.jpg`,
+        isScreenshot: true,
+        originalUrl: shot.url,
+        timestamp: shot.timestamp,
+      }))
+      setImageFiles((prev) => [...prev, ...newImages])
+      toast.success(`Captured ${captured.length} screenshot${captured.length > 1 ? 's' : ''}!`, { id: 'auto-screenshot' })
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Failed to capture screenshots', { id: 'auto-screenshot' })
+    } finally {
+      setIsAutoCapturing(false)
+    }
+  }
+
+  const removeImage = (index) => {
+    setImageFiles((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  if (editingIndex !== null) {
+    return (
+      <PhotoCropFromVideo
+        videoFile={videoFile}
+        onBack={() => setEditingIndex(null)}
+        onCrop={(newImage) => {
+          setImageFiles((prev) => prev.map((f, i) => (i === editingIndex ? newImage : f)))
+          setEditingIndex(null)
+        }}
+      />
+    )
+  }
+
+  return (
+    <div className="post-ad-step-shell-narrow pb-32 sm:pb-36">
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="self-start mb-6 inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-800"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Back
+        </button>
+      )}
+
+      <div className="text-center mb-5 sm:mb-6 w-full">
+        <h2 className="post-ad-step-heading">Your Ad Is Coming Together! Here&apos;s Your Title &amp; Photos</h2>
+        <p className="post-ad-step-subheading">
+          Your ad title and photos are ready. You can edit them anytime before publishing.
+        </p>
+      </div>
+
+      <PostAdListingBreadcrumb items={[...breadcrumbItems, 'upload video']} />
+
+      <div className="space-y-5 sm:space-y-6 w-full">
+        <div>
+          <label className="block text-sm font-medium text-gray-800 mb-2">
+            Title<span className="text-red-500">*</span>
+          </label>
+          <input
+            type="text"
+            {...register('title', {
+              required: 'Title is required',
+              minLength: { value: 10, message: 'Title must be at least 10 characters' },
+            })}
+            className={POST_AD_INPUT}
+            placeholder="Enter product title"
+          />
+          {errors?.title && <p className="mt-1.5 text-sm text-red-600">{errors.title.message}</p>}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-800 mb-2">
+            Description<span className="text-red-500">*</span>
+          </label>
+          <textarea
+            {...register('description', {
+              required: 'Description is required',
+              minLength: { value: 30, message: 'Description must be at least 30 characters' },
+              maxLength: { value: 2500, message: 'Description must not exceed 2500 characters' },
+            })}
+            rows={6}
+            className={`${POST_AD_INPUT} resize-none min-h-[150px]`}
+            placeholder="Enter product description"
+          />
+          {errors?.description && (
+            <p className="mt-1.5 text-sm text-red-600">{errors.description.message}</p>
+          )}
+        </div>
+
+        <div>
+          <p className="text-sm font-medium text-gray-800 mb-2">Photos (Max 10 images)</p>
+          <div className="space-y-1">
+            {(() => {
+              const rows = []
+              let i = 0
+              let isFullWidthRow = true
+              while (i < imageFiles.length) {
+                const rowSize = isFullWidthRow ? 1 : 2
+                rows.push(
+                  imageFiles.slice(i, i + rowSize).map((file, offset) => ({ file, index: i + offset })),
+                )
+                i += rowSize
+                isFullWidthRow = !isFullWidthRow
+              }
+              return rows
+            })().map((row, rowIndex) => (
+              <div key={rowIndex} className={row.length === 2 ? 'grid grid-cols-2 gap-1' : ''}>
+                {row.map(({ file, index }) => (
+                  <div key={index} className="relative h-64 sm:h-72">
+                    <ImagePreviewImg
+                      file={file}
+                      alt={`Photo ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!videoFile) {
+                          toast.error('No video available to crop from')
+                          return
+                        }
+                        setEditingIndex(index)
+                      }}
+                      className="absolute top-2 right-11 bg-gray-900/70 text-white p-1.5 rounded-full hover:bg-gray-900"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="absolute top-2 right-2 bg-gray-900/70 text-white p-1.5 rounded-full hover:bg-red-600"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={handleScreenGrab}
+              disabled={isAutoCapturing || !videoFile}
+              className="btn-secondary flex-1 flex items-center justify-center gap-2 disabled:opacity-50"
+            >
+              {isAutoCapturing ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Capturing...
+                </>
+              ) : (
+                <>
+                  <Camera className="h-4 w-4" />
+                  Screen Grab
+                </>
+              )}
+            </button>
+            <label className="btn-secondary flex-1 flex items-center justify-center gap-2 cursor-pointer">
+              <Upload className="h-4 w-4" />
+              Add Photos
+              <input
+                type="file"
+                className="hidden"
+                accept="image/jpeg,image/png,image/jpg"
+                multiple
+                onChange={handleAddPhotos}
+              />
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <div className="post-ad-fixed-footer">
+        <div className="mx-auto w-full max-w-[640px] px-4 pt-4 sm:px-6 sm:pt-5">
+          <div className="mb-3 flex gap-1 sm:mb-4">
+            {[0, 1].map((i) => (
+              <div
+                key={i}
+                className="h-[3px] flex-1 rounded-full"
+                style={{ backgroundColor: i === 0 ? POST_AD_NAVY : '#e5e7eb' }}
+              />
+            ))}
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-gray-600">1 of 2</p>
+            <button
+              type="button"
+              onClick={onNext}
+              className="inline-flex w-full items-center justify-center gap-1 rounded-xl px-8 py-3.5 text-[15px] font-semibold text-white transition sm:w-auto sm:px-10"
+              style={{ backgroundColor: POST_AD_BLUE }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = '#1d4ed8'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = POST_AD_BLUE
+              }}
+            >
+              Next
+              <span className="text-lg leading-none">&gt;</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// Step 5: Basic Details (renamed from Step4)
+function Step4BasicDetails({
+  register,
+  watch,
+  setValue,
+  getValues,
+  control,
+  errors,
+  categories,
+  selectedCategory,
+  subcategories,
+  breadcrumbItems = [],
+  onBack,
+  onNext,
+  initialDynamicFormValues,
+}) {
   const selectedCategoryObj = categories.find(cat => cat._id === selectedCategory)
   const selectedSubcategory = subcategories.find(sub => sub._id === watch('subcategory'))
   
   const categoryName = selectedCategoryObj?.name || ''
   const subcategoryName = selectedSubcategory?.name || ''
-  const categoryFieldGroupKey = categoryName ? resolveCategoryKeyForFields(categoryName) : ''
-  
-  // Get dynamic fields for this category/subcategory
-  let dynamicFields = categoryFieldGroupKey ? getFieldsForCategory(categoryFieldGroupKey, subcategoryName) : []
   const isVehicle = /vehicles?|motors?|cars?|auto/i.test(categoryName || '')
   const isBicycle = isVehicle && isVehicleSubcategoryBicycle(subcategoryName)
-  if (isVehicle && isBicycle) {
-    dynamicFields = dynamicFields.filter((f) => f !== 'transmission' && f !== 'fuelType')
-  }
-  const brandOptions = categoryFieldGroupKey ? getBrandOptionsForCategory(categoryFieldGroupKey, subcategoryName) : []
-
-  // Vehicles: only require core listing fields here. Extra specs (mileage, trim, VIN, etc.) stay optional
-  // so users are not blocked by a long scroll of "required" fields that typical classifieds treat as optional.
-  const VEHICLE_STEP4_REQUIRED = new Set(['make', 'model', 'year'])
-
-  const itemFieldRequired = (fieldName) => {
-    if (fieldName === 'brand' || fieldName === 'condition') return false
-    if (fieldName === 'make') return isVehicle
-    if (isVehicle) return VEHICLE_STEP4_REQUIRED.has(fieldName)
-    return dynamicFields.includes(fieldName)
-  }
-
-  const fieldRequiredMessage = (fieldName) => {
-    const cfg = getFieldConfig(fieldName)
-    return `${cfg.label || fieldName} is required`
-  }
 
   const categoryFilters = watch('__categoryFilters') || []
-  const categoryFiltersLoading = watch('__categoryFiltersLoading') === true
-  const categoryFiltersError = watch('__categoryFiltersError') || ''
-  const conditionValue = scalarFromMultiSelect(watch('condition'))
-
-  const filterGroups = useMemo(() => {
-    const list = Array.isArray(categoryFilters) ? categoryFilters : []
-    if (!list.length) return []
-
-    const byId = new Map(list.map((f) => [String(f._id), f]))
-    const childrenByParent = new Map()
-    list.forEach((f) => {
-      const pid = f.parentId ? String(f.parentId) : null
-      if (!childrenByParent.has(pid)) childrenByParent.set(pid, [])
-      childrenByParent.get(pid).push(f)
-    })
-
-    const roots = (childrenByParent.get(null) || []).slice().sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
-
-    const groups = roots.map((root) => {
-      const rootSlug = String(root.slug || root._id)
-      const fieldKey = `filter_${rootSlug}`
-      const options = buildFilterMultiselectOptions(root, childrenByParent, byId)
-
-      return {
-        root,
-        fieldKey,
-        options,
-      }
-    })
-
-    return groups.filter((g) => (g.options?.length || 0) > 0 && !isAdsPostedFilterRoot(g.root))
-  }, [categoryFilters])
 
   // When user reaches Step 4 after AI video processing, re-apply brand + filter prefills.
   useEffect(() => {
@@ -2195,919 +2678,484 @@ function Step4BasicDetails({ register, watch, setValue, getValues, control, erro
     }
   }, [isVehicle, isBicycle, setValue])
 
-  // Render a field based on its configuration (registerOptions e.g. { required } for vehicle make)
-  const renderField = (fieldName, registerOptions = {}) => {
-    const fieldConfig = getFieldConfig(fieldName)
-    const req = itemFieldRequired(fieldName)
-    const reqMsg = fieldRequiredMessage(fieldName)
-    const merged = { ...registerOptions }
-    if (req && merged.required === undefined) {
-      merged.required = reqMsg
-    }
-    
-    switch (fieldConfig.type) {
-      case FIELD_TYPES.text:
-        return (
-          <div key={fieldName}>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {fieldConfig.label}
-              {req && <span className="text-red-500"> *</span>}
-            </label>
-            <input
-              type="text"
-              {...register(fieldName, merged)}
-              className="input-field"
-              placeholder={fieldConfig.placeholder}
-            />
-            {errors[fieldName] && (
-              <p className="mt-1 text-sm text-red-600">{errors[fieldName].message}</p>
-            )}
-          </div>
-        )
-      
-      case FIELD_TYPES.number:
-        return (
-          <div key={fieldName}>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {fieldConfig.label}
-              {req && <span className="text-red-500"> *</span>}
-            </label>
-            <input
-              type="number"
-              {...register(fieldName, {
-                ...merged,
-                min: fieldConfig.min,
-                max: fieldConfig.max,
-                valueAsNumber: true,
-                validate: (v) => {
-                  if (!req) return true
-                  if (v === '' || v === undefined || v === null || (typeof v === 'number' && Number.isNaN(v))) {
-                    return reqMsg
-                  }
-                  return true
-                },
-              })}
-              className="input-field"
-              placeholder={fieldConfig.placeholder}
-            />
-            {errors[fieldName] && (
-              <p className="mt-1 text-sm text-red-600">{errors[fieldName].message}</p>
-            )}
-          </div>
-        )
-      
-      case FIELD_TYPES.select:
-        return (
-          <div key={fieldName}>
-            <Controller
-              name={fieldName}
-              control={control}
-              defaultValue={[]}
-              rules={{
-                validate: (v) => {
-                  if (!req) return true
-                  return toFilterArray(v).length > 0 || reqMsg
-                },
-              }}
-              render={({ field, fieldState }) => (
-                <FilterMultiSelect
-                  label={fieldConfig.label}
-                  required={req}
-                  options={(fieldConfig.options || []).map((option) => ({ value: option, label: option }))}
-                  value={field.value}
-                  onChange={field.onChange}
-                  error={fieldState.error}
-                  placeholder={fieldConfig.placeholder || `Select ${fieldConfig.label.toLowerCase()}`}
-                />
-              )}
-            />
-          </div>
-        )
-      
-      case FIELD_TYPES.textarea:
-        return (
-          <div key={fieldName}>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {fieldConfig.label}
-            </label>
-            <textarea
-              {...register(fieldName)}
-              rows={fieldConfig.rows || 4}
-              className="input-field"
-              placeholder={fieldConfig.placeholder}
-            />
-          </div>
-        )
-      
-      case FIELD_TYPES.checkbox:
-        return (
-          <div key={fieldName} className="flex items-center gap-2">
-                <input
-              type="checkbox"
-              {...register(fieldName)}
-              className="w-4 h-4"
-            />
-            <label className="text-sm font-medium text-gray-700">
-              {fieldConfig.label}
-              </label>
-          </div>
-        )
-      
-      case 'dimensions':
-        return (
-          <div key={fieldName} className="grid grid-cols-1 gap-4 sm:grid-cols-4">
-            <div className="grid grid-cols-1 gap-2 sm:col-span-3 sm:grid-cols-3">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Length</label>
-                <input
-                  type="number"
-                  {...register('dimensions.length', { min: 0 })}
-                  className="input-field"
-                  placeholder="Length"
-                />
-        </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Width</label>
-                <input
-                  type="number"
-                  {...register('dimensions.width', { min: 0 })}
-                  className="input-field"
-                  placeholder="Width"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Height</label>
-                <input
-                  type="number"
-                  {...register('dimensions.height', { min: 0 })}
-                  className="input-field"
-                  placeholder="Height"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Unit</label>
-              <select {...register('dimensions.unit')} className="input-field">
-                <option value="cm">cm</option>
-                <option value="inch">inch</option>
-              </select>
-            </div>
-          </div>
-        )
-      
-      default:
-        return (
-          <div key={fieldName}>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              {fieldConfig.label}
-            </label>
-            <input
-              type="text"
-              {...register(fieldName)}
-              className="input-field"
-              placeholder={fieldConfig.placeholder}
-            />
-          </div>
-        )
-    }
-  }
-
   return (
-    <div className="card space-y-6">
-      <h2 className={STEP_CARD_TITLE}>Item Information</h2>
-      
+    <div className="post-ad-step-shell-wide pb-32 sm:pb-36">
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="self-start mb-6 inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-800"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Back
+        </button>
+      )}
+
+      <div className="text-center mb-5 sm:mb-6 w-full">
+        <h2 className="post-ad-step-heading">Use plenty of photos, add useful details, and set the right price.</h2>
+        <p className="post-ad-step-subheading">Select the area that suits your ad best.</p>
+      </div>
+
+      <PostAdListingBreadcrumb items={[...breadcrumbItems, 'upload video', 'Basic Details', 'Additional Details']} />
+
       {!categoryName && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 w-full">
           <p className="text-sm text-yellow-800">
             ⚠️ Please select a category first to see relevant fields.
           </p>
         </div>
       )}
 
-      {/* Brand - Show if brand is in dynamic fields or if brandOptions exist */}
-      {(dynamicFields.includes('brand') || brandOptions.length > 0) && (
-        <div>
-          <Controller
-            name="brandChoice"
-            control={control}
-            defaultValue={[]}
-            rules={{
-              validate: (v) => {
-                if (!brandOptions.length) return true
-                return toFilterArray(v).length > 0 || 'Please select a brand'
-              },
-            }}
-            render={({ field, fieldState }) => (
-              <FilterMultiSelect
-                label="Brand"
-                required={brandOptions.length > 0}
-                options={[
-                  ...brandOptions.map((b) => ({ value: b, label: b })),
-                  ...(brandOptions.includes('Other') ? [] : [{ value: 'Other', label: 'Other' }]),
-                ]}
-                value={field.value}
-                onChange={(next) => {
-                  field.onChange(next)
-                  const selected = toFilterArray(next).filter((b) => b !== 'Other')
-                  if (selected.length) {
-                    setValue('brand', selected.join(', '), { shouldDirty: true, shouldTouch: true })
-                    if (isVehicle) setValue('make', selected[0], { shouldDirty: true, shouldTouch: true })
-                  } else if (!toFilterArray(next).includes('Other')) {
-                    setValue('brand', '', { shouldDirty: true, shouldTouch: true })
-                  }
-                }}
-                error={fieldState.error}
-                placeholder="Select brand"
-              />
+      {/* Admin-configured dynamic fields (FormField collection), scoped to the selected category.
+          Use the Step 2 subcategory as the base categoryId when one was selected, since that's
+          the deepest category the user has actually chosen; fall back to the root category. */}
+      <DynamicCategoryFormSection
+        categoryId={watch('subcategory') || selectedCategory}
+        onAdvancePastForm={onNext}
+        setValue={setValue}
+        watch={watch}
+        initialValues={initialDynamicFormValues}
+      />
+    </div>
+  )
+}
+
+// Step 6: Review & Confirm
+function ReviewSectionCard({ title, onEdit, editing, children }) {
+  return (
+    <div className="w-full bg-white rounded-xl border border-gray-200 p-5 mb-4">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-gray-900">{title}</h3>
+        <button type="button" onClick={onEdit} className="text-sm font-medium hover:underline" style={{ color: POST_AD_BLUE }}>
+          {editing ? 'Done' : 'Edit'}
+        </button>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+function Step10Review({
+  formData,
+  imageFiles,
+  videoFile,
+  categories,
+  selectedCategory,
+  subcategories,
+  categoryPathNames,
+  register,
+  errors,
+  setValue,
+  watch,
+  isSubmitting,
+  isEditMode,
+  onBack,
+}) {
+  const dispatch = useDispatch()
+  const allDynamicFields = useSelector(selectDynamicFormAllFields)
+  const dynamicValues = useSelector(selectDynamicFormValues)
+  const computedOptionsMap = useSelector((state) => state.dynamicForm.computedOptions)
+
+  const overviewFields = allDynamicFields.filter((f) => getFieldKind(f.fieldType) !== FIELD_KIND.CHECKBOX)
+  const featureFields = allDynamicFields.filter((f) => getFieldKind(f.fieldType) === FIELD_KIND.CHECKBOX)
+
+  const setDynamicField = (field, next) => {
+    dispatch(setDynamicFieldValue({ fieldName: field.fieldName, value: next }))
+  }
+
+  const [editingOverview, setEditingOverview] = useState(false)
+  const [editingDescription, setEditingDescription] = useState(false)
+  const [editingFeatures, setEditingFeatures] = useState(false)
+  const [editingLocation, setEditingLocation] = useState(false)
+  const [expandedFeatureGroup, setExpandedFeatureGroup] = useState(null)
+  const [descriptionExpanded, setDescriptionExpanded] = useState(false)
+  const [activeImageIndex, setActiveImageIndex] = useState(0)
+  const [requestPreview, setRequestPreview] = useState(null)
+
+  const totalImages = imageFiles.length
+  const activeImage = imageFiles[Math.min(activeImageIndex, Math.max(totalImages - 1, 0))]
+
+  const locationSummary =
+    watch('locationAddress') || [formData.area, formData.city, formData.country].filter(Boolean).join(', ')
+
+  /**
+   * Builds the same [key, value] `_parts` shape as the real POST /api/products request
+   * for on-screen display — shown alongside the actual submission (triggered separately
+   * by this button's type="submit"), not instead of it.
+   */
+  const buildRequestPreview = () => {
+    const BASE_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8029'
+    const token = localStorage.getItem('token') || ''
+    const redactedToken = token ? `${token.slice(0, 6)}...${token.slice(-6)}` : ''
+
+    const VIDEO_EXT_TYPES = {
+      mp4: 'video/mp4',
+      mov: 'video/quicktime',
+      avi: 'video/x-msvideo',
+      mkv: 'video/x-matroska',
+      webm: 'video/webm',
+    }
+    const guessTypeFromName = (name, fallback) => {
+      const ext = String(name || '').split('.').pop()?.toLowerCase()
+      return (ext && VIDEO_EXT_TYPES[ext]) || fallback
+    }
+
+    const toFileDescriptor = (file, fallbackName, fallbackType) => {
+      if (!file) return null
+      if (typeof file === 'object' && typeof file.url === 'string') {
+        const name = file.name || fallbackName
+        return { uri: file.url, name, type: file.type || guessTypeFromName(name, fallbackType) }
+      }
+      if (file instanceof File || file instanceof Blob) {
+        const name = file.name || fallbackName
+        return {
+          uri: URL.createObjectURL(file),
+          name,
+          type: file.type || guessTypeFromName(name, fallbackType),
+        }
+      }
+      return null
+    }
+
+    // [key, value] tuples — matches the exact _parts shape shown in the mobile app's
+    // own [HTTP:REQUEST] debug log (React Native's internal FormData representation).
+    // Display-only: the real API submission is unaffected by this format.
+    const parts = []
+
+    const video = toFileDescriptor(videoFile, 'video.mp4', 'video/mp4')
+    if (video) parts.push(['video', video])
+
+    imageFiles.forEach((file, i) => {
+      const image = toFileDescriptor(file, `photo_${i}.jpg`, 'image/jpeg')
+      if (image) parts.push(['images', image])
+    })
+
+    parts.push(['title', formData.title || ''])
+    parts.push(['description', formData.description || ''])
+    parts.push(['price', formData.price || ''])
+    parts.push(['currency', formData.currency || MARKETPLACE_CURRENCY])
+    parts.push(['category', selectedCategory || ''])
+    parts.push(['subcategory', formData.subcategory || ''])
+    parts.push(['location', locationSummary || ''])
+    parts.push(['country', formData.country || ''])
+    parts.push(['city', formData.city || ''])
+    parts.push(['area', formData.area || ''])
+    parts.push(['brand', formData.brand || ''])
+    parts.push(['contactName', formData.contactName || ''])
+    parts.push(['contactPhone', formData.contactPhone || ''])
+    parts.push(['condition', (Array.isArray(formData.condition) ? formData.condition[0] : formData.condition) || ''])
+    parts.push(['priceType', formData.priceType || 'Fixed'])
+    parts.push(['adType', formData.adType || 'free'])
+
+    allDynamicFields.forEach((field) => {
+      const raw = dynamicValues[field.fieldName]
+      if (raw === undefined || raw === null || raw === '') return
+      const value = Array.isArray(raw) ? raw.join(',') : String(raw)
+      if (!value) return
+      parts.push([field.fieldName, value])
+    })
+
+    return {
+      url: `${BASE_URL}/api/products`,
+      headers: {
+        Accept: 'application/json, text/plain, */*',
+        'Content-Type': 'multipart/form-data',
+        ...(token ? { Authorization: `Bearer ${redactedToken}` } : {}),
+      },
+      data: { _parts: parts },
+    }
+  }
+
+  const description = formData.description || ''
+  const descriptionPreview =
+    description.length > 180 && !descriptionExpanded ? `${description.slice(0, 180)}...` : description
+
+  return (
+    <div className="post-ad-step-shell-wide pb-32 sm:pb-36">
+      {onBack && (
+        <button
+          type="button"
+          onClick={onBack}
+          className="self-start mb-6 inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-800"
+        >
+          <ChevronLeft className="h-4 w-4" />
+          Back
+        </button>
+      )}
+
+      <div className="text-center mb-5 sm:mb-6 w-full">
+        <h2 className="post-ad-step-heading">We are all set to go!</h2>
+        <p className="post-ad-step-subheading">Review your all details and we will be live soon</p>
+      </div>
+
+      <PostAdListingBreadcrumb
+        items={[...(categoryPathNames || []), 'upload video', 'Basic Details', 'Additional Details', 'Summary']}
+      />
+
+      <div className="relative w-full rounded-xl overflow-hidden bg-gray-100 mb-6">
+        {activeImage ? (
+          <ImagePreviewImg
+            file={activeImage}
+            alt="Listing photo"
+            className="w-full h-[280px] sm:h-[420px] object-cover"
+          />
+        ) : (
+          <div className="w-full h-[280px] sm:h-[420px] flex items-center justify-center text-gray-400">
+            No photos
+          </div>
+        )}
+
+        {totalImages > 1 && (
+          <>
+            <button
+              type="button"
+              onClick={() => setActiveImageIndex((i) => (i - 1 + totalImages) % totalImages)}
+              className="absolute left-3 top-1/2 -translate-y-1/2 bg-white/90 rounded-full p-2 shadow"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveImageIndex((i) => (i + 1) % totalImages)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 bg-white/90 rounded-full p-2 shadow"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <span className="absolute top-3 right-3 bg-black/60 text-white text-xs px-2 py-1 rounded-full flex items-center gap-1">
+              <ImageIcon className="h-3 w-3" /> {activeImageIndex + 1}/{totalImages}
+            </span>
+          </>
+        )}
+
+        <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+          <span
+            className="inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold text-white"
+            style={{ backgroundColor: POST_AD_BLUE }}
+          >
+            {formData.currency || MARKETPLACE_CURRENCY} {formData.price || '0'}
+          </span>
+          <span className="inline-flex items-center rounded-full bg-white px-3 py-1 text-xs font-medium text-amber-700">
+            Draft
+          </span>
+        </div>
+      </div>
+
+      <div className="w-full mb-4">
+        <h3 className="text-xl font-bold text-gray-900">{formData.title}</h3>
+        <div className="flex flex-wrap items-center gap-4 mt-2 text-sm text-gray-600">
+          {formData.year && (
+            <span className="inline-flex items-center gap-1">
+              <Calendar className="h-4 w-4" /> {formData.year}
+            </span>
+          )}
+          {formData.mileage && (
+            <span className="inline-flex items-center gap-1">
+              <Gauge className="h-4 w-4" /> {formData.mileage} km
+            </span>
+          )}
+          {categoryPathNames?.length > 0 && (
+            <span className="inline-flex items-center gap-1">
+              <Globe className="h-4 w-4" /> {categoryPathNames[categoryPathNames.length - 1]}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <ReviewSectionCard title="Car Overview" editing={editingOverview} onEdit={() => setEditingOverview((v) => !v)}>
+        {editingOverview ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-5">
+            {overviewFields.map((field) => (
+              <div key={field.id || field.fieldName}>
+                <FieldRenderer
+                  field={field}
+                  value={dynamicValues[field.fieldName]}
+                  onChange={(next) => setDynamicField(field, next)}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-4">
+            {overviewFields.map((field) => {
+              const display = resolveFieldDisplayValue(
+                field,
+                dynamicValues[field.fieldName],
+                computedOptionsMap[field.fieldName],
+              )
+              if (!display || (Array.isArray(display) && !display.length)) return null
+              return (
+                <div key={field.id || field.fieldName}>
+                  <p className="text-xs text-gray-500">{field.fieldTitle}</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    {Array.isArray(display) ? display.join(', ') : display}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </ReviewSectionCard>
+
+      <ReviewSectionCard
+        title={formData.title || 'Description'}
+        editing={editingDescription}
+        onEdit={() => setEditingDescription((v) => !v)}
+      >
+        {editingDescription ? (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-800 mb-2">Title</label>
+              <input type="text" className={POST_AD_INPUT} {...register('title')} />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-800 mb-2">Description</label>
+              <textarea rows={5} className={`${POST_AD_INPUT} resize-none`} {...register('description')} />
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p className="text-sm text-gray-700 whitespace-pre-line">{descriptionPreview}</p>
+            {description.length > 180 && (
+              <button
+                type="button"
+                onClick={() => setDescriptionExpanded((v) => !v)}
+                className="mt-2 text-sm font-medium hover:underline"
+                style={{ color: POST_AD_BLUE }}
+              >
+                {descriptionExpanded ? 'Show Less' : 'Read More'}
+              </button>
             )}
-          />
-          {toFilterArray(watch('brandChoice')).includes('Other') ? (
-            <div className="mt-2">
-              <input
-                type="text"
-                {...register('brand', {
-                  required: 'Please enter brand name',
-                })}
-                className="input-field"
-                placeholder="Enter brand name"
+          </div>
+        )}
+      </ReviewSectionCard>
+
+      <ReviewSectionCard title="Features" editing={editingFeatures} onEdit={() => setEditingFeatures((v) => !v)}>
+        {editingFeatures ? (
+          <div className="space-y-5">
+            {featureFields.map((field) => (
+              <FieldRenderer
+                key={field.id || field.fieldName}
+                field={field}
+                value={dynamicValues[field.fieldName]}
+                onChange={(next) => setDynamicField(field, next)}
               />
-              {errors.brand && (
-                <p className="mt-1 text-sm text-red-600">{errors.brand.message}</p>
-              )}
-            </div>
-          ) : (
-            watch('brand') &&
-            watch('brand') !== '' &&
-            !brandOptions.includes(watch('brand')) && (
-              <p className="mt-1 text-xs text-gray-500">Custom brand: {watch('brand')}</p>
-            )
-          )}
+            ))}
+          </div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {featureFields.map((field) => {
+              const selected = Array.isArray(dynamicValues[field.fieldName]) ? dynamicValues[field.fieldName] : []
+              if (!selected.length) return null
+              const isExpanded = expandedFeatureGroup === field.fieldName
+              const labels = resolveFieldDisplayValue(field, selected, computedOptionsMap[field.fieldName])
+              return (
+                <div key={field.id || field.fieldName} className="py-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-700">{field.fieldTitle}</span>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedFeatureGroup(isExpanded ? null : field.fieldName)}
+                      className="flex items-center gap-2 text-sm font-medium text-gray-900"
+                    >
+                      {selected.length}
+                      <Plus
+                        className="h-4 w-4 transition-transform"
+                        style={{ color: POST_AD_BLUE, transform: isExpanded ? 'rotate(45deg)' : 'none' }}
+                      />
+                    </button>
+                  </div>
+                  {isExpanded && <p className="mt-2 text-sm text-gray-600">{labels.join(', ')}</p>}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </ReviewSectionCard>
+
+      <ReviewSectionCard title="Location" editing={editingLocation} onEdit={() => setEditingLocation((v) => !v)}>
+        {editingLocation ? (
+          <LocationMapPicker setValue={setValue} watch={watch} />
+        ) : (
+          <div>
+            <p className="text-sm text-gray-600 mb-3">{locationSummary || 'No location set'}</p>
+            <LocationMapPicker setValue={setValue} watch={watch} readOnly />
+          </div>
+        )}
+      </ReviewSectionCard>
+
+      {!videoFile && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-4 w-full">
+          ⚠️ No video uploaded
+        </div>
+      )}
+      {imageFiles.length === 0 && (
+        <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-4 w-full">
+          ⚠️ No images uploaded
         </div>
       )}
 
-      {/* Condition - Always shown */}
-      <div>
-        <Controller
-          name="condition"
-          control={control}
-          defaultValue={[]}
-          rules={{
-            validate: (v) => toFilterArray(v).length > 0 || 'Condition is required',
-          }}
-          render={({ field, fieldState }) => (
-            <FilterMultiSelect
-              label="Condition"
-              required
-              options={CONDITION_OPTIONS.map((opt) => ({
-                value: opt,
-                label: opt === 'Brand New' ? `${opt} (Unused)` : opt,
-              }))}
-              value={field.value}
-              onChange={field.onChange}
-              error={fieldState.error}
-              placeholder="Select condition"
-            />
-          )}
-        />
-      </div>
-
-      {/* Category Filters (from Admin -> Filters, applied by category/subcategory) */}
-      {categoryFiltersLoading ? (
-        <div className="flex items-center gap-2 text-sm text-gray-600">
-          <Loader2 className="w-4 h-4 animate-spin" />
-          Loading category filters...
-        </div>
-      ) : categoryFiltersError ? (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <p className="text-sm text-yellow-800">{categoryFiltersError}</p>
-        </div>
-      ) : filterGroups.length ? (
-        <div className="space-y-4">
-          <h3 className="text-sm font-semibold text-gray-900">Category Filters</h3>
-          {filterGroups.map((g) => (
-            <div key={g.fieldKey}>
-              <Controller
-                name={g.fieldKey}
-                control={control}
-                defaultValue={[]}
-                rules={{
-                  validate: (v) => {
-                    if (!(isVehicle && !isBicycle)) return true
-                    const arr = toFilterArray(v)
-                    return arr.length > 0 || `${g.root.name} is required`
-                  },
-                }}
-                render={({ field, fieldState }) => (
-                  <FilterMultiSelect
-                    label={g.root.name}
-                    required={isVehicle && !isBicycle}
-                    options={g.options}
-                    value={field.value}
-                    onChange={field.onChange}
-                    error={fieldState.error}
-                    placeholder={`Select ${g.root.name.toLowerCase()}`}
-                  />
-                )}
-              />
-            </div>
-          ))}
-        </div>
-      ) : null}
-
-      {/* Render dynamic fields */}
-      {dynamicFields.map((fieldName) => {
-        if (fieldName === 'brand' || fieldName === 'condition') return null
-        return renderField(fieldName, {})
-      })}
-
-      {conditionValue === 'Brand New' && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-          <p className="text-sm text-yellow-800">
-            ⚠️ Brand New items cannot have visible damage in photos. Please ensure your photos show an unused item.
-          </p>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// Step 5: Usage Details (renamed from Step4)
-function Step5Usage({ register, errors }) {
-  const currentYear = new Date().getFullYear()
-  const years = Array.from({ length: 20 }, (_, i) => currentYear - i)
-
-  return (
-    <div className="card space-y-6">
-      <h2 className={STEP_CARD_TITLE}>Usage Details</h2>
-      <p className="text-sm text-gray-600 mb-4">All fields are required. Values may be prefilled from your video; complete anything missing.</p>
-      
-      <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-          Purchase Year <span className="text-red-500">*</span>
-        </label>
-        <select
-          {...register('purchaseYear', { required: 'Purchase year is required' })}
-          className="input-field"
-        >
-          <option value="">Select year</option>
-          {years.map(year => (
-            <option key={year} value={year}>{year}</option>
-          ))}
-        </select>
-        {errors.purchaseYear && (
-          <p className="mt-1 text-sm text-red-600">{errors.purchaseYear.message}</p>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Usage Duration <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="number"
-            {...register('usageDuration.value', {
-              required: 'Usage duration is required',
-              min: { value: 0, message: 'Must be 0 or greater' },
-            })}
-            className="input-field"
-            placeholder="e.g., 2"
-          />
-          {errors.usageDuration?.value && (
-            <p className="mt-1 text-sm text-red-600">{errors.usageDuration.value.message}</p>
-          )}
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Unit <span className="text-red-500">*</span>
-          </label>
-          <select
-            {...register('usageDuration.unit', { required: 'Select a unit' })}
-            className="input-field"
-          >
-            <option value="">Select unit</option>
-            <option value="months">Months</option>
-            <option value="years">Years</option>
-          </select>
-          {errors.usageDuration?.unit && (
-            <p className="mt-1 text-sm text-red-600">{errors.usageDuration.unit.message}</p>
-          )}
-        </div>
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Reason for Selling <span className="text-red-500">*</span>
-        </label>
-        <textarea
-          {...register('reasonForSelling', {
-            required: 'Reason for selling is required',
-            minLength: { value: 5, message: 'Please enter at least 5 characters' },
-          })}
-          rows={3}
-          className="input-field"
-          placeholder="e.g., Moving, Upgrading, No longer needed..."
-        />
-        {errors.reasonForSelling && (
-          <p className="mt-1 text-sm text-red-600">{errors.reasonForSelling.message}</p>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// Step 6: Price Details (renamed from Step5)
-function Step6Price({ register, errors, watch, setValue }) {
-  const price = watch('price')
-  const priceType = watch('priceType') || 'Fixed'
-
-  useEffect(() => {
-    setValue('currency', MARKETPLACE_CURRENCY, { shouldDirty: true, shouldValidate: true })
-  }, [setValue])
-
-  const currency = MARKETPLACE_CURRENCY
-  const selectedCurrency = { code: 'AED', symbol: 'AED', name: 'UAE Dirham' }
-
-  return (
-    <div className="card space-y-6">
-      <h2 className={STEP_CARD_TITLE}>Pricing</h2>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Currency <span className="text-red-500">*</span>
-            </label>
-            <select
-          {...register('currency', { required: 'Currency is required' })}
-              className="input-field bg-gray-50"
-        >
-          <option value={MARKETPLACE_CURRENCY}>
-            {MARKETPLACE_CURRENCY} — UAE Dirham (Dubai)
-          </option>
-            </select>
-          <p className="mt-1 text-xs text-gray-500">All prices are in UAE Dirham (AED).</p>
-          </div>
-
-      <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Price <span className="text-red-500">*</span>
-          </label>
-        <div className="flex items-center gap-2">
-          <input
-            type="number"
-            {...register('price', {
-              required: 'Price is required',
-              min: { value: 0.01, message: 'Price must be greater than 0' },
-            })}
-            className="input-field flex-1"
-            placeholder="e.g. 80000"
-            min={0.01}
-            step="0.01"
-          />
-          <span className="text-gray-500 text-sm shrink-0 font-medium">{selectedCurrency.code}</span>
-        </div>
-          {errors.price && (
-            <p className="mt-1 text-sm text-red-600">{errors.price.message}</p>
-          )}
-        {price && (price < 1 || price > 1000000) && (
-          <p className="mt-1 text-sm text-yellow-600">
-            ⚠️ Extreme prices will be flagged for review
-          </p>
-          )}
-        </div>
-
-      <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-          Price Type <span className="text-red-500">*</span>
-        </label>
-        <select
-          {...register('priceType', { required: 'Price type is required' })}
-          className="input-field"
-        >
-          <option value="Fixed">Fixed Price</option>
-          <option value="Negotiable">Negotiable</option>
-        </select>
-        {errors.priceType && (
-          <p className="mt-1 text-sm text-red-600">{errors.priceType.message}</p>
-        )}
-      </div>
-
-      <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
-        <p className="text-sm text-slate-700">
-          Tip: type digits only for the amount in <strong>AED</strong>. Do not enter words like &quot;Free&quot; or
-          &quot;Contact for price&quot;, and do not paste currency symbols into the price box.
-        </p>
-      </div>
-    </div>
-  )
-}
-
-// Step 7: Location & Delivery (renamed from Step6)
-function Step7Location({ register, errors }) {
-  return (
-    <div className="card space-y-6">
-      <h2 className={STEP_CARD_TITLE}>Location & Delivery</h2>
-      
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Country <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-          {...register('country', { required: 'Country is required' })}
-            className="input-field"
-          placeholder="e.g., United States"
-          />
-        {errors.country && (
-          <p className="mt-1 text-sm text-red-600">{errors.country.message}</p>
-          )}
-        </div>
-
-      <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-          City <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-          {...register('city', { required: 'City is required' })}
-            className="input-field"
-          placeholder="e.g., New York"
-          />
-        {errors.city && (
-          <p className="mt-1 text-sm text-red-600">{errors.city.message}</p>
-        )}
-        </div>
-
-      <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-          Area / Locality <span className="text-red-500">*</span>
-          </label>
-        <input
-          type="text"
-          {...register('area', { required: 'Area is required' })}
-            className="input-field"
-          placeholder="e.g., Manhattan, Brooklyn"
-        />
-        {errors.area && (
-          <p className="mt-1 text-sm text-red-600">{errors.area.message}</p>
-          )}
-        </div>
-
-      <div className="space-y-4">
-        <label className="block text-sm font-medium text-gray-700">
-          Delivery Options
-        </label>
-        
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            {...register('deliveryOptions.buyerPickup')}
-            defaultChecked
-            className="w-4 h-4"
-          />
-          <label className="text-sm text-gray-700">Buyer Pickup</label>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            {...register('deliveryOptions.sellerDelivery')}
-            className="w-4 h-4"
-          />
-          <label className="text-sm text-gray-700">Seller Delivery (optional)</label>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Delivery Charges (if seller delivery)
-          </label>
-          <input
-            type="number"
-            {...register('deliveryOptions.deliveryCharges', { min: 0 })}
-            className="input-field"
-            placeholder="0.00"
-            step="0.01"
-          />
-        </div>
-      </div>
-
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <p className="text-sm text-yellow-800">
-          ⚠️ Accurate location only. Fake locations = rejection.
-        </p>
-      </div>
-    </div>
-  )
-}
-
-// Step 8: Description (renamed from Step9)
-// Step 8: Description (renamed from Step9)
-function Step8Description({ register, errors, watch, setValue }) {
-  const description = watch('description') || ''
-  const title = watch('title') || ''
-  const charCount = description.length
-  const [isEnhancing, setIsEnhancing] = useState(false)
-
-  return (
-    <div className="card space-y-6">
-      <h2 className={STEP_CARD_TITLE}>Description</h2>
-      
-      <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Description <span className="text-red-500">*</span>
-          </label>
-          <textarea
-          {...register('description', {
-            required: 'Description is required',
-            minLength: { value: 30, message: 'Description must be at least 30 characters' },
-            maxLength: { value: 2500, message: 'Description cannot exceed 2500 characters' },
-            validate: (value) => {
-              if (value.match(/[A-Z]{10,}/)) {
-                return 'Avoid ALL CAPS spam'
-              }
-              if (value.match(/https?:\/\//)) {
-                return 'External links are not allowed'
-              }
-              return true
-            }
-          })}
-          rows={10}
-            className="input-field"
-          placeholder="Describe your item in detail. Include condition details, comfort/quality notes, reason for selling, pickup/delivery notes..."
-        />
-        <div className="mt-3 flex items-center gap-3 flex-wrap">
-          <button
-            type="button"
-            className="btn-primary"
-            disabled={isEnhancing || !description || description.length < 30}
-            onClick={async () => {
-              setIsEnhancing(true)
-              try {
-                const res = await videoService.enhanceDescription({ title, description })
-                const nextDescription =
-                  res?.data?.enhancedDescription || res?.data?.description || ''
-                if (!nextDescription || typeof nextDescription !== 'string') {
-                  toast.error('AI enhancement returned an empty description.')
-                  return
-                }
-                setValue('description', nextDescription, { shouldDirty: true, shouldTouch: true })
-                toast.success('Description enhanced by AI')
-              } catch (e) {
-                toast.error(e?.response?.data?.message || 'Failed to enhance description')
-              } finally {
-                setIsEnhancing(false)
-              }
-            }}
-          >
-            {isEnhancing ? 'Enhancing…' : 'AI Enhance'}
-          </button>
-          <p className="text-xs text-gray-500">
-            Keeps it concise, engaging, and conversion-focused.
-          </p>
-        </div>
-        <div className="flex flex-col gap-1 mt-2 sm:flex-row sm:justify-between sm:gap-2">
-          <p className="text-sm text-gray-500">
-            {charCount < 30 ? `${30 - charCount} more characters needed` : 'Minimum length met'}
-          </p>
-          <p className={`text-sm ${charCount > 2500 ? 'text-red-600' : 'text-gray-500'}`}>
-            {charCount} / 2,500 characters
-          </p>
-        </div>
-          {errors.description && (
-            <p className="mt-1 text-sm text-red-600">{errors.description.message}</p>
-          )}
-        </div>
-
-      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-        <p className="text-sm font-medium text-green-900 mb-2">Allowed:</p>
-        <ul className="text-sm text-green-800 space-y-1 list-disc list-inside">
-          <li>Condition details</li>
-          <li>Comfort / quality notes</li>
-          <li>Reason for selling</li>
-          <li>Pickup/delivery notes</li>
-        </ul>
-      </div>
-
-      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-        <p className="text-sm font-medium text-red-900 mb-2">Not Allowed:</p>
-        <ul className="text-sm text-red-800 space-y-1 list-disc list-inside">
-          <li>Phone numbers / emails</li>
-          <li>External links</li>
-          <li>ALL CAPS spam</li>
-        </ul>
-      </div>
-    </div>
-  )
-}
-
-// Step 10: Contact Details (renamed from Step9)
-function Step9Contact({ register, errors, user }) {
-  return (
-    <div className="card space-y-6">
-      <h2 className={STEP_CARD_TITLE}>Contact Preferences</h2>
-      
-      <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-          Contact Name <span className="text-red-500">*</span>
-            </label>
-        <input
-          type="text"
-          {...register('contactName', { required: 'Contact name is required' })}
-              className="input-field"
-          defaultValue={user?.name || ''}
-          placeholder="Your name"
-        />
-        {errors.contactName && (
-          <p className="mt-1 text-sm text-red-600">{errors.contactName.message}</p>
-        )}
-      </div>
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Verified Phone Number <span className="text-red-500">*</span>
-        </label>
-        <input
-          type="tel"
-          {...register('contactPhone', { 
-            required: 'Phone number is required',
-            pattern: {
-              value: /^[\d\s\-\+\(\)]+$/,
-              message: 'Invalid phone number format'
-            }
-          })}
-          className="input-field"
-          defaultValue={user?.phone || ''}
-          placeholder="+1234567890"
-        />
-        {errors.contactPhone && (
-          <p className="mt-1 text-sm text-red-600">{errors.contactPhone.message}</p>
-        )}
-        {user?.phone && (
-          <p className="mt-1 text-xs text-gray-500">
-            Using verified phone: {user.phone}
-          </p>
-        )}
-          </div>
-
-      <div className="space-y-3">
-        <label className="block text-sm font-medium text-gray-700">
-          Contact Options <span className="text-red-500">*</span>
-        </label>
-        
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            {...register('contactOptions.inAppChat')}
-            defaultChecked
-            className="w-4 h-4"
-          />
-          <label className="text-sm text-gray-700">In-app chat</label>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            {...register('contactOptions.call')}
-            defaultChecked
-            className="w-4 h-4"
-          />
-          <label className="text-sm text-gray-700">Call</label>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            {...register('contactOptions.whatsapp')}
-            className="w-4 h-4"
-          />
-          <label className="text-sm text-gray-700">WhatsApp (optional)</label>
-        </div>
-      </div>
-
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-        <p className="text-sm text-yellow-800">
-          ⚠️ Only verified numbers allowed. No contact info inside description.
-        </p>
-      </div>
-    </div>
-  )
-}
-
-// Step 11: Review & Confirm (renamed from Step10)
-function Step10Review({ formData, imageFiles, videoFile, categories, selectedCategory, subcategories, categoryPathNames, register, errors }) {
-  const category = categories.find(cat => cat._id === selectedCategory)
-  const subcategory = subcategories.find(sub => sub._id === formData.subcategory)
-
-  return (
-    <div className="card space-y-6">
-      <h2 className={STEP_CARD_TITLE}>Review Your Listing</h2>
-      
-      <div className="space-y-4">
-        <div className="border-b pb-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Category</h3>
-          {categoryPathNames?.length > 0 ? (
-            <p className="text-gray-700">{categoryPathNames.join(' → ')}</p>
-          ) : (
-            <>
-              <p className="text-gray-700">{category?.emoji} {category?.name}</p>
-              {subcategory && <p className="text-sm text-gray-600">{subcategory.name}</p>}
-            </>
-          )}
-        </div>
-
-        <div className="border-b pb-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Basic Details</h3>
-          <div className="space-y-1 text-sm text-gray-700">
-            <p><strong>Title:</strong> {formData.title}</p>
-            <p><strong>Brand:</strong> {formData.brand || 'Not specified'}</p>
-            <p><strong>Condition:</strong> {formData.condition}</p>
-            {formData.material && <p><strong>Material:</strong> {formData.material}</p>}
-            {formData.color && <p><strong>Color:</strong> {formData.color}</p>}
-          </div>
-        </div>
-
-        <div className="border-b pb-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Price</h3>
-          <p className="text-gray-700">
-            {formData.currency || MARKETPLACE_CURRENCY} {formData.price} ({formData.priceType || 'Fixed'})
-          </p>
-        </div>
-
-        <div className="border-b pb-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Ad Category</h3>
-          <div className="space-y-3">
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input type="radio" value="free" {...register('adType', { required: 'Please select an ad type' })} defaultChecked={formData.adType === 'free'} className="mt-1" />
-              <span>
-                <span className="font-medium text-gray-900">Free</span>
-                <span className="block text-xs text-gray-600">Standard visibility, pending moderation</span>
-              </span>
-            </label>
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input type="radio" value="basic" {...register('adType', { required: 'Please select an ad type' })} defaultChecked={formData.adType === 'basic'} className="mt-1" />
-              <span>
-                <span className="font-medium text-gray-900">Basic</span>
-                <span className="block text-xs text-gray-600">Boosted visibility, pending moderation</span>
-              </span>
-            </label>
-            <label className="flex items-start gap-3 cursor-pointer">
-              <input type="radio" value="premium" {...register('adType', { required: 'Please select an ad type' })} defaultChecked={formData.adType === 'premium'} className="mt-1" />
-              <span>
-                <span className="font-medium text-gray-900">Premium</span>
-                <span className="block text-xs text-gray-600">Top placement, pending moderation</span>
-              </span>
-            </label>
-          </div>
-          {errors.adType && (
-            <p className="mt-2 text-sm text-red-600">{errors.adType.message}</p>
-          )}
-        </div>
-
-        <div className="border-b pb-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Location</h3>
-          <p className="text-gray-700">{formData.area}, {formData.city}, {formData.country}</p>
-        </div>
-
-        <div className="border-b pb-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Media</h3>
-          {videoFile ? (
-            <p className="text-gray-700">✓ 1 video uploaded</p>
-          ) : (
-            <p className="text-gray-700 text-red-600">⚠️ No video uploaded</p>
-          )}
-          {imageFiles.length > 0 ? (
-            <p className="text-gray-700">✓ {imageFiles.length} image(s) uploaded</p>
-          ) : (
-            <p className="text-gray-700 text-red-600">⚠️ No images uploaded</p>
-          )}
-        </div>
-
-        <div className="border-b pb-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Description</h3>
-          <p className="text-gray-700 text-sm">{formData.description?.substring(0, 200)}...</p>
-        </div>
-
-        <div className="border-b pb-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Contact</h3>
-          <p className="text-gray-700">{formData.contactName}</p>
-          <p className="text-gray-700 text-sm">{formData.contactPhone}</p>
-        </div>
-      </div>
-
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 w-full">
         <div className="flex items-start gap-2">
-          <input 
-            type="checkbox" 
-            id="acceptRules" 
+          <input
+            type="checkbox"
+            id="acceptRules"
             {...register('acceptRules', { required: 'You must accept the posting rules' })}
-            className="mt-1" 
+            className="mt-1"
           />
           <label htmlFor="acceptRules" className="text-sm text-blue-900">
-            I accept the posting rules and confirm that all information is accurate. I understand that wrong category, fake locations, stock images, or misleading information will result in rejection.
+            I accept the posting rules and confirm that all information is accurate. I understand that wrong
+            category, fake locations, stock images, or misleading information will result in rejection.
           </label>
         </div>
-        {errors.acceptRules && (
-          <p className="mt-2 text-sm text-red-600">{errors.acceptRules.message}</p>
-        )}
+        {errors.acceptRules && <p className="mt-2 text-sm text-red-600">{errors.acceptRules.message}</p>}
+      </div>
+
+      {requestPreview && (
+        <div className="w-full bg-white rounded-xl border border-gray-200 p-5 mb-4">
+          <h3 className="font-semibold text-gray-900 mb-3">Request Preview (posting this to the API)</h3>
+          <pre className="text-xs text-gray-700 whitespace-pre-wrap break-words bg-gray-50 rounded-lg p-3 overflow-x-auto">
+{`LOG  [HTTP:REQUEST] POST ${requestPreview.url}
+headers=${JSON.stringify(requestPreview.headers, null, 2)}
+params=undefined
+data=${JSON.stringify(requestPreview.data, null, 2)}`}
+          </pre>
+        </div>
+      )}
+
+      <div className="post-ad-fixed-footer">
+        <div className="mx-auto w-full max-w-[920px] px-4 pt-4 sm:px-6 sm:pt-5">
+          <div className="mb-3 flex gap-1 sm:mb-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div key={i} className="h-[3px] flex-1 rounded-full" style={{ backgroundColor: POST_AD_NAVY }} />
+            ))}
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-gray-600">4 of 4</p>
+            <button
+              type="submit"
+              disabled={isSubmitting || watch('acceptRules') !== true}
+              onClick={(e) => {
+                if (watch('acceptRules') !== true) {
+                  e.preventDefault()
+                  toast.error('Please accept the posting rules to continue')
+                  return
+                }
+                setRequestPreview(buildRequestPreview())
+              }}
+              className="inline-flex w-full items-center justify-center gap-1 rounded-xl px-8 py-3.5 text-[15px] font-semibold text-white transition disabled:opacity-50 sm:w-auto sm:px-10"
+              style={{ backgroundColor: POST_AD_BLUE }}
+              onMouseEnter={(e) => {
+                if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = '#1d4ed8'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = POST_AD_BLUE
+              }}
+            >
+              {isSubmitting ? (isEditMode ? 'Saving...' : 'Posting...') : isEditMode ? 'Save Changes' : 'Post Ad'}
+              <span className="text-lg leading-none">&gt;</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )
@@ -3117,7 +3165,7 @@ function Step10Review({ formData, imageFiles, videoFile, categories, selectedCat
 function PostAdPage() {
   const dispatch = useDispatch()
   const navigate = useNavigate()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const editProductId = searchParams.get('edit')
   const isEditMode = !!editProductId
   const [editProductPostedAt, setEditProductPostedAt] = useState(null)
@@ -3125,8 +3173,12 @@ function PostAdPage() {
   const { categories } = useSelector((state) => state.categories)
   const { loading } = useSelector((state) => state.products)
   const { user } = useSelector((state) => state.auth)
+  // Admin-configured Car Overview/Features fields live in their own Redux slice
+  // (dynamicForm), not react-hook-form — pulled in here so onSubmit can send them.
+  const allDynamicFieldsForSubmit = useSelector(selectDynamicFormAllFields)
+  const dynamicFormSubmitValues = useSelector(selectDynamicFormValues)
   
-  const { register, handleSubmit, watch, setValue, getValues, trigger, control, formState: { errors } } = useForm({
+  const { register, handleSubmit, watch, setValue, getValues, trigger, control, reset, formState: { errors } } = useForm({
     mode: 'onChange', // Validate on change for better UX
     defaultValues: {
       currency: MARKETPLACE_CURRENCY,
@@ -3160,9 +3212,14 @@ function PostAdPage() {
       reasonForSelling: '',
     }
   })
-  
+
+  // Reactive subscription to every field so the draft-autosave effect below re-runs
+  // as the user types, not just when step/category/video/photos change.
+  const watchedFormValuesForDraft = watch()
+
   const [currentStep, setCurrentStep] = useState(1)
   const [initialStepResolved, setInitialStepResolved] = useState(false)
+  const isDynamicFormReadyToSubmit = useSelector(selectDynamicFormIsReadyToSubmit)
   const [imageFiles, setImageFiles] = useState([])
   const [videoFile, setVideoFile] = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('')
@@ -3191,31 +3248,128 @@ function PostAdPage() {
 
   const prevFilterScopeRef = useRef('')
   const prevFilterFieldKeysRef = useRef([])
+  // Step 5's admin-configured fields live in a Redux slice that gets wiped as soon
+  // as that step mounts (setActiveCategory resets `values`), so a restored draft's
+  // dynamic-form values are handed down via ref and re-applied right after — see
+  // useCategoryDynamicForm.
+  const restoredDynamicFormValuesRef = useRef(null)
 
   // Restore session from storage when entering post-ad (prevents false logout on Back).
   useEffect(() => {
     dispatch(rehydrateSessionFromStorage())
   }, [dispatch])
 
-  // Fresh post-ad flow each visit: step 2 categories, no stale selection/video.
+  // Fresh post-ad flow each visit — UNLESS a previously saved draft exists for this
+  // user (IndexedDB; see postAdDraftStore), in which case it's restored instead so a
+  // refresh, or leaving and coming back to /post-ad, picks up right where they left
+  // off (title/description/category/photos/video and admin-configured fields).
+  // A `step` URL param (kept in sync below) still wins over the draft's own step
+  // when present, so deep-linking to a specific step keeps working.
   useEffect(() => {
     if (isEditMode) {
       setInitialStepResolved(true)
       return
     }
 
-    setSelectedPath([])
-    setSelectedCategory('')
-    setValue('category', '')
-    setValue('subcategory', '')
-    setValue('childCategory', '')
-    setValue('categoryPath', [])
-    setVideoFile(null)
-    setImageFiles([])
-    setCategoryPhase('root')
-    setCurrentStep(user ? (user?.role === 'admin' || user.isVerified ? 2 : 1) : 1)
-    setInitialStepResolved(true)
+    let cancelled = false
+
+    const restoreOrReset = async () => {
+      const draft = user?._id ? await loadPostAdDraft(user._id) : null
+
+      if (!cancelled && draft && draft.currentStep > 1) {
+        Object.entries(draft.formValues || {}).forEach(([key, value]) => setValue(key, value))
+        if (draft.videoFile) setValue('video', draft.videoFile)
+        setSelectedPath(draft.selectedPath || [])
+        setSelectedCategory(draft.selectedCategory || '')
+        setCategoryPhase(draft.categoryPhase || 'root')
+        setVideoFile(draft.videoFile || null)
+        setImageFiles(draft.imageFiles || [])
+        restoredDynamicFormValuesRef.current = draft.dynamicFormValues || null
+
+        const requestedDisplayStep = Number(searchParams.get('step'))
+        const requestedStep = Number.isInteger(requestedDisplayStep) ? toInternalStep(requestedDisplayStep) : NaN
+        const canHonorRequestedStep =
+          Number.isInteger(requestedStep) && requestedStep >= 2 && requestedStep <= TOTAL_STEPS
+        setCurrentStep(canHonorRequestedStep ? requestedStep : draft.currentStep)
+        setInitialStepResolved(true)
+        return
+      }
+
+      if (cancelled) return
+
+      setSelectedPath([])
+      setSelectedCategory('')
+      setValue('category', '')
+      setValue('subcategory', '')
+      setValue('childCategory', '')
+      setValue('categoryPath', [])
+      setVideoFile(null)
+      setImageFiles([])
+      setCategoryPhase('root')
+
+      const defaultStep = user ? (user?.role === 'admin' || user.isVerified ? 2 : 1) : 1
+      const requestedDisplayStep = Number(searchParams.get('step'))
+      const requestedStep = Number.isInteger(requestedDisplayStep) ? toInternalStep(requestedDisplayStep) : NaN
+      const canHonorRequestedStep =
+        defaultStep > 1 && Number.isInteger(requestedStep) && requestedStep >= 2 && requestedStep <= TOTAL_STEPS
+      setCurrentStep(canHonorRequestedStep ? requestedStep : defaultStep)
+      setInitialStepResolved(true)
+    }
+
+    restoreOrReset()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch, isEditMode, setValue, user?.id])
+
+  // Debounced autosave of the in-progress draft (text fields, category, video, photos,
+  // and Step 5's admin-configured fields) so it survives a refresh or navigating away.
+  useEffect(() => {
+    if (isEditMode || !initialStepResolved || !user?._id || currentStep < 2) return
+
+    const timeoutId = window.setTimeout(() => {
+      const { video, ...formValues } = getValues()
+      savePostAdDraft(user._id, {
+        currentStep,
+        categoryPhase,
+        selectedPath,
+        selectedCategory,
+        formValues,
+        videoFile,
+        imageFiles,
+        dynamicFormValues: dynamicFormSubmitValues,
+      })
+    }, 800)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [
+    isEditMode,
+    initialStepResolved,
+    user?._id,
+    currentStep,
+    categoryPhase,
+    selectedPath,
+    selectedCategory,
+    videoFile,
+    imageFiles,
+    dynamicFormSubmitValues,
+    watchedFormValuesForDraft,
+    getValues,
+  ])
+
+  // Keep the URL's `step` param in sync so a refresh returns to this step.
+  useEffect(() => {
+    if (!initialStepResolved) return
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.set('step', String(toDisplayStep(currentStep)))
+        return next
+      },
+      { replace: true },
+    )
+  }, [currentStep, initialStepResolved, setSearchParams])
 
   // Root categories for step 2 (single request; aborted on leave via route scope).
   useEffect(() => {
@@ -3546,7 +3700,7 @@ function PostAdPage() {
           })
         }
 
-        setCurrentStep(4)
+        setCurrentStep(5)
         window.scrollTo(0, 0)
       } catch (error) {
         console.error('Error loading product:', error)
@@ -3726,47 +3880,13 @@ function PostAdPage() {
       return nonScreenshotImages.length > 0 || screenshotImages.length > 0
     }
 
-    case 4: {
-      const cat = categories.find((c) => c._id === watch('category'))
-      const isVehicle = cat && /vehicles?|motors?|cars?|auto/i.test(String(cat.name || ''))
-      const base = toFilterArray(watch('condition')).length > 0
-      if (isVehicle) return base && !!watch('make')?.trim()
-      return base
-    }
+    case 4:
+      return imageFiles.length > 0
 
-    case 5: {
-      const py = watch('purchaseYear')
-      const uv = watch('usageDuration.value')
-      const uu = watch('usageDuration.unit')
-      const rs = (watch('reasonForSelling') || '').trim()
-      return (
-        py !== undefined &&
-        py !== null &&
-        py !== '' &&
-        uv !== undefined &&
-        uv !== null &&
-        uv !== '' &&
-        !Number.isNaN(Number(uv)) &&
-        !!uu &&
-        rs.length >= 5
-      )
-    }
+    case 5:
+      return isDynamicFormReadyToSubmit
 
     case 6:
-      return !!watch('price') && Number(watch('price')) > 0 && !!watch('priceType')
-
-    case 7:
-      return !!watch('country') && !!watch('city') && !!watch('area')
-
-    case 8: {
-      const desc = watch('description') || ''
-      return desc.length >= 30 && desc.length <= 2500
-    }
-
-    case 9:
-      return !!watch('contactName') && !!watch('contactPhone')
-
-    case 10:
       return watch('acceptRules') === true
 
     default:
@@ -3808,40 +3928,13 @@ function PostAdPage() {
         return subs.length > 0 ? ['category', 'subcategory'] : ['category']
       }
       case 3: return ['title', 'description']
-      case 4: {
-        const cat = (flatCategoriesForSteps.length ? flatCategoriesForSteps : categories).find((c) => c._id === watch('category'))
-        if (!cat) return ['condition']
-        const categoryName = cat.name || ''
-        const resolvedKey = resolveCategoryKeyForFields(categoryName)
-        const sub = levelOptions[1]?.find((s) => s._id === watch('subcategory'))
-        const subName = sub?.name || ''
-        const isVehicleCat = /vehicles?|motors?|cars?|auto/i.test(String(categoryName || ''))
-        const isBicycle = isVehicleCat && isVehicleSubcategoryBicycle(subName)
-        let dyn = getFieldsForCategory(resolvedKey, subName)
-        if (isVehicleCat && isBicycle) {
-          dyn = dyn.filter((f) => f !== 'transmission' && f !== 'fuelType')
-        }
-        const filterKeys = watch('__categoryFilterFieldKeys') || []
-        const brands = getBrandOptionsForCategory(resolvedKey, subName)
-        const fields = ['condition', ...dyn, ...filterKeys]
-        if (isVehicleCat) fields.push('make')
-        if (brands.length) {
-          fields.push('brandChoice')
-          if (toFilterArray(watch('brandChoice')).includes('Other')) fields.push('brand')
-        }
-        return [...new Set(fields)]
-      }
-      case 5:
-        return ['purchaseYear', 'usageDuration.value', 'usageDuration.unit', 'reasonForSelling']
-      case 6: return ['price', 'priceType']
-      case 7: return ['country', 'city', 'area']
-      case 8: return ['description']
-      case 9: return ['contactName', 'contactPhone']
-      case 10: return ['acceptRules']
+      case 4: return ['title', 'description']
+      case 5: return []
+      case 6: return ['acceptRules']
       default: return []
     }
   }
-  
+
   const validateField = (step, field, value) => {
     switch (step) {
       case 2:
@@ -3851,18 +3944,7 @@ function PostAdPage() {
         if (field === 'title') return value && value.length >= 10 && value.length <= 100
         if (field === 'condition') return !!value
         return true
-      case 5:
-        if (field === 'price') return value && !isNaN(value) && Number(value) > 0
-        if (field === 'priceType') return !!value
-        return true
       case 6:
-        return !!value
-      case 8:
-        if (field === 'description') return value && value.length >= 30 && value.length <= 2500
-        return true
-      case 9:
-        return !!value
-      case 10:
         if (field === 'acceptRules') return value === true
         return true
       default:
@@ -3897,49 +3979,14 @@ function PostAdPage() {
     }
 
     case 4:
-      if (!watch('condition')) return 'Please select a condition'
-      {
-        const cat = (flatCategoriesForSteps.length ? flatCategoriesForSteps : categories).find((c) => c._id === watch('category'))
-        const isVehicle = cat && /vehicles?|motors?|cars?|auto/i.test(String(cat.name || ''))
-        if (isVehicle && !watch('make')?.trim()) return 'Please enter make (e.g. Toyota, Mercedes)'
-        return 'Please complete all required fields'
-      }
+      if (imageFiles.length === 0) return 'Please add at least one photo'
+      return 'Please complete all required fields'
 
     case 5:
-      if (!watch('purchaseYear')) return 'Please select purchase year'
-      if (watch('usageDuration.value') === '' || watch('usageDuration.value') == null) return 'Please enter usage duration'
-      if (!watch('usageDuration.unit')) return 'Please select usage unit'
-      if (!(watch('reasonForSelling') || '').trim() || (watch('reasonForSelling') || '').trim().length < 5) {
-        return 'Please enter reason for selling (at least 5 characters)'
-      }
+      if (!isDynamicFormReadyToSubmit) return 'Please complete the additional details below'
       return 'Please complete all required fields'
 
     case 6:
-      if (!watch('price')) return 'Please enter a price'
-      if (Number(watch('price')) <= 0) return 'Price must be greater than 0'
-      if (!watch('priceType')) return 'Please select price type'
-      return 'Please complete all required fields'
-
-    case 7:
-      if (!watch('country')) return 'Please enter your country'
-      if (!watch('city')) return 'Please enter your city'
-      if (!watch('area')) return 'Please enter your area'
-      return 'Please complete all required fields'
-
-    case 8: {
-      const desc = watch('description') || ''
-      if (!desc) return 'Please enter a description'
-      if (desc.length < 30) return 'Description must be at least 30 characters'
-      if (desc.length > 2500) return 'Description must not exceed 2500 characters'
-      return 'Please complete all required fields'
-    }
-
-    case 9:
-      if (!watch('contactName')) return 'Please enter contact name'
-      if (!watch('contactPhone')) return 'Please enter phone number'
-      return 'Please complete all required fields'
-
-    case 10:
       if (!watch('acceptRules')) return 'Please accept the posting rules'
       return 'Please complete all required fields'
 
@@ -3957,7 +4004,7 @@ function PostAdPage() {
   const handlePostAdBack = () => {
     if (currentStep === 3) {
       if (isEditMode) {
-        setCurrentStep(4)
+        setCurrentStep(5)
         window.scrollTo(0, 0)
         return
       }
@@ -3974,6 +4021,31 @@ function PostAdPage() {
     if (currentStep === 2) {
       navigate('/', { replace: true })
     }
+  }
+
+  // True once the user has entered anything worth offering to discard — used to
+  // show/hide the "Flush Data" button below.
+  const hasEnteredData =
+    currentStep > 2 ||
+    (currentStep === 2 && selectedPath.length > 0) ||
+    Boolean(videoFile) ||
+    imageFiles.length > 0 ||
+    Boolean((watch('title') || '').trim()) ||
+    Boolean((watch('description') || '').trim())
+
+  const handleFlushData = () => {
+    if (user?._id) clearPostAdDraft(user._id)
+    reset()
+    setSelectedPath([])
+    setSelectedCategory('')
+    setVideoFile(null)
+    setImageFiles([])
+    setCategoryPhase('root')
+    dispatch(resetDynamicForm())
+    restoredDynamicFormValuesRef.current = null
+    setCurrentStep(user ? (user?.role === 'admin' || user.isVerified ? 2 : 1) : 1)
+    window.scrollTo(0, 0)
+    toast.success('All entered data cleared.')
   }
 
   const onSubmit = async (data) => {
@@ -3994,13 +4066,27 @@ function PostAdPage() {
       }
       if (imageFiles.length === 0) {
         toast.error('Please upload at least 1 image')
-        setCurrentStep(8)
+        setCurrentStep(4)
         setIsSubmitting(false)
         return
       }
 
-      // Combine location fields
-      const location = data.location || (data.area && data.city && data.country ? `${data.area}, ${data.city}, ${data.country}` : '')
+      // Combine location fields. The old Location & Delivery step (country/city/area)
+      // was removed, and the map picker's locationAddress only populates once Google
+      // Maps is actually configured (VITE_GOOGLE_MAPS_API_KEY) — until then, fall back
+      // to any admin-configured free-text field (e.g. "Locate your item"), since the
+      // backend's `location` schema field is required and rejects an empty string.
+      const dynamicTextFallback = allDynamicFieldsForSubmit
+        .filter((f) => getFieldKind(f.fieldType) === FIELD_KIND.TEXT)
+        .map((f) => dynamicFormSubmitValues[f.fieldName])
+        .filter(Boolean)
+        .join(', ')
+      const location =
+        data.location ||
+        data.locationAddress ||
+        (data.area && data.city && data.country ? `${data.area}, ${data.city}, ${data.country}` : '') ||
+        dynamicTextFallback ||
+        'Not specified' // last-resort fallback — Product.location is a required schema field
 
       // AI validation layer for car listings:
       // Merge AI extracted values + user edits, then ensure all required car fields exist before submit.
@@ -4193,10 +4279,19 @@ function PostAdPage() {
         .filter(Boolean)
 
       // Prepare form data with proper structure
+      // Price/condition come only from AI extraction now (their manual steps were
+      // removed) — fall back to a dummy value when AI didn't detect one, since both
+      // are required by the backend's route-level and schema validation.
+      const priceNumeric = Number(data.price)
+      const priceValue = data.price !== '' && data.price != null && !Number.isNaN(priceNumeric) && priceNumeric > 0
+        ? data.price
+        : 1
+      const conditionValue = scalarFromMultiSelect(data.condition) || 'Good'
+
       const formData = {
         title: data.title,
         description: data.description,
-        price: data.price,
+        price: priceValue,
         currency: MARKETPLACE_CURRENCY,
         category: data.category,
         // Two-level category flow: category + subcategory only.
@@ -4205,11 +4300,14 @@ function PostAdPage() {
         categoryPath: JSON.stringify(pathIds),
         categoryPathNames: JSON.stringify(pathNames),
         location: location,
+        latitude: data.latitude ?? null,
+        longitude: data.longitude ?? null,
+        locationAddress: data.locationAddress || null,
         country: data.country,
         city: data.city,
         area: data.area,
         brand: data.brand || null,
-        condition: scalarFromMultiSelect(data.condition) || null,
+        condition: conditionValue,
         material: data.material || null,
         color: scalarFromMultiSelect(data.color) || null,
         make: data.make || null,
@@ -4269,6 +4367,35 @@ function PostAdPage() {
       }
       if (Object.keys(filterEntries).length) {
         console.log('[PostAd] Sending filter data:', filterEntries)
+      }
+
+      // Admin-configured Car Overview/Features fields (modelid, trimid, cityid,
+      // driverassistancesafetyid, ...) live in the dynamicForm Redux slice, not
+      // react-hook-form, so they need to be attached explicitly. Sent as raw ids under
+      // each field's own fieldName, multi-select values comma-joined — matching the
+      // backend's productVehicleFields lowercase-key aliasing (see api/utils/productVehicleFields.js).
+      //
+      // Any field whose admin-configured type is "checkbox" (multi-select — see
+      // FIELD_KIND.CHECKBOX / getFieldKind) is ALSO grouped into a single `features`
+      // JSON array of { title, values }, purely by field type so it applies to every
+      // category automatically, including ones added later — no per-field allowlist.
+      const features = []
+      allDynamicFieldsForSubmit.forEach((field) => {
+        const raw = dynamicFormSubmitValues[field.fieldName]
+        if (raw === undefined || raw === null || raw === '') return
+
+        const value = Array.isArray(raw) ? raw.join(',') : String(raw)
+        if (value) formData[field.fieldName] = value
+
+        if (getFieldKind(field.fieldType) === FIELD_KIND.CHECKBOX) {
+          const values = (Array.isArray(raw) ? raw : [raw]).filter(Boolean).map(String)
+          if (values.length) {
+            features.push({ title: field.fieldTitle || field.fieldName, values })
+          }
+        }
+      })
+      if (features.length > 0) {
+        formData.features = features
       }
 
       // Attach any other transcription/dynamic primitive fields so they persist.
@@ -4370,17 +4497,31 @@ function PostAdPage() {
       } else {
         await dispatch(createProduct(formData)).unwrap()
         toast.success('Product submitted for review! It will be visible after admin approval.')
+        if (user?._id) clearPostAdDraft(user._id)
       }
       navigate('/dashboard')
     } catch (error) {
-      console.error('Error submitting form:', error?.response?.data || error)
-      const errPayload = error?.response?.data || (typeof error === 'object' ? error : null)
-      const errorMessage =
-        (typeof errPayload === 'string' ? errPayload : errPayload?.message) ||
-        error?.message ||
-        `Failed to ${isEditMode ? 'update' : 'post'} product`
-      const angleChecklist =
-        typeof errPayload === 'object' && errPayload ? errPayload.angleChecklist : undefined
+      console.error('Error submitting form:', error)
+      // `error` here is normally the createProduct/updateProduct thunk's
+      // rejectWithValue({ message, angleChecklist }), but stay defensive — a raw
+      // axios error (response.data.message) or a plain thrown Error can also reach
+      // this catch (e.g. a failure earlier in the try block, before dispatch).
+      const responseData = error?.response?.data
+      let errorMessage
+      let angleChecklist
+      if (typeof error === 'string') {
+        errorMessage = error
+      } else if (typeof responseData === 'string') {
+        errorMessage = responseData
+      } else if (responseData?.message) {
+        errorMessage = responseData.message
+        angleChecklist = responseData.angleChecklist
+      } else if (error?.message) {
+        errorMessage = error.message
+        angleChecklist = error.angleChecklist
+      } else {
+        errorMessage = `Failed to ${isEditMode ? 'update' : 'post'} product`
+      }
       toast.error(
         Array.isArray(angleChecklist) && angleChecklist.length
           ? `${errorMessage} (${angleChecklist.join(', ')})`
@@ -4416,10 +4557,24 @@ function PostAdPage() {
 
   const isCategoryStep = currentStep === 2 && !isEditMode
   const isListingDetailsStep = currentStep === 3 && !isEditMode
+  const isTitlePhotosStep = currentStep === 4 && !isEditMode
+  const isBasicDetailsStep = currentStep === 5
+  const isReviewStep = currentStep === 6
 
   return (
-    <div className={`mx-auto w-full ${isCategoryStep || isListingDetailsStep ? 'max-w-none px-0 py-0' : 'max-w-4xl px-3 sm:px-4 md:px-6 lg:px-8 py-6 sm:py-8'}`}>
-      {!isCategoryStep && !isListingDetailsStep && (
+    <div className={`mx-auto w-full ${isCategoryStep || isListingDetailsStep || isTitlePhotosStep || isBasicDetailsStep || isReviewStep ? 'max-w-none px-0 py-0' : 'max-w-4xl px-3 sm:px-4 md:px-6 lg:px-8 py-6 sm:py-8'}`}>
+      {!isEditMode && hasEnteredData && (
+        <button
+          type="button"
+          onClick={handleFlushData}
+          className="fixed top-16 right-3 z-40 inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-3.5 py-2 text-xs font-semibold text-red-700 shadow-sm transition hover:bg-red-100 sm:top-20 sm:right-6"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+          Flush Data
+        </button>
+      )}
+
+      {!isCategoryStep && !isListingDetailsStep && !isTitlePhotosStep && !isBasicDetailsStep && !isReviewStep && (
         <>
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 mb-6 sm:mb-8">
             {isEditMode ? 'Edit Product' : 'Post Your Ad'}
@@ -4429,16 +4584,16 @@ function PostAdPage() {
           <div className="mb-6 sm:mb-8">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
               <span className="text-sm font-medium text-gray-700">
-                Step {currentStep} of {TOTAL_STEPS}
+                Step {toDisplayStep(currentStep)} of {DISPLAY_TOTAL_STEPS}
               </span>
               <span className="text-sm text-gray-500">
-                {Math.round((currentStep / TOTAL_STEPS) * 100)}% Complete
+                {Math.round((toDisplayStep(currentStep) / DISPLAY_TOTAL_STEPS) * 100)}% Complete
               </span>
             </div>
             <div className="w-full bg-gray-200 rounded-full h-2">
               <div
                 className="bg-primary-600 h-2 rounded-full transition-all duration-300"
-                style={{ width: `${(currentStep / TOTAL_STEPS) * 100}%` }}
+                style={{ width: `${(toDisplayStep(currentStep) / DISPLAY_TOTAL_STEPS) * 100}%` }}
               />
             </div>
           </div>
@@ -4499,6 +4654,18 @@ function PostAdPage() {
           />
         )}
         {currentStep === 4 && (
+          <Step4TitlePhotosReview
+            register={register}
+            errors={errors}
+            imageFiles={imageFiles}
+            setImageFiles={setImageFiles}
+            videoFile={videoFile}
+            breadcrumbItems={categoryPathNames}
+            onBack={prevStep}
+            onNext={nextStep}
+          />
+        )}
+        {currentStep === 5 && (
           <Step4BasicDetails
             register={register}
             watch={watch}
@@ -4509,20 +4676,13 @@ function PostAdPage() {
             categories={flatCategoriesForSteps.length ? flatCategoriesForSteps : categories}
             selectedCategory={selectedCategoryForSteps || selectedCategory}
             subcategories={levelOptions[1] || []}
+            breadcrumbItems={categoryPathNames}
+            onBack={prevStep}
+            onNext={nextStep}
+            initialDynamicFormValues={restoredDynamicFormValuesRef.current}
           />
         )}
-        {currentStep === 5 && <Step5Usage register={register} errors={errors} />}
         {currentStep === 6 && (
-          <Step6Price register={register} watch={watch} setValue={setValue} errors={errors} />
-        )}
-        {currentStep === 7 && <Step7Location register={register} errors={errors} />}
-        {currentStep === 8 && (
-          <Step8Description register={register} watch={watch} errors={errors} setValue={setValue} />
-        )}
-        {currentStep === 9 && (
-          <Step9Contact register={register} errors={errors} user={user} />
-        )}
-        {currentStep === 10 && (
           <Step10Review
             formData={watch()}
             imageFiles={imageFiles}
@@ -4533,64 +4693,12 @@ function PostAdPage() {
             categoryPathNames={categoryPathNames}
             register={register}
             errors={errors}
+            setValue={setValue}
+            watch={watch}
+            isSubmitting={isSubmitting}
+            isEditMode={isEditMode}
+            onBack={prevStep}
           />
-        )}
-        {currentStep === 12 && (
-          <div className="card text-center py-8 sm:py-12 px-4">
-            <div className="animate-spin rounded-full h-12 w-12 sm:h-16 sm:w-16 border-b-2 border-primary-600 mx-auto mb-4"></div>
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">Submitting Your Ad...</h2>
-            <p className="text-gray-600">Please wait while we process your submission</p>
-          </div>
-        )}
-
-        {/* Navigation Buttons */}
-        {currentStep < TOTAL_STEPS && currentStep !== 1 && currentStep !== 2 && currentStep !== 3 && (
-          <div className="post-ad-form-nav">
-          <button
-            type="button"
-              onClick={prevStep}
-              className="btn-secondary post-ad-form-nav-btn flex items-center gap-2"
-          >
-              <ChevronLeft className="w-4 h-4" />
-              Previous
-          </button>
-            {currentStep === 10 ? (
-          <button
-            type="submit"
-                disabled={isSubmitting || !validateStep(10)}
-                onClick={(e) => {
-                  // Ensure form validation passes before submitting
-                  if (!validateStep(10)) {
-                    e.preventDefault()
-                    toast.error('Please accept the posting rules to continue')
-                    return false
-                  }
-                }}
-                className="btn-primary post-ad-form-nav-btn flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isSubmitting ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                    {isEditMode ? 'Saving...' : 'Posting...'}
-                  </>
-                ) : (
-                  <>
-                    {isEditMode ? 'Save Changes' : 'Post Ad'}
-                    <ChevronRight className="w-4 h-4" />
-                  </>
-                )}
-          </button>
-            ) : (
-              <button
-                type="button"
-                onClick={nextStep}
-                className="btn-primary post-ad-form-nav-btn flex items-center gap-2"
-              >
-                Next
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
-        </div>
         )}
 
         {currentStep === 1 && (

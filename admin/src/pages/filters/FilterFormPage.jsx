@@ -218,6 +218,11 @@ function FilterFormPage() {
         if (segs.length >= 3) payload.childCategoryId = deepestId
         else if (segs.length === 2) payload.subcategoryId = deepestId
         else payload.categoryId = deepestId
+      } else if (
+        isEdit &&
+        (editing?.categoryId || editing?.subcategoryId || editing?.childCategoryId)
+      ) {
+        payload.clearCategory = 'true'
       }
       if (form.colorCode?.trim()) payload.colorCode = form.colorCode.trim()
       if (form.thumbFile) payload.thumbImage = form.thumbFile

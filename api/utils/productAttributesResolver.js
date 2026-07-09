@@ -646,6 +646,104 @@ async function buildQuickViewDataForProducts(products = []) {
 }
 
 /**
+ * Build the "features" list for a batch of products: every checkbox/multi-select
+ * admin-configured FormField for the product's category scope, resolved to display
+ * labels, as [{ title, values }] — regardless of `showOnQuickView` (unlike
+ * quickViewData above), since a multi-select field is inherently a feature list no
+ * matter whether it's also flagged for the quick-view/"Car Overview" summary. Driven
+ * purely by field type, so any category — including ones added later — works with no
+ * extra configuration.
+ * @param {object[]} products
+ * @returns {Promise<Array<{ title: string, values: string[] }>[]>}
+ */
+async function buildFeaturesForProducts(products = []) {
+  if (!Array.isArray(products) || products.length === 0) return []
+
+  try {
+    const schemaRefPaths = getProductSchemaRefPaths()
+    const selectFields = getQuickViewProductSelectFields()
+
+    const productIds = products
+      .map((p) => toIdString(p?._id))
+      .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id))
+
+    const dbById = new Map()
+    if (productIds.length) {
+      const docs = await Product.find({ _id: { $in: productIds } })
+        .select(selectFields.join(' '))
+        .lean()
+      for (const doc of docs) dbById.set(String(doc._id), doc)
+    }
+
+    const mergedProducts = products.map((product) => {
+      const stored = dbById.get(String(product._id)) || {}
+      return { ...stored, ...product }
+    })
+
+    const allCategoryIds = [
+      ...new Set(mergedProducts.flatMap((product) => collectCategoryScopeIds(product).map(String))),
+    ]
+      .filter((id) => mongoose.Types.ObjectId.isValid(id))
+      .map((id) => new mongoose.Types.ObjectId(id))
+
+    const multiSelectRows = allCategoryIds.length
+      ? await FormField.find({
+          categoryId: { $in: allCategoryIds },
+          isActive: true,
+          isDeleted: false,
+        })
+          .populate('fieldTypeId', 'fieldValue')
+          .sort({ formStep: 1, fieldOrder: 1 })
+          .lean()
+          .then((rows) =>
+            rows.filter((row) => MULTI_FIELD_TYPES.has((row.fieldTypeId?.fieldValue || '').toLowerCase()))
+          )
+      : []
+
+    const allDefs = mergedProducts.map((product) =>
+      buildQuickViewFieldDefinitions(
+        product,
+        buildQuickViewFormFieldMapForProduct(multiSelectRows, product),
+        schemaRefPaths
+      )
+    )
+
+    const idsByModel = {}
+    for (const modelName of Object.keys(REF_SOURCE_REGISTRY)) {
+      if (REF_SOURCE_REGISTRY[modelName]?.modelName === modelName) {
+        idsByModel[modelName] = new Set()
+      }
+    }
+    if (!idsByModel.Filter) idsByModel.Filter = new Set()
+    if (!idsByModel.Category) idsByModel.Category = new Set()
+    if (!idsByModel.Emirate) idsByModel.Emirate = new Set()
+    for (const defs of allDefs) {
+      for (const def of defs) {
+        if (!def.refSource) continue
+        const ids = normalizeToIdList(def.rawValue, def.isMulti)
+        for (const id of ids) {
+          if (def.refSource?.modelName && idsByModel[def.refSource.modelName]) {
+            idsByModel[def.refSource.modelName].add(id)
+          }
+        }
+      }
+    }
+
+    const lookupMaps = await batchLoadDisplayMaps(idsByModel)
+
+    return allDefs.map((defs) =>
+      resolveQuickViewEntries(defs, lookupMaps)
+        .filter((entry) => Array.isArray(entry.fieldValues) && entry.fieldValues.length)
+        .map((entry) => ({ title: entry.fieldTitle, values: entry.fieldValues }))
+    )
+  } catch (err) {
+    console.error('[productAttributesResolver] Failed to build features:', err)
+    return products.map(() => [])
+  }
+}
+
+/**
  * Build quickViewData array for a single product.
  * @param {object} product
  * @returns {Promise<object[]>}
@@ -725,6 +823,7 @@ module.exports = {
   buildProductAttributesPresentation,
   buildQuickViewDataPresentation,
   buildQuickViewDataForProducts,
+  buildFeaturesForProducts,
   getProductSchemaRefPaths,
   REF_SOURCE_REGISTRY,
 }

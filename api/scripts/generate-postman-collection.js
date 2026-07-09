@@ -175,6 +175,8 @@ const BODY_BY_ROUTE = {
     parentId: null,
     sortOrder: 0,
     isActive: true,
+    colorCode: '#FF0000',
+    xOrder: 0,
   },
   'PATCH /api/admin/categories/:id': {
     name: 'Updated name',
@@ -182,6 +184,8 @@ const BODY_BY_ROUTE = {
     parentId: null,
     sortOrder: 1,
     isActive: true,
+    colorCode: '#FF0000',
+    xOrder: 1,
   },
   'DELETE /api/admin/categories/:id': null,
   'POST /api/admin/filters': {

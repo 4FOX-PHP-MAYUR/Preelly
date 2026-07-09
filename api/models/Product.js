@@ -356,6 +356,19 @@ const productSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: null,
     },
+    // Multi-select ("checkbox") admin-configured dynamic fields captured at
+    // submission time, grouped by field so they can be rendered as a distinct
+    // "Features" list — e.g. [{ title: "Safety Features", values: ["ABS", "Airbags"] }].
+    features: {
+      type: [
+        {
+          title: { type: String, trim: true },
+          values: { type: [String], default: [] },
+          _id: false,
+        },
+      ],
+      default: [],
+    },
     // Usage details
     purchaseYear: {
       type: Number,
@@ -386,6 +399,19 @@ const productSchema = new mongoose.Schema(
     area: {
       type: String,
       trim: true,
+    },
+    latitude: {
+      type: Number,
+      default: null,
+    },
+    longitude: {
+      type: Number,
+      default: null,
+    },
+    locationAddress: {
+      type: String,
+      trim: true,
+      default: null,
     },
     deliveryOptions: {
       buyerPickup: { type: Boolean, default: true },

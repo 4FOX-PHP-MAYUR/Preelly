@@ -4,10 +4,10 @@ mongoose.set('bufferCommands', false)
 mongoose.set('strictQuery', true)
 
 async function connectDB() {
-  const uri = process.env.MONGO_URI
+  const uri = process.env.MONGO_URI || process.env.MONGODB_URI
 
   if (!uri) {
-    console.error('❌  MONGO_URI is not set in .env')
+    console.error('❌  MONGO_URI (or MONGODB_URI) is not set in .env')
     process.exit(1)
   }
 

@@ -1,4 +1,4 @@
-import { SOCKET_URL } from './constants'
+import { BACKEND_URL } from './constants'
 
 // Format price with currency
 export const formatPrice = (price, currency = 'USD') => {
@@ -55,7 +55,7 @@ export const getMediaUrl = (path) => {
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path
   }
-  const baseUrl = SOCKET_URL
+  const baseUrl = BACKEND_URL
   // If path starts with /, use it directly, otherwise prepend /uploads
   const mediaPath = path.startsWith('/') ? path : `/uploads/${path}`
   return `${baseUrl}${mediaPath}`

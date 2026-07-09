@@ -682,6 +682,14 @@ router.post('/transcribe', authMiddleware, upload.single('video'), async (req, r
       }
     }
 
+    // This temp upload only feeds AI processing above; the real listing video is
+    // attached separately on final submission, so it's safe to clean up here.
+    if (videoPath && fs.existsSync(videoPath)) {
+      fs.unlink(videoPath, (err) => {
+        if (err) console.error('Failed to clean up temp transcribe upload:', err.message)
+      })
+    }
+
     res.json({
       success: true,
       transcript: transcript || '',

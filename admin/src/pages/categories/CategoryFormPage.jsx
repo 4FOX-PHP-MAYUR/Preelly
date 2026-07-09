@@ -17,6 +17,11 @@ const emptyForm = {
   category_image_file: null,
   image_preview: '',
   clear_image: false,
+  categoryImage_file: null,
+  categoryImage_preview: '',
+  clear_categoryImage: false,
+  colorCode: '',
+  xOrder: '',
 }
 
 function CategoryFormPage() {
@@ -27,6 +32,7 @@ function CategoryFormPage() {
   const [loadingRecord, setLoadingRecord] = useState(isEdit)
   const [form, setForm] = useState(emptyForm)
   const [existingImage, setExistingImage] = useState('')
+  const [existingCategoryImage, setExistingCategoryImage] = useState('')
 
   const [parentLevelOptions, setParentLevelOptions] = useState([[]])
   const [parentSelectedPath, setParentSelectedPath] = useState([])
@@ -87,8 +93,14 @@ function CategoryFormPage() {
           category_image_file: null,
           image_preview: '',
           clear_image: false,
+          categoryImage_file: null,
+          categoryImage_preview: '',
+          clear_categoryImage: false,
+          colorCode: row.colorCode || '',
+          xOrder: row.xOrder !== undefined && row.xOrder !== null ? String(row.xOrder) : '',
         })
         setExistingImage(row.image || row.icon || '')
+        setExistingCategoryImage(row.categoryImage || '')
 
         const pathIds = Array.isArray(row.path) ? row.path.map((pid) => String(pid)) : []
         await restoreParentCascade(pathIds)
@@ -152,6 +164,25 @@ function CategoryFormPage() {
     }))
   }
 
+  const handleCategoryImageChange = (e) => {
+    const file = e.target.files?.[0] || null
+    if (!file) {
+      setForm((prev) => ({
+        ...prev,
+        categoryImage_file: null,
+        categoryImage_preview: '',
+        clear_categoryImage: false,
+      }))
+      return
+    }
+    setForm((prev) => ({
+      ...prev,
+      categoryImage_file: file,
+      categoryImage_preview: URL.createObjectURL(file),
+      clear_categoryImage: false,
+    }))
+  }
+
   const handleSave = async () => {
     if (!form.name?.trim()) {
       toast.error('Category name is required')
@@ -163,12 +194,18 @@ function CategoryFormPage() {
         name: form.name.trim(),
         parentId: form.parentId || null,
         isActive: form.isActive !== false,
+        colorCode: form.colorCode || '',
+        xOrder: form.xOrder !== '' ? form.xOrder : 0,
       }
       if (form.category_image_file) {
         payload.category_image = form.category_image_file
       }
+      if (form.categoryImage_file) {
+        payload.categoryImage = form.categoryImage_file
+      }
       if (isEdit) {
         if (form.clear_image) payload.clear_image = 'true'
+        if (form.clear_categoryImage) payload.clear_categoryImage = 'true'
         await adminService.updateAdminCategory(id, payload)
         toast.success('Category updated')
       } else {
@@ -217,45 +254,6 @@ function CategoryFormPage() {
               onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
             />
           </div>
-        </div>
-      </FormSection>
-
-      <FormSection title="Category image">
-        <div>
-          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
-            Category Image
-          </label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleImageChange}
-            className="admin-input file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700"
-          />
-          {(form.image_preview || (existingImage && !form.clear_image)) && (
-            <div className="mt-3 flex items-center gap-3">
-              <img
-                src={form.image_preview || getMediaUrl(existingImage) || existingImage}
-                alt="Category"
-                className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700"
-              />
-              {isEdit && existingImage && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    setForm((prev) => ({
-                      ...prev,
-                      category_image_file: null,
-                      image_preview: '',
-                      clear_image: true,
-                    }))
-                  }
-                  className="text-sm text-red-600 hover:underline dark:text-red-400"
-                >
-                  Remove image
-                </button>
-              )}
-            </div>
-          )}
         </div>
       </FormSection>
 
@@ -312,6 +310,117 @@ function CategoryFormPage() {
               .join(' → ')}
           </p>
         )}
+      </FormSection>
+
+      <FormSection title="Icon">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            Icon
+          </label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleImageChange}
+            className="admin-input file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700"
+          />
+          {(form.image_preview || (existingImage && !form.clear_image)) && (
+            <div className="mt-3 flex items-center gap-3">
+              <img
+                src={form.image_preview || getMediaUrl(existingImage) || existingImage}
+                alt="Category"
+                className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700"
+              />
+              {isEdit && existingImage && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      category_image_file: null,
+                      image_preview: '',
+                      clear_image: true,
+                    }))
+                  }
+                  className="text-sm text-red-600 hover:underline dark:text-red-400"
+                >
+                  Remove image
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </FormSection>
+
+      <FormSection title="Category Image">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            Category Image
+          </label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={handleCategoryImageChange}
+            className="admin-input file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700"
+          />
+          {(form.categoryImage_preview || (existingCategoryImage && !form.clear_categoryImage)) && (
+            <div className="mt-3 flex items-center gap-3">
+              <img
+                src={form.categoryImage_preview || getMediaUrl(existingCategoryImage) || existingCategoryImage}
+                alt="Category"
+                className="h-16 w-16 rounded-lg object-cover border border-slate-200 dark:border-slate-700"
+              />
+              {isEdit && existingCategoryImage && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setForm((prev) => ({
+                      ...prev,
+                      categoryImage_file: null,
+                      categoryImage_preview: '',
+                      clear_categoryImage: true,
+                    }))
+                  }
+                  className="text-sm text-red-600 hover:underline dark:text-red-400"
+                >
+                  Remove image
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </FormSection>
+
+      <FormSection title="Color Code">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            Color Code
+          </label>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={/^#[0-9A-Fa-f]{6}$/.test(form.colorCode) ? form.colorCode : '#000000'}
+              onChange={(e) => setForm({ ...form, colorCode: e.target.value })}
+              className="h-10 w-12 rounded-md border border-slate-200 dark:border-slate-700 cursor-pointer"
+            />
+            <input
+              type="text"
+              value={form.colorCode}
+              onChange={(e) => setForm({ ...form, colorCode: e.target.value })}
+              placeholder="#000000"
+              className="admin-input w-full"
+            />
+          </div>
+        </div>
+      </FormSection>
+
+      <FormSection title="Order">
+        <Input
+          label="Order"
+          type="number"
+          value={form.xOrder}
+          onChange={(e) => setForm({ ...form, xOrder: e.target.value })}
+          placeholder="0"
+        />
       </FormSection>
     </AdminFormShell>
   )

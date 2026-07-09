@@ -24,6 +24,9 @@ const CategorySchema = new Schema(
     isDeleted: { type: Boolean, default: false, index: true },
     image: { type: String, default: null },
     icon: { type: String, default: null },
+    categoryImage: { type: String, default: null },
+    colorCode: { type: String, default: null },
+    xOrder: { type: Number, default: 0 },
     emoji: { type: String, default: '📦' },
     count: { type: Number, default: 0 },
   },
@@ -104,7 +107,7 @@ CategorySchema.statics.getChildren = function (parentId, extraFilter = {}) {
   } else {
     filter.parentId = parentId
   }
-  return this.find(filter).sort({ sortOrder: 1, name: 1 })
+  return this.find(filter).sort({ xOrder: 1, name: 1 })
 }
 
 CategorySchema.statics.getAncestors = async function (id) {

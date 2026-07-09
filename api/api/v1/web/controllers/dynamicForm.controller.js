@@ -5,6 +5,7 @@ const { isRegisteredTable, normalizeTableName } = require('../../../../config/dy
 const { buildActiveFormFieldsQuery, mergeScopedFormFields } = require('../../../../utils/formFieldScope')
 const { isSelectionFieldType } = require('../../../../utils/formFieldTypes')
 const { loadOptionsForFormFields } = require('../../../../core/services/dynamicTableOptionsService')
+const { hasFieldFunction, callFieldFunction } = require('../../../../core/services/formFieldFunctions')
 
 /**
  * POST /api/v1/web/dynamic-form
@@ -62,6 +63,7 @@ async function getDynamicForm(req, res) {
         tableName: isRegisteredTable(normalizedTable) ? normalizedTable : tableName,
         tableConfig: f.tableConfig || null,
         functionName: f.functionName || '',
+        functionForField: f.functionForField || '',
       }
 
       if (needsOptions) {
@@ -94,4 +96,31 @@ async function getDynamicForm(req, res) {
   }
 }
 
-module.exports = { getDynamicForm }
+/**
+ * POST /api/v1/web/dynamic-form/field-function
+ * Body: { functionName: string, params: Record<string, string> }
+ *
+ * Generic invoker for FormField.functionName — resolves a field's options from
+ * the current values of the fields it depends on (functionForField). See
+ * core/services/formFieldFunctions.js for the registry of callable functions.
+ */
+async function callFormFieldFunction(req, res) {
+  try {
+    const { functionName, params } = req.body
+
+    if (!functionName || typeof functionName !== 'string') {
+      return res.status(400).json({ message: 'functionName is required' })
+    }
+    if (!hasFieldFunction(functionName)) {
+      return res.status(404).json({ message: `Unknown function "${functionName}"` })
+    }
+
+    const options = await callFieldFunction(functionName, params && typeof params === 'object' ? params : {})
+    res.json({ options })
+  } catch (error) {
+    console.error('Error calling form field function:', error)
+    res.status(500).json({ message: 'Error calling form field function' })
+  }
+}
+
+module.exports = { getDynamicForm, callFormFieldFunction }

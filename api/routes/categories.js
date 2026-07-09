@@ -54,7 +54,7 @@ router.get('/roots', async (req, res) => {
       isDeleted: { $ne: true },
       isActive: { $ne: false },
     })
-      .sort({ sortOrder: 1, name: 1 })
+      .sort({ xOrder: 1, name: 1 })
       .lean()
 
     // Keep UI consistent with /api/categories (adds active product counts).

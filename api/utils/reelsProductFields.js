@@ -1,5 +1,6 @@
 const mongoose = require('mongoose')
-const { buildQuickViewDataForProducts } = require('./productAttributesResolver')
+const Product = require('../models/Product')
+const { buildQuickViewDataForProducts, buildFeaturesForProducts } = require('./productAttributesResolver')
 
 function toIdString (value) {
   if (value == null || value === '') return null
@@ -70,6 +71,44 @@ function attachReelsVehicleFields (product, filterNames) {
   }
 }
 
+/**
+ * The feed's own $project stage never selects `category` (see buildPostProjection
+ * in routes/feedData.js), so it's not present on these product objects even though
+ * it exists in the DB. Look it up by product _id instead of trusting product.category.
+ */
+async function fetchCategoryNamesByProductId (products) {
+  const productIds = products
+    .map((p) => toIdString(p._id))
+    .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id))
+
+  if (!productIds.length) return new Map()
+
+  const docs = await Product.find({ _id: { $in: productIds } }).select('_id category').lean()
+  const categoryIdByProductId = new Map()
+  const categoryIds = new Set()
+  for (const doc of docs) {
+    const categoryId = toIdString(doc.category)
+    if (categoryId && mongoose.Types.ObjectId.isValid(categoryId)) {
+      categoryIdByProductId.set(String(doc._id), categoryId)
+      categoryIds.add(categoryId)
+    }
+  }
+
+  if (!categoryIds.size) return new Map()
+
+  const Category = require('../models/Category')
+  const categories = await Category.find({ _id: { $in: [...categoryIds] } }).select('_id name').lean()
+  const categoryNameById = new Map(categories.map((c) => [String(c._id), c.name]))
+
+  const categoryNameByProductId = new Map()
+  for (const [productId, categoryId] of categoryIdByProductId) {
+    const name = categoryNameById.get(categoryId)
+    if (name) categoryNameByProductId.set(productId, name)
+  }
+  return categoryNameByProductId
+}
+
 async function enrichReelsProducts (products) {
   if (!Array.isArray(products) || products.length === 0) return []
 
@@ -88,12 +127,21 @@ async function enrichReelsProducts (products) {
     for (const f of filters) filterNames.set(String(f._id), f.name)
   }
 
+  const categoryNameByProductId = await fetchCategoryNamesByProductId(products)
   const withVehicleFields = products.map((p) => attachReelsVehicleFields(p, filterNames))
-  const quickViewDataByIndex = await buildQuickViewDataForProducts(withVehicleFields)
+  const [quickViewDataByIndex, featuresByIndex] = await Promise.all([
+    buildQuickViewDataForProducts(withVehicleFields),
+    // Every checkbox/multi-select field, independent of `showOnQuickView` — a
+    // multi-select field is a feature regardless of whether it's also surfaced in
+    // the quick-view/"Car Overview" summary above.
+    buildFeaturesForProducts(withVehicleFields),
+  ])
 
   return withVehicleFields.map((product, index) => ({
     ...product,
+    categoryName: categoryNameByProductId.get(toIdString(product._id)) || null,
     quickViewData: quickViewDataByIndex[index] || [],
+    features: featuresByIndex[index] || [],
   }))
 }
 

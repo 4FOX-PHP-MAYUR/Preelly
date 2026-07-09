@@ -1,0 +1,18 @@
+import { FieldShell } from './FieldShell'
+import { fieldInputClass } from './fieldStyles'
+
+export function NumberField({ field, value, error, required, onChange }) {
+  return (
+    <FieldShell field={field} required={required} error={error} htmlFor={field.fieldName}>
+      <input
+        id={field.fieldName}
+        name={field.fieldName}
+        type="number"
+        className={fieldInputClass(Boolean(error))}
+        placeholder={field.placeholder || ''}
+        value={value ?? ''}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </FieldShell>
+  )
+}

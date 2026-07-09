@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Env files
+.env
+.env.*
+!.env.example
+
+# Build output
+dist/
+build/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# OS junk
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Uploads (user-generated content, keep dir via .gitkeep if needed)
+api/uploads/*
+!api/uploads/.gitkeep

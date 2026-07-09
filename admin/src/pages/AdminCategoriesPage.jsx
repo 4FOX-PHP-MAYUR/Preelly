@@ -19,9 +19,15 @@ function AdminCategoriesPage() {
     category_image_file: null,
     image_preview: '',
     clear_image: false,
+    categoryImage_file: null,
+    categoryImage_preview: '',
+    clear_categoryImage: false,
+    colorCode: '',
+    xOrder: '',
   })
   const [search, setSearch] = useState('')
   const [filterParentId, setFilterParentId] = useState('')
+  const [rootOnly, setRootOnly] = useState(false)
   const LIMIT = 100
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
@@ -108,12 +114,16 @@ function AdminCategoriesPage() {
     }
   }
 
-  const fetchCategories = async (p = 1, searchTerm = '', parentId = filterParentId) => {
+  const fetchCategories = async (p = 1, searchTerm = '', parentId = filterParentId, rootOnlyFilter = rootOnly) => {
     try {
       setLoading(true)
       const params = { limit: LIMIT, page: p }
       if (searchTerm && searchTerm.trim()) params.search = searchTerm.trim()
-      if (parentId) params.parentId = parentId
+      if (rootOnlyFilter) {
+        params.rootOnly = 'true'
+      } else if (parentId) {
+        params.parentId = parentId
+      }
       const res = await adminService.getAdminCategories(params)
       const data = res.data || {}
       const items = data.categories || data.data || []
@@ -173,12 +183,19 @@ function AdminCategoriesPage() {
 
   const handleSearch = (e) => {
     e.preventDefault()
-    fetchCategories(1, search, filterParentId)
+    fetchCategories(1, search, filterParentId, rootOnly)
   }
 
   const handleParentFilterChange = (parentId) => {
     setFilterParentId(parentId)
-    fetchCategories(1, search, parentId)
+    setRootOnly(false)
+    fetchCategories(1, search, parentId, false)
+  }
+
+  const handleRootOnlyToggle = (checked) => {
+    setRootOnly(checked)
+    if (checked) setFilterParentId('')
+    fetchCategories(1, search, checked ? '' : filterParentId, checked)
   }
 
   const resetForm = () => ({
@@ -188,6 +205,11 @@ function AdminCategoriesPage() {
     category_image_file: null,
     image_preview: '',
     clear_image: false,
+    categoryImage_file: null,
+    categoryImage_preview: '',
+    clear_categoryImage: false,
+    colorCode: '',
+    xOrder: '',
   })
 
   const openAdd = () => {
@@ -218,7 +240,28 @@ function AdminCategoriesPage() {
     }))
   }
 
-  const existingCategoryImage = (row) => row?.image || row?.icon || null
+  const existingCategoryIcon = (row) => row?.image || row?.icon || null
+  const existingCategoryImage2 = (row) => row?.categoryImage || null
+
+  const handleCategoryImageChange = (e) => {
+    const file = e.target.files?.[0] || null
+    if (!file) {
+      setForm((prev) => ({
+        ...prev,
+        categoryImage_file: null,
+        categoryImage_preview: '',
+        clear_categoryImage: false,
+      }))
+      return
+    }
+    const preview = URL.createObjectURL(file)
+    setForm((prev) => ({
+      ...prev,
+      categoryImage_file: file,
+      categoryImage_preview: preview,
+      clear_categoryImage: false,
+    }))
+  }
 
   const handleSave = async (e) => {
     e.preventDefault()
@@ -228,12 +271,18 @@ function AdminCategoriesPage() {
         name: form.name,
         parentId: form.parentId || null,
         isActive: form.isActive !== false,
+        colorCode: form.colorCode || '',
+        xOrder: form.xOrder !== '' ? form.xOrder : 0,
       }
       if (form.category_image_file) {
         payload.category_image = form.category_image_file
       }
+      if (form.categoryImage_file) {
+        payload.categoryImage = form.categoryImage_file
+      }
       if (editing) {
         if (form.clear_image) payload.clear_image = 'true'
+        if (form.clear_categoryImage) payload.clear_categoryImage = 'true'
         await adminService.updateAdminCategory(editing._id, payload)
         toast.success('Category updated')
       } else {
@@ -392,13 +441,22 @@ function AdminCategoriesPage() {
           <select
             value={filterParentId}
             onChange={(e) => handleParentFilterChange(e.target.value)}
-            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white"
+            disabled={rootOnly}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white disabled:opacity-60"
           >
             <option value="">All Parent Categories</option>
             {importRootCategoryOptions.map((c) => (
               <option key={c._id} value={c._id}>{c.name}</option>
             ))}
           </select>
+          <label className="flex items-center gap-2 text-sm text-gray-700 px-3 py-2 border border-gray-200 rounded-lg bg-white cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rootOnly}
+              onChange={(e) => handleRootOnlyToggle(e.target.checked)}
+            />
+            <span>Show Root Category</span>
+          </label>
           <input
             type="text"
             value={search}
@@ -409,10 +467,10 @@ function AdminCategoriesPage() {
           <button type="submit" className="px-4 py-2 text-sm rounded-lg bg-indigo-600 text-white hover:bg-indigo-700">
             Search
           </button>
-          {(search || filterParentId) && (
+          {(search || filterParentId || rootOnly) && (
             <button
               type="button"
-              onClick={() => { setSearch(''); setFilterParentId(''); fetchCategories(1, '', ''); }}
+              onClick={() => { setSearch(''); setFilterParentId(''); setRootOnly(false); fetchCategories(1, '', '', false); }}
               className="px-3 py-2 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50"
             >
               Clear
@@ -452,7 +510,56 @@ function AdminCategoriesPage() {
                 </label>
               </div>
               <div className="md:col-span-2">
-                <label className="block text-xs font-medium text-gray-700 mb-1">Category Image (optional)</label>
+                <label className="block text-xs font-medium text-gray-700 mb-2">Parent Category</label>
+                <div className="flex flex-wrap gap-3">
+                  {parentLevelOptions.map((options, levelIndex) => {
+                    if (!options || options.length === 0) return null
+                    const value = parentSelectedPath[levelIndex] || ''
+                    const filteredOptions = options.filter(
+                      opt => !editing || String(opt._id) !== String(editing._id)
+                    )
+                    if (filteredOptions.length === 0 && !value) return null
+                    const parentName = levelIndex > 0
+                      ? parentLevelOptions[levelIndex - 1]?.find(c => String(c._id) === String(parentSelectedPath[levelIndex - 1]))?.name
+                      : null
+                    return (
+                      <div key={levelIndex} className="flex-1 min-w-[200px]">
+                        <label className="block text-[11px] text-gray-500 mb-1">
+                          {levelIndex === 0 ? 'Root' : parentName || `Level ${levelIndex + 1}`}
+                        </label>
+                        <select
+                          value={value}
+                          onChange={(e) => handleParentLevelChange(levelIndex, e.target.value)}
+                          disabled={loadingParentLevel}
+                          className="block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-60"
+                        >
+                          <option value="">
+                            {levelIndex === 0 ? '(No parent – root level)' : `Select child of ${parentName || '...'}`}
+                          </option>
+                          {filteredOptions.map(opt => (
+                            <option key={opt._id} value={opt._id}>
+                              {opt.emoji ? `${opt.emoji} ` : ''}{opt.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )
+                  })}
+                </div>
+                {loadingParentLevel && (
+                  <p className="text-xs text-gray-400 mt-1">Loading subcategories...</p>
+                )}
+                {parentSelectedPath.length > 0 && (
+                  <p className="text-xs text-indigo-600 mt-2">
+                    Parent: {parentSelectedPath
+                      .map((id, i) => parentLevelOptions[i]?.find(c => String(c._id) === String(id))?.name)
+                      .filter(Boolean)
+                      .join(' → ')}
+                  </p>
+                )}
+              </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Icon (optional)</label>
                 <div className="flex items-center gap-3 mt-1">
                   <input
                     type="file"
@@ -461,13 +568,13 @@ function AdminCategoriesPage() {
                     className="text-xs"
                   />
                   {(form.image_preview ||
-                    (editing && existingCategoryImage(editing) && !form.clear_image)) && (
+                    (editing && existingCategoryIcon(editing) && !form.clear_image)) && (
                     <div className="flex items-center gap-2">
                       <img
                         src={
                           form.image_preview ||
-                          getMediaUrl(existingCategoryImage(editing)) ||
-                          existingCategoryImage(editing)
+                          getMediaUrl(existingCategoryIcon(editing)) ||
+                          existingCategoryIcon(editing)
                         }
                         alt="Category"
                         className="h-12 w-12 rounded object-cover border border-gray-200"
@@ -490,56 +597,75 @@ function AdminCategoriesPage() {
                   )}
                 </div>
               </div>
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-gray-700 mb-1">Category Image (optional)</label>
+                <div className="flex items-center gap-3 mt-1">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleCategoryImageChange}
+                    className="text-xs"
+                  />
+                  {(form.categoryImage_preview ||
+                    (editing && existingCategoryImage2(editing) && !form.clear_categoryImage)) && (
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={
+                          form.categoryImage_preview ||
+                          getMediaUrl(existingCategoryImage2(editing)) ||
+                          existingCategoryImage2(editing)
+                        }
+                        alt="Category"
+                        className="h-12 w-12 rounded object-cover border border-gray-200"
+                      />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setForm((prev) => ({
+                            ...prev,
+                            categoryImage_file: null,
+                            categoryImage_preview: '',
+                            clear_categoryImage: true,
+                          }))
+                        }
+                        className="text-xs text-red-600 hover:underline"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-2">Parent Category</label>
-              <div className="flex flex-wrap gap-3">
-                {parentLevelOptions.map((options, levelIndex) => {
-                  if (!options || options.length === 0) return null
-                  const value = parentSelectedPath[levelIndex] || ''
-                  const filteredOptions = options.filter(
-                    opt => !editing || String(opt._id) !== String(editing._id)
-                  )
-                  if (filteredOptions.length === 0 && !value) return null
-                  const parentName = levelIndex > 0
-                    ? parentLevelOptions[levelIndex - 1]?.find(c => String(c._id) === String(parentSelectedPath[levelIndex - 1]))?.name
-                    : null
-                  return (
-                    <div key={levelIndex} className="flex-1 min-w-[200px]">
-                      <label className="block text-[11px] text-gray-500 mb-1">
-                        {levelIndex === 0 ? 'Root' : parentName || `Level ${levelIndex + 1}`}
-                      </label>
-                      <select
-                        value={value}
-                        onChange={(e) => handleParentLevelChange(levelIndex, e.target.value)}
-                        disabled={loadingParentLevel}
-                        className="block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 disabled:opacity-60"
-                      >
-                        <option value="">
-                          {levelIndex === 0 ? '(No parent – root level)' : `Select child of ${parentName || '...'}`}
-                        </option>
-                        {filteredOptions.map(opt => (
-                          <option key={opt._id} value={opt._id}>
-                            {opt.emoji ? `${opt.emoji} ` : ''}{opt.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )
-                })}
+              <label className="block text-xs font-medium text-gray-700 mb-1">Color Code</label>
+              <div className="flex items-center gap-2 mt-1">
+                <input
+                  type="color"
+                  value={/^#[0-9A-Fa-f]{6}$/.test(form.colorCode) ? form.colorCode : '#000000'}
+                  onChange={(e) => setForm({ ...form, colorCode: e.target.value })}
+                  className="h-9 w-11 rounded-lg border border-gray-200 cursor-pointer"
+                />
+                <input
+                  type="text"
+                  value={form.colorCode}
+                  onChange={(e) => setForm({ ...form, colorCode: e.target.value })}
+                  placeholder="#000000"
+                  className="block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                />
               </div>
-              {loadingParentLevel && (
-                <p className="text-xs text-gray-400 mt-1">Loading subcategories...</p>
-              )}
-              {parentSelectedPath.length > 0 && (
-                <p className="text-xs text-indigo-600 mt-2">
-                  Parent: {parentSelectedPath
-                    .map((id, i) => parentLevelOptions[i]?.find(c => String(c._id) === String(id))?.name)
-                    .filter(Boolean)
-                    .join(' → ')}
-                </p>
-              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-gray-700 mb-1">Order</label>
+              <input
+                type="number"
+                value={form.xOrder}
+                onChange={(e) => setForm({ ...form, xOrder: e.target.value })}
+                placeholder="0"
+                className="mt-1 block w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+              />
             </div>
 
             <div className="flex items-center gap-3 justify-end pt-2 border-t border-gray-100">
@@ -614,7 +740,7 @@ function AdminCategoriesPage() {
         data={categories}
         loading={loading}
         serverSide
-        pagination={{ page, limit: LIMIT, total, onPageChange: (p) => fetchCategories(p, search, filterParentId) }}
+        pagination={{ page, limit: LIMIT, total, onPageChange: (p) => fetchCategories(p, search, filterParentId, rootOnly) }}
         onEdit={async (r) => {
           setEditing(r)
           setForm({
@@ -624,6 +750,11 @@ function AdminCategoriesPage() {
             category_image_file: null,
             image_preview: '',
             clear_image: false,
+            categoryImage_file: null,
+            categoryImage_preview: '',
+            clear_categoryImage: false,
+            colorCode: r.colorCode || '',
+            xOrder: r.xOrder !== undefined && r.xOrder !== null ? String(r.xOrder) : '',
           })
           const pathIds = Array.isArray(r.path) ? r.path.map(id => String(id)) : []
           await restoreParentCascade(pathIds)

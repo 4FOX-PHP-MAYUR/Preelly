@@ -36,7 +36,7 @@ async function findCategoriesUnderRootByLevels(rootId, levels = [1, 2]) {
     level: { $in: levels },
     ...ACTIVE_FILTER,
   })
-    .sort({ sortOrder: 1, name: 1 })
+    .sort({ xOrder: 1, name: 1 })
     .lean()
 }
 

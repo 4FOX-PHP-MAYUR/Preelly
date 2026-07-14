@@ -63,7 +63,7 @@ export const getMediaUrl = (path) => {
 
 /** Category image/icon path from API → absolute URL for <img src> */
 export const getCategoryImageUrl = (category) => {
-  const path = category?.image || category?.icon
+  const path = category?.categoryImage || category?.image || category?.icon
   if (!path || typeof path !== 'string') return null
   return getMediaUrl(path) || path
 }

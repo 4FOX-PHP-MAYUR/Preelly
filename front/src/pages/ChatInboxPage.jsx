@@ -8,6 +8,10 @@ import {
 } from 'lucide-react'
 import { selectUser, selectIsAuthenticated } from '@shared/store/slices/authSlice'
 import { fetchRootCategories } from '@shared/store/slices/categorySlice'
+import BrandLogo from '@shared/components/BrandLogo'
+import MarketplaceTopBar from '../components/Layout/MarketplaceTopBar'
+import MarketplaceLogoBlock from '../components/Layout/MarketplaceLogoBlock'
+import { MARKETPLACE_LOGO_CELL } from '../components/Layout/marketplaceLayoutStyles'
 import { useChat } from '@shared/components/Chat/ChatContext'
 import { useCall } from '@shared/components/Call/CallContext'
 import { getMediaUrl } from '@shared/utils/helpers'
@@ -344,7 +348,7 @@ function ChatSidebar({ chatUnread }) {
               return (
                 <Link
                   key={cat._id || cat.id}
-                  to={`/categories/${cat._id || cat.id}`}
+                  to={`/categories/${cat._id || cat.id}/products`}
                   className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
                 >
                   <Icon className="h-4 w-4 shrink-0 text-slate-500" />
@@ -438,6 +442,7 @@ export default function ChatInboxPage() {
   const [text,    setText]    = useState('')
   const [sending, setSending] = useState(false)
   const [mobileTh, setMobileTh] = useState(!!urlId)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const [attachFiles, setAttachFiles] = useState([])
   const [isRecording, setIsRecording] = useState(false)
@@ -605,29 +610,69 @@ export default function ChatInboxPage() {
     return groupMsgs((activeThread.messages || []).filter(m => m.id !== 'last-message'))
   }, [activeThread])
 
-  if (!isAuthenticated) return (
-    <div className="flex items-center justify-center min-h-[60vh]">
-      <div className="text-center">
-        <p className="text-gray-500 mb-4">Please log in to view your messages.</p>
-        <button onClick={() => navigate('/login')}
-          className="px-6 py-2.5 rounded-full bg-purple-600 text-white text-sm font-semibold">
-          Login
-        </button>
+  if (!isAuthenticated) {
+    return (
+      <div className="h-[100dvh] overflow-hidden bg-[#f7f8fa]">
+        <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)]">
+          <MarketplaceTopBar topBarColSpan="" onToggleMobileMenu={() => navigate('/login')} />
+          <div className="flex items-center justify-center px-4">
+            <div className="text-center">
+              <p className="mb-4 text-gray-500">Please log in to view your messages.</p>
+              <button
+                type="button"
+                onClick={() => navigate('/login')}
+                className="rounded-full bg-brand px-6 py-2.5 text-sm font-semibold text-white"
+              >
+                Login
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
-    </div>
-  )
+    )
+  }
 
   return (
-    <div className="viewport-below-header bg-gray-50">
-      <div className="md:grid md:grid-cols-[260px_1fr] h-full">
+    <div className="h-[100dvh] overflow-hidden bg-[#f7f8fa]">
+      {mobileMenuOpen && (
+        <>
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="fixed inset-0 z-[60] bg-black/40 lg:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <aside className="fixed inset-y-0 left-0 z-[70] w-[min(320px,88vw)] overflow-y-auto bg-white p-5 shadow-2xl lg:hidden">
+            <div className="mb-5 flex items-center justify-between">
+              <Link to="/" onClick={() => setMobileMenuOpen(false)}>
+                <BrandLogo variant="light" className="h-8 w-auto" />
+              </Link>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                className="rounded-xl p-2 text-slate-600 hover:bg-slate-100"
+                aria-label="Close menu"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <ChatSidebar chatUnread={chatUnread} />
+          </aside>
+        </>
+      )}
 
-        {/* ════ SIDEBAR — sticky below logo, same as DashboardLayout ════ */}
-        <div className="hidden md:block md:sticky md:top-16 md:h-[calc(100dvh-4rem)]">
-          <ChatSidebar chatUnread={chatUnread} />
+      <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] grid-cols-1 lg:grid-cols-[270px_minmax(0,1fr)]">
+        <div className={MARKETPLACE_LOGO_CELL}>
+          <MarketplaceLogoBlock />
         </div>
 
-        {/* ════ MAIN AREA ════ */}
-        <div className="flex flex-col p-3 sm:p-4 md:p-5 h-full min-h-0 overflow-hidden">
+        <MarketplaceTopBar topBarColSpan="" onToggleMobileMenu={() => setMobileMenuOpen(true)} />
+
+        <aside className="hidden min-h-0 overflow-y-auto border-r border-slate-200 bg-white lg:block">
+          <ChatSidebar chatUnread={chatUnread} />
+        </aside>
+
+        <div className="flex min-h-0 min-w-0 flex-col overflow-hidden p-3 sm:p-4 lg:p-5">
 
         {/* ── Two-panel ───────────────────────────────────────────────────── */}
         <div className="flex-1 min-h-0 border border-gray-200 rounded-2xl overflow-hidden flex bg-white shadow-sm">
@@ -939,7 +984,7 @@ export default function ChatInboxPage() {
             )}
           </div>
         </div>
-      </div>
+        </div>
       </div>
     </div>
   )

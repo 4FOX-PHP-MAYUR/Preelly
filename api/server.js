@@ -172,6 +172,7 @@ app.use('/api',               require('./routes/interactions'))  // before /prod
 app.use('/api/products',      require('./routes/products'))
 app.use('/api',               require('./routes/dynamicForm'))
 app.use('/api/admin',         require('./routes/admin'))
+app.use('/api/coupon',        require('./routes/coupons'))
 app.use('/api',               require('./routes/ai'))
 app.use('/api/video',         require('./routes/video'))
 app.use('/api/streaming',     require('./routes/streaming'))
@@ -277,6 +278,10 @@ connectDB().then(() => {
     require('./models/Filter').fixIndexes?.() ?? Promise.resolve(),
     require('./models/FormField').fixIndexes?.() ?? Promise.resolve(),
     require('./models/Emirate').fixIndexes?.() ?? Promise.resolve(),
+    require('./models/Package').fixIndexes?.() ?? Promise.resolve(),
+    require('./models/StorageFacility').fixIndexes?.() ?? Promise.resolve(),
+    require('./models/Coupon').fixIndexes?.() ?? Promise.resolve(),
+    require('./models/CouponRedemption').fixIndexes?.() ?? Promise.resolve(),
     require('./models/Product').syncIndexes(),
     require('./models/User').syncIndexes(),
     require('./models/Chat').syncIndexes(),
@@ -287,6 +292,9 @@ connectDB().then(() => {
       if (r.status === 'rejected') console.warn('⚠️  Index sync warning:', r.reason?.message)
     })
   })
+
+  // Expired coupons → inactive (hourly sweep)
+  require('./jobs/couponExpiryJob').startCouponExpiryJob()
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`🚀 Server running on port ${PORT}`)

@@ -530,7 +530,25 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // 0 = package not paid for yet, 1 = payment completed.
+    // Set to 0 on creation; flipped to 1 once the seller pays for a package.
+    isPaymentDone: {
+      type: Number,
+      enum: [0, 1],
+      default: 0,
+      index: true,
+    },
+    // The package the seller chose to promote this listing.
+    package: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Package',
+      default: null,
+    },
     views: {
+      type: Number,
+      default: 0,
+    },
+    shares: {
       type: Number,
       default: 0,
     },

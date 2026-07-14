@@ -22,16 +22,25 @@ const VARIANT_STYLES = {
     dropdown:
       'absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[200] max-h-96 overflow-y-auto',
   },
+  marketplace: {
+    input:
+      'h-9 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-10 pr-10 text-sm text-slate-700 outline-none transition focus:border-primary-400 focus:bg-white',
+    icon: 'pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400',
+    clearButton: 'absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600',
+    dropdown:
+      'absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-[200] max-h-96 overflow-y-auto',
+  },
 }
 
 function SearchBar({
   className = '',
   placeholder = 'Search for products, brands, and more...',
   variant = 'default',
+  defaultQuery = '',
 }) {
   const navigate = useNavigate()
   const styles = VARIANT_STYLES[variant] || VARIANT_STYLES.default
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(defaultQuery)
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [suggestions, setSuggestions] = useState([])
   const [popularSearches, setPopularSearches] = useState([])
@@ -40,6 +49,10 @@ function SearchBar({
   const [loadingExtras, setLoadingExtras] = useState(true)
   const searchTimeoutRef = useRef(null)
   const containerRef = useRef(null)
+
+  useEffect(() => {
+    setSearchQuery(defaultQuery)
+  }, [defaultQuery])
 
   const refreshRecentSearches = () => {
     return globalSearchService

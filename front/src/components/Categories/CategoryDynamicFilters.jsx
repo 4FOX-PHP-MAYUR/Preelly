@@ -9,7 +9,9 @@ function CategoryDynamicFilters({
   childCategoryId = '',
   selectedFilterIds = [],
   onChange,
+  variant = 'default',
 }) {
+  const isFlat = variant === 'flat'
   const [filters, setFilters] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -88,10 +90,46 @@ function CategoryDynamicFilters({
   }
 
   if (!groups.length) {
+    if (isFlat) return null
     return (
       <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
         No filters configured for this category yet. Select a subcategory if available.
       </p>
+    )
+  }
+
+  if (isFlat) {
+    return (
+      <>
+        {groups.map((group) => (
+          <div
+            key={String(group.root._id)}
+            className="border-b border-[#E8EBF2] py-4 last:border-b-0"
+          >
+            <p className="mb-3 text-sm font-semibold text-[#0F172A]">{group.root.name}</p>
+            <div className="flex flex-wrap gap-2">
+              {group.options.map((opt) => {
+                const id = opt.filterId || opt.value
+                const active = selectedSet.has(String(id))
+                return (
+                  <button
+                    key={`${group.root._id}-${opt.value}`}
+                    type="button"
+                    onClick={() => toggleFilterId(id)}
+                    className={`rounded-full px-3.5 py-2 text-sm font-medium transition ${
+                      active
+                        ? 'bg-brand text-white shadow-sm shadow-brand/25'
+                        : 'bg-white text-[#64748B] ring-1 ring-[#E4E7EF] hover:text-brand hover:ring-brand/30'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ))}
+      </>
     )
   }
 

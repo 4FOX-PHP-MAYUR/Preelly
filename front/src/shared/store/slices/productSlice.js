@@ -17,6 +17,8 @@ export const fetchProducts = createAsyncThunk(
       minPrice,
       maxPrice,
       year,
+      minYear,
+      maxYear,
       minMileage,
       maxMileage,
       make,
@@ -28,6 +30,7 @@ export const fetchProducts = createAsyncThunk(
       condition,
       transmission,
       fuelType,
+      filterIds,
       sortBy,
     },
     { rejectWithValue }
@@ -50,6 +53,8 @@ export const fetchProducts = createAsyncThunk(
       if (minPrice !== undefined && minPrice !== null && minPrice !== '') params.minPrice = minPrice
       if (maxPrice !== undefined && maxPrice !== null && maxPrice !== '') params.maxPrice = maxPrice
       if (year !== undefined && year !== null && year !== '') params.year = year
+      if (minYear !== undefined && minYear !== null && minYear !== '') params.minYear = minYear
+      if (maxYear !== undefined && maxYear !== null && maxYear !== '') params.maxYear = maxYear
       if (minMileage !== undefined && minMileage !== null && minMileage !== '') params.minMileage = minMileage
       if (maxMileage !== undefined && maxMileage !== null && maxMileage !== '') params.maxMileage = maxMileage
       if (make) params.make = make
@@ -61,6 +66,7 @@ export const fetchProducts = createAsyncThunk(
       if (condition) params.condition = condition
       if (transmission) params.transmission = transmission
       if (fuelType) params.fuelType = fuelType
+      if (filterIds) params.filterIds = filterIds
       if (sortBy) params.sortBy = sortBy
       const response = await productService.getProducts(params)
       return response.data
@@ -201,6 +207,7 @@ const productSlice = createSlice({
   reducers: {
     clearCurrentProduct: (state) => {
       state.currentProduct = null
+      state.relatedProducts = []
     },
     clearProducts: (state) => {
       state.products = []

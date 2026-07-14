@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import { fetchRootCategories } from '@shared/store/slices/categorySlice'
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
 import CategorySkeleton from '../components/Categories/CategorySkeleton'
-import { CategoryBadge, formatCategoryCount, isVehicleCategoryName } from '../components/Categories/categoryBrowseShared'
+import { CategoryBadge, formatCategoryCount } from '../components/Categories/categoryBrowseShared'
 import { getCategoryImageUrl } from '@shared/utils/helpers'
 
 function BrowseCategoryTile({ category, onClick }) {
@@ -55,11 +55,8 @@ function CategoriesPage() {
   }, [dispatch, rootCategories.length, loading])
 
   const handleCategoryClick = (category) => {
-    if (isVehicleCategoryName(category.name)) {
-      navigate(`/categories/${category._id}/products`)
-      return
-    }
-    navigate(`/categories/${category._id}`)
+    // All categories open the unified listing page with the shared filter panel.
+    navigate(`/categories/${category._id}/products`)
   }
 
   return (

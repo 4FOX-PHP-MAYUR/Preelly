@@ -15,7 +15,14 @@ export function useEmirateCities() {
       .listActiveEmirates()
       .then((res) => {
         if (cancelled) return
-        const list = Array.isArray(res?.data) ? res.data : []
+        const body = res?.data
+        const list = Array.isArray(body)
+          ? body
+          : Array.isArray(body?.data)
+            ? body.data
+            : Array.isArray(body?.emirates)
+              ? body.emirates
+              : []
         setEmirates(list)
         setError('')
       })

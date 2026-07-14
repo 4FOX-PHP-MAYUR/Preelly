@@ -1,9 +1,12 @@
 const express = require('express')
 const router = express.Router()
 const Product = require('../models/Product')
+const Comment = require('../models/Comment')
+const Follow = require('../models/Follow')
 const Category = require('../models/Category')
 const Filter = require('../models/Filter')
 const CategoryFilter = require('../models/CategoryFilter')
+const Package = require('../models/Package')
 const mongoose = require('mongoose')
 const authMiddleware = require('../middleware/auth')
 const validateObjectId = require('../middleware/validateObjectId')
@@ -22,7 +25,7 @@ const {
   buildVehicleDetailPresentation,
   HANDLED_REQUEST_KEYS,
 } = require('../utils/productVehicleFields')
-const { buildProductAttributesPresentation } = require('../utils/productAttributesResolver')
+const { buildProductAttributesPresentation, buildDetailFeaturesPresentation } = require('../utils/productAttributesResolver')
 const { enrichReelsProducts } = require('../utils/reelsProductFields')
 
 function parseBooleanField (value) {
@@ -330,6 +333,8 @@ router.get('/', async (req, res) => {
       limit = 10,
       userId,
       year,
+      minYear,
+      maxYear,
       minMileage,
       maxMileage,
       make,
@@ -694,6 +699,20 @@ router.get('/', async (req, res) => {
     if (year && year.trim() !== '') {
       const y = Number(year)
       if (!isNaN(y)) query.year = y
+    }
+    if (minYear !== undefined && minYear !== null && minYear !== '') {
+      const y = Number(minYear)
+      if (!isNaN(y)) {
+        query.year = typeof query.year === 'object' && query.year ? query.year : {}
+        query.year.$gte = y
+      }
+    }
+    if (maxYear !== undefined && maxYear !== null && maxYear !== '') {
+      const y = Number(maxYear)
+      if (!isNaN(y)) {
+        query.year = typeof query.year === 'object' && query.year ? query.year : {}
+        query.year.$lte = y
+      }
     }
     if (minMileage !== undefined && minMileage !== null && minMileage !== '') {
       const min = Number(minMileage)
@@ -1164,33 +1183,56 @@ router.get('/:id/related', validateObjectId('id'), async (req, res) => {
       return res.status(404).json({ message: 'Product not found' })
     }
 
-    const { categoryId, location } = req.query
+    const { categoryId, location, subcategoryId } = req.query
+    const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-    const query = {
+    const baseQuery = {
       _id: { $ne: product._id },
-      status: 'active', // Only show approved products in related
+      status: 'active',
     }
 
-    if (categoryId || product.category) {
-      // Prefer explicit categoryId query param, otherwise use product's category
-      if (categoryId) query.category = categoryId
-      else query.category = product.category
-    }
-    // Also filter by subcategory when available (query param takes precedence)
-    const relatedSub = req.query.subcategoryId || product.subcategory
-    if (relatedSub) {
-      query.subcategory = relatedSub
+    const category = categoryId || product.category
+    if (category) baseQuery.category = category
+
+    const relatedSub = subcategoryId || product.subcategory
+
+    const buildLocationClause = () => {
+      const explicit = typeof location === 'string' ? location.trim() : ''
+      if (explicit && explicit.length <= 64) {
+        const rx = new RegExp(escapeRegExp(explicit), 'i')
+        return { $or: [{ city: rx }, { location: rx }] }
+      }
+      const city = product?.city && String(product.city).trim()
+      if (city && city.length <= 64) {
+        const rx = new RegExp(escapeRegExp(city), 'i')
+        return { $or: [{ city: rx }, { location: rx }] }
+      }
+      return null
     }
 
-    if (location || product.location) {
-      query.location = new RegExp(location || product.location, 'i')
+    const locationClause = buildLocationClause()
+
+    const runRelatedQuery = async ({ withSubcategory, withLocation }) => {
+      const query = { ...baseQuery }
+      if (withSubcategory && relatedSub) query.subcategory = relatedSub
+      if (withLocation && locationClause) Object.assign(query, locationClause)
+      return Product.find(query)
+        .populate('category', 'name')
+        .limit(10)
+        .sort({ createdAt: -1 })
+        .lean()
     }
 
-    const relatedProducts = await Product.find(query)
-      .populate('category', 'name')
-      .limit(10)
-      .sort({ createdAt: -1 })
-      .lean()
+    let relatedProducts = await runRelatedQuery({ withSubcategory: true, withLocation: false })
+    if (relatedProducts.length === 0 && relatedSub) {
+      relatedProducts = await runRelatedQuery({ withSubcategory: false, withLocation: false })
+    }
+    if (relatedProducts.length === 0 && locationClause) {
+      relatedProducts = await runRelatedQuery({ withSubcategory: Boolean(relatedSub), withLocation: true })
+      if (relatedProducts.length === 0 && relatedSub) {
+        relatedProducts = await runRelatedQuery({ withSubcategory: false, withLocation: true })
+      }
+    }
 
     const savedStorage = await readSavedStorageForRequest(req)
     const relatedWithSaved = relatedProducts.map((p) => withSaved(p, savedStorage))
@@ -1479,16 +1521,6 @@ router.get('/:id', validateObjectId('id'), async (req, res) => {
       hasToken: !!token,
     })
 
-    // Increment views only for active products
-    if (product.status === 'active') {
-      try {
-        await product.incrementViews()
-      } catch (viewErr) {
-        console.error('Error incrementing views:', viewErr)
-        // continue - still return the product
-      }
-    }
-
     // saved = EXISTS(user_id + product_id in saved storage). Real-time read, no cache.
     let savedStorage
     try {
@@ -1498,18 +1530,26 @@ router.get('/:id', validateObjectId('id'), async (req, res) => {
       savedStorage = { userId: null, savedProductIds: new Set() }
     }
     const productWithSaved = withSaved(product, savedStorage)
-    const [presentation, attributesPresentation] = await Promise.all([
+    const sellerId = product.seller?._id || product.seller
+    const [presentation, attributesPresentation, detailFeatures, commentCount, postCount, followingCount] = await Promise.all([
       buildVehicleDetailPresentation(productWithSaved),
       buildProductAttributesPresentation(productWithSaved),
+      buildDetailFeaturesPresentation(productWithSaved),
+      Comment.countDocuments({ product: req.params.id, status: 'approved' }),
+      sellerId ? Product.countDocuments({ seller: sellerId, status: 'active' }) : Promise.resolve(0),
+      sellerId ? Follow.countDocuments({ follower: sellerId, status: 'active' }) : Promise.resolve(0),
     ])
     res.json({
       ...productWithSaved,
       ...presentation.legacyFields,
       ...presentation.vehicleListingFields,
+      features: detailFeatures,
       carOverview: presentation.carOverview,
       vehicleFeatures: presentation.vehicleFeatures,
       productAttributes: attributesPresentation.productAttributes,
       productMultiAttributes: attributesPresentation.productMultiAttributes,
+      commentCount,
+      sellerStats: { postCount, followingCount },
     })
   } catch (error) {
     console.error('Error fetching product:', error)
@@ -2642,6 +2682,45 @@ router.delete('/:id', authMiddleware, validateObjectId('id'), async (req, res) =
       return res.status(400).json({ message: 'Invalid product ID' })
     }
     res.status(500).json({ message: 'Error deleting product' })
+  }
+})
+
+// @route   PUT /api/products/:id/package
+// @desc    Attach the package the seller picked after submitting the listing.
+//          `isPaymentDone` stays 0 here — it only flips to 1 once payment succeeds.
+// @access  Private (owner only)
+router.put('/:id/package', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const { packageId } = req.body
+    if (!packageId || !mongoose.Types.ObjectId.isValid(String(packageId))) {
+      return res.status(400).json({ message: 'A valid packageId is required' })
+    }
+
+    const selectedPackage = await Package.findOne({ _id: packageId, isDeleted: false, status: true }).lean()
+    if (!selectedPackage) {
+      return res.status(404).json({ message: 'Package not found' })
+    }
+
+    const product = await Product.findById(req.params.id)
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' })
+    }
+    if (product.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to update this product' })
+    }
+
+    product.package = selectedPackage._id
+    await product.save()
+
+    res.json({
+      message: 'Package selected successfully',
+      productId: String(product._id),
+      packageId: String(selectedPackage._id),
+      isPaymentDone: product.isPaymentDone,
+    })
+  } catch (error) {
+    console.error('Error selecting package:', error)
+    res.status(500).json({ message: 'Error selecting package' })
   }
 })
 

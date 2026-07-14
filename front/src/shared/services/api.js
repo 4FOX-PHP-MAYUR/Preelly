@@ -81,6 +81,14 @@ api.interceptors.response.use(
   }
 )
 
+/** Skip empty optional fields so legacy form keys are not sent when unused. */
+function hasFormPayloadValue(value) {
+  if (value === undefined || value === null) return false
+  if (typeof value === 'string' && value.trim() === '') return false
+  if (Array.isArray(value) && value.length === 0) return false
+  return true
+}
+
 /** Build multipart body once per key (avoids duplicate currency etc. on the wire). */
 function buildProductMultipartFormData(productData) {
   const formData = new FormData()
@@ -89,7 +97,7 @@ function buildProductMultipartFormData(productData) {
   const entries = new Map()
   Object.keys(productData).forEach((key) => {
     const value = productData[key]
-    if (value === undefined || value === null) return
+    if (!hasFormPayloadValue(value)) return
     entries.set(key, value)
   })
 
@@ -198,6 +206,34 @@ export const dynamicFormService = {
 export const emirateService = {
   listActiveEmirates: (config) => api.get('/v1/web/emirates', config),
   getEmirateById: (id, config) => api.get(`/v1/web/emirates/${id}`, config),
+}
+
+// Packages (public web API — `packages` collection)
+export const packageService = {
+  listActivePackages: (config) => api.get('/v1/web/packages', config),
+  getPackageById: (id, config) => api.get(`/v1/web/packages/${id}`, config),
+  // Attaches the chosen package to a submitted listing (payment still pending).
+  selectPackageForProduct: (productId, packageId) =>
+    api.put(`/products/${productId}/package`, { packageId }),
+}
+
+// Storage facility durations (public web API — `storagefacilities` collection)
+export const storageFacilityService = {
+  listActiveStorageFacilities: (config) => api.get('/v1/web/storage-facilities', config),
+}
+
+// Coupons — validation is server-side; the API returns the reason on rejection.
+export const couponService = {
+  validate: (payload, config) => api.post('/coupon/validate', payload, config),
+}
+
+// Post-ad checkout — order summary is priced server-side, never in the browser.
+export const checkoutService = {
+  getSummary: ({ productId, packageId, storageFacilityId }, config) =>
+    api.get('/v1/web/checkout/summary', {
+      ...config,
+      params: { productId, packageId, ...(storageFacilityId ? { storageFacilityId } : {}) },
+    }),
 }
 
 // Product service
@@ -370,6 +406,14 @@ export const interactionService = {
     if (!isValidObjectId(productId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid product ID' } } })
     return api.post(`/products/${productId}/view`)
   },
+  recordVideoView: (productId) => {
+    if (!isValidObjectId(productId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid product ID' } } })
+    return api.post(`/products/${productId}/video-view`)
+  },
+  shareProduct: (productId) => {
+    if (!isValidObjectId(productId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid product ID' } } })
+    return api.post(`/products/${productId}/share`)
+  },
   checkLiked: (productId) => {
     if (!isValidObjectId(productId)) return Promise.resolve({ data: { liked: false } })
     return asAuthOptional(() => api.get(`/products/${productId}/liked`), { liked: false })
@@ -380,7 +424,11 @@ export const interactionService = {
   },
   reportProduct: (productId, data) => api.post(`/products/${productId}/report`, data),
   getComments: (productId) => api.get(`/products/${productId}/comments`),
-  addComment: (productId, text) => api.post(`/products/${productId}/comments`, { text }),
+  addComment: (productId, text, parentID = null) => {
+    const body = { text }
+    if (parentID) body.parentID = parentID
+    return api.post(`/products/${productId}/comments`, body)
+  },
   deleteComment: (commentId) => api.delete(`/comments/${commentId}`),
   likeComment: (commentId) => api.post(`/comments/${commentId}/like`),
   reportComment: (commentId, reason) => api.post(`/comments/${commentId}/report`, { reason }),
@@ -409,6 +457,24 @@ export const chatService = {
   deleteChat: (chatId) => api.delete(`/chats/${chatId}`),
   deleteMessage: (chatId, messageId) => api.delete(`/chats/${chatId}/messages/${messageId}`),
   saveCallEvent: (chatId, data) => api.post(`/chats/${chatId}/call-event`, data),
+}
+
+/**
+ * Storage facilities are sent as multipart so the icon can ride along.
+ * `imageIcon` is a File when replacing the icon; everything else is coerced to a
+ * string by FormData, which the API's validators and service already expect.
+ */
+function toStorageFacilityFormData(data = {}) {
+  const formData = new FormData()
+  Object.entries(data).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    if (key === 'imageIcon') {
+      if (value instanceof File) formData.append('imageIcon', value)
+      return
+    }
+    formData.append(key, value)
+  })
+  return formData
 }
 
 // Admin service
@@ -566,6 +632,35 @@ export const adminService = {
   updateEmirate: (id, data) => api.patch(`/admin/emirates/${id}`, data),
   setEmirateStatus: (id, status) => api.put(`/admin/emirates/${id}/status`, { status }),
   deleteEmirate: (id) => api.delete(`/admin/emirates/${id}`),
+  // Packages admin endpoints
+  getPackages: (params) => api.get('/admin/packages', { params }),
+  getPackageById: (id) => api.get(`/admin/packages/${id}`),
+  createPackage: (data) => api.post('/admin/packages', data),
+  updatePackage: (id, data) => api.patch(`/admin/packages/${id}`, data),
+  setPackageStatus: (id, status) => api.put(`/admin/packages/${id}/status`, { status }),
+  deletePackage: (id) => api.delete(`/admin/packages/${id}`),
+  // Storage Facilities admin endpoints (multipart — optional icon upload)
+  getStorageFacilities: (params) => api.get('/admin/storage-facilities', { params }),
+  getStorageFacilityById: (id) => api.get(`/admin/storage-facilities/${id}`),
+  createStorageFacility: (data) =>
+    api.post('/admin/storage-facilities', toStorageFacilityFormData(data), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  updateStorageFacility: (id, data) =>
+    api.patch(`/admin/storage-facilities/${id}`, toStorageFacilityFormData(data), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  setStorageFacilityStatus: (id, status) =>
+    api.put(`/admin/storage-facilities/${id}/status`, { status }),
+  deleteStorageFacility: (id) => api.delete(`/admin/storage-facilities/${id}`),
+  // Coupon endpoints (mounted at /api/coupon)
+  getCoupons: (params) => api.get('/coupon/list', { params }),
+  getCouponById: (id) => api.get(`/coupon/${id}`),
+  createCoupon: (data) => api.post('/coupon/create', data),
+  updateCoupon: (id, data) => api.put(`/coupon/update/${id}`, data),
+  setCouponStatus: (id, status) => api.patch(`/coupon/status/${id}`, { status }),
+  deleteCoupon: (id) => api.delete(`/coupon/${id}`),
+  generateCouponCode: () => api.get('/coupon/generate-code'),
   // Admin Roles endpoints
   getRoles: (params) => api.get('/admin/roles', { params }),
   getRoleById: (id) => api.get(`/admin/roles/${id}`),

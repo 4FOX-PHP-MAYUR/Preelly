@@ -43,7 +43,7 @@ import {
   Play,
   Trash2,
 } from 'lucide-react'
-import { getCategoryImageUrl, getMediaUrl } from '@shared/utils/helpers'
+import { getMediaUrl } from '@shared/utils/helpers'
 import {
   getBrandOptionsForCategory,
   isVehicleSubcategoryBicycle,
@@ -57,7 +57,6 @@ import { applyAiVehicleFormPrefill, syncBrandChoiceFromMake } from '@shared/util
 import { toFilterArray, mergeFilterValues, scalarFromMultiSelect } from '@shared/utils/filterValueUtils'
 import {
   applyAdsPostedToFormData,
-  isAdsPostedFilterRoot,
   omitAdsPostedFromSelections,
   resolveAdsPostedSelectionForDate,
 } from '@shared/utils/adsPostedFilter'
@@ -72,6 +71,7 @@ import {
   setFieldValue as setDynamicFieldValue,
   resetDynamicForm,
 } from '@shared/store/slices/dynamicFormSlice'
+import { PostAdListingBreadcrumb } from '../components/PostAd/PostAdListingBreadcrumb'
 import { DynamicCategoryFormSection } from '../features/postAdCategoryForm/components/DynamicCategoryFormSection'
 import { FieldRenderer } from '../features/postAdCategoryForm/components/FieldRenderer'
 import { LocationMapPicker } from '../features/postAdCategoryForm/components/LocationMapPicker'
@@ -88,8 +88,25 @@ const DISPLAY_TOTAL_STEPS = TOTAL_STEPS - 1
 const toDisplayStep = (internalStep) => Math.max(1, internalStep - 1)
 const toInternalStep = (displayStep) => displayStep + 1
 
+/** Motors stops at the subcategory level: picking a subcategory goes straight to the
+ *  dynamic form (keyed off that subcategory) instead of asking for a child category.
+ *  Every other root category keeps its full child-category drill-down. */
+const isMotorsRootCategory = (name) => String(name || '').trim().toLowerCase() === 'motors'
+
 /** All listings use UAE Dirham (Dubai / UAE marketplace). */
 const MARKETPLACE_CURRENCY = 'AED'
+
+function hasFormPayloadValue(value) {
+  if (value === undefined || value === null) return false
+  if (typeof value === 'string' && value.trim() === '') return false
+  if (Array.isArray(value) && value.length === 0) return false
+  return true
+}
+
+function assignIfPresent(target, key, value) {
+  if (!hasFormPayloadValue(value)) return
+  target[key] = value
+}
 
 // Step 1: Authentication Check
 function Step1Auth({ user, onNext }) {
@@ -151,12 +168,18 @@ function getCategoryCardTheme(name) {
   return match || { bg: '#F4F6F8', ring: 'ring-slate-300', iconClass: 'text-slate-500', Icon: LayoutGrid }
 }
 
+function getPostAdCategoryCardImageUrl(category) {
+  const path = category?.categoryImage
+  if (!path || typeof path !== 'string') return null
+  return getMediaUrl(path) || path
+}
+
 /** Card background is the admin-configured `category.colorCode`; the hardcoded
  *  theme only fills in for categories that don't have one set yet. */
 function CategoryPickerCard({ category, selected, onSelect }) {
   const theme = getCategoryCardTheme(category?.name)
   const Icon = theme.Icon
-  const imageSrc = getCategoryImageUrl(category)
+  const imageSrc = getPostAdCategoryCardImageUrl(category)
   const [imageFailed, setImageFailed] = useState(false)
   const bgColor = /^#[0-9A-Fa-f]{3,8}$/.test(category?.colorCode || '') ? category.colorCode : theme.bg
 
@@ -330,22 +353,6 @@ const VIDEO_TIPS = [
   'Keep it under 2 minutes',
   'Use good lighting for a clear view',
 ]
-
-function PostAdListingBreadcrumb({ items = [] }) {
-  return (
-    <nav className="mb-6 sm:mb-8 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-500" aria-label="Breadcrumb">
-      <Home className="h-4 w-4 shrink-0 text-gray-500" aria-hidden />
-      {items.map((name, i) => (
-        <span key={`${name}-${i}`} className="inline-flex items-center gap-2">
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden />
-          <span className={i === items.length - 1 ? 'font-medium text-gray-800' : 'text-gray-500'}>
-            {name}
-          </span>
-        </span>
-      ))}
-    </nav>
-  )
-}
 
 // Safe video src: use .url for existing (edit) video objects; createObjectURL only for File/Blob, with cleanup
 function useVideoPreviewSrc(videoFile) {
@@ -1254,16 +1261,7 @@ function Step3VideoUpload({
   }
 
   const handleContinue = () => {
-    const title = (watch('title') || '').trim()
-    const description = (watch('description') || '').trim()
-    if (title.length < 10) {
-      toast.error('Title must be at least 10 characters')
-      return
-    }
-    if (description.length < 30) {
-      toast.error('Description must be at least 30 characters')
-      return
-    }
+    // Title/description are optional here — enforced on the later review step.
     if (!videoFile) {
       toast.error('Please upload or capture a video')
       return
@@ -1302,35 +1300,28 @@ function Step3VideoUpload({
       <PostAdListingBreadcrumb items={[...breadcrumbItems, 'upload video']} />
 
       <div className="space-y-5 sm:space-y-6 w-full">
-        <div>
+        {/* <div style={{ display: 'none' }}>
           <label className="block text-sm font-medium text-gray-800 mb-2">
-            Title<span className="text-red-500">*</span>
+            Title
           </label>
           <div className="relative">
             <input
               type="text"
-              {...register('title', {
-                required: 'Title is required',
-                minLength: { value: 10, message: 'Title must be at least 10 characters' },
-              })}
+              {...register('title')}
               className={`${POST_AD_INPUT} pr-11`}
               placeholder="Enter product title"
             />
             <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
           </div>
           {errors?.title && <p className="mt-1.5 text-sm text-red-600">{errors.title.message}</p>}
-        </div>
+        </div> */}
 
-        <div>
+        {/* <div style={{ display: 'none' }}>
           <label className="block text-sm font-medium text-gray-800 mb-2">
-            Description<span className="text-red-500">*</span>
+            Description
           </label>
           <textarea
-            {...register('description', {
-              required: 'Description is required',
-              minLength: { value: 30, message: 'Description must be at least 30 characters' },
-              maxLength: { value: 2500, message: 'Description must not exceed 2500 characters' },
-            })}
+            {...register('description')}
             rows={6}
             className={`${POST_AD_INPUT} resize-none min-h-[150px]`}
             placeholder="Enter product description"
@@ -1338,7 +1329,7 @@ function Step3VideoUpload({
           {errors?.description && (
             <p className="mt-1.5 text-sm text-red-600">{errors.description.message}</p>
           )}
-        </div>
+        </div> */}
 
         {!videoFile ? (
           <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4">
@@ -2707,10 +2698,10 @@ function Step4BasicDetails({
       )}
 
       {/* Admin-configured dynamic fields (FormField collection), scoped to the selected category.
-          Use the Step 2 subcategory as the base categoryId when one was selected, since that's
-          the deepest category the user has actually chosen; fall back to the root category. */}
+          Use the deepest category the user picked in Step 2 (child category, then subcategory,
+          then root) as the base categoryId. */}
       <DynamicCategoryFormSection
-        categoryId={watch('subcategory') || selectedCategory}
+        categoryId={watch('childCategory') || watch('subcategory') || selectedCategory}
         onAdvancePastForm={onNext}
         setValue={setValue}
         watch={watch}
@@ -2822,6 +2813,11 @@ function Step10Review({
     // Display-only: the real API submission is unaffected by this format.
     const parts = []
 
+    const pushPart = (key, value) => {
+      if (!hasFormPayloadValue(value)) return
+      parts.push([key, value])
+    }
+
     const video = toFileDescriptor(videoFile, 'video.mp4', 'video/mp4')
     if (video) parts.push(['video', video])
 
@@ -2830,22 +2826,25 @@ function Step10Review({
       if (image) parts.push(['images', image])
     })
 
-    parts.push(['title', formData.title || ''])
-    parts.push(['description', formData.description || ''])
-    parts.push(['price', formData.price || ''])
-    parts.push(['currency', formData.currency || MARKETPLACE_CURRENCY])
-    parts.push(['category', selectedCategory || ''])
-    parts.push(['subcategory', formData.subcategory || ''])
-    parts.push(['location', locationSummary || ''])
-    parts.push(['country', formData.country || ''])
-    parts.push(['city', formData.city || ''])
-    parts.push(['area', formData.area || ''])
-    parts.push(['brand', formData.brand || ''])
-    parts.push(['contactName', formData.contactName || ''])
-    parts.push(['contactPhone', formData.contactPhone || ''])
-    parts.push(['condition', (Array.isArray(formData.condition) ? formData.condition[0] : formData.condition) || ''])
-    parts.push(['priceType', formData.priceType || 'Fixed'])
-    parts.push(['adType', formData.adType || 'free'])
+    pushPart('title', formData.title)
+    pushPart('description', formData.description)
+    pushPart('price', formData.price)
+    pushPart('currency', formData.currency || MARKETPLACE_CURRENCY)
+    pushPart('category', selectedCategory)
+    pushPart('subcategory', formData.subcategory)
+    pushPart('location', locationSummary)
+    pushPart('country', formData.country)
+    pushPart('city', formData.city)
+    pushPart('area', formData.area)
+    pushPart('brand', formData.brand)
+    pushPart('contactName', formData.contactName)
+    pushPart('contactPhone', formData.contactPhone)
+    pushPart(
+      'condition',
+      Array.isArray(formData.condition) ? formData.condition[0] : formData.condition
+    )
+    pushPart('priceType', formData.priceType || 'Fixed')
+    pushPart('adType', formData.adType || 'free')
 
     allDynamicFields.forEach((field) => {
       const raw = dynamicValues[field.fieldName]
@@ -3230,9 +3229,6 @@ function PostAdPage() {
   const [loadingLevels, setLoadingLevels] = useState(false)
   const [categoryPhase, setCategoryPhase] = useState('root')
   const [loadingSubcategories, setLoadingSubcategories] = useState(false)
-  const [categoryFilters, setCategoryFilters] = useState([])
-  const [loadingCategoryFilters, setLoadingCategoryFilters] = useState(false)
-  const [categoryFiltersError, setCategoryFiltersError] = useState('')
   const [loadingProduct, setLoadingProduct] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -3246,8 +3242,6 @@ function PostAdPage() {
     accident_free: null,
   })
 
-  const prevFilterScopeRef = useRef('')
-  const prevFilterFieldKeysRef = useRef([])
   // Step 5's admin-configured fields live in a Redux slice that gets wiped as soon
   // as that step mounts (setActiveCategory resets `values`), so a restored draft's
   // dynamic-form values are handed down via ref and re-applied right after — see
@@ -3429,126 +3423,6 @@ function PostAdPage() {
     return () => { cancelled = true }
   }, [selectedPath[0], levelOptions[0]])
 
-  // Fetch category filters for the currently selected category level (deepest selected node wins).
-  useEffect(() => {
-    const rootId = selectedPath[0] || ''
-    const subId = selectedPath[1] || ''
-    const childId = selectedPath.length > 2 ? selectedPath[selectedPath.length - 1] : ''
-
-    // Clear when nothing selected
-    if (!rootId) {
-      setCategoryFilters([])
-      setCategoryFiltersError('')
-      setLoadingCategoryFilters(false)
-      setValue('__categoryFilterFieldKeys', [], { shouldDirty: false, shouldTouch: false })
-      return
-    }
-
-    const scopeKey = selectedPath.filter(Boolean).join('>')
-    if (!scopeKey) return
-
-    // If the scope changed, clear previously set filter fields
-    if (prevFilterScopeRef.current && prevFilterScopeRef.current !== scopeKey) {
-      prevFilterFieldKeysRef.current.forEach((k) => setValue(k, []))
-    }
-    prevFilterScopeRef.current = scopeKey
-
-    let cancelled = false
-    setLoadingCategoryFilters(true)
-    setCategoryFiltersError('')
-
-    const levels = {
-      categoryId: rootId,
-      ...(subId ? { subcategoryId: subId } : {}),
-      ...(childId ? { childCategoryId: childId } : {}),
-    }
-
-    categoryService
-      .getCategoryFilters(levels)
-      .then((res) => {
-        if (cancelled) return
-        const list = Array.isArray(res?.data?.filters) ? res.data.filters : []
-        setCategoryFilters(list)
-        setCategoryFiltersError('')
-
-        // Track the field keys we need to clear on next scope change
-        const rootFilters = list.filter((f) => !f.parentId)
-        const fieldKeys = []
-        for (const root of rootFilters) {
-          if (isAdsPostedFilterRoot(root)) continue
-          const slug = String(root.slug || root._id)
-          fieldKeys.push(`filter_${slug}`)
-        }
-        prevFilterFieldKeysRef.current = fieldKeys
-
-        // Register filter fields so setValue before Step 4 mount is preserved.
-        fieldKeys.forEach((k) => {
-          const cur = getValues(k)
-          if (cur === undefined) {
-            setValue(k, [], { shouldRegister: true, shouldDirty: false, shouldTouch: false })
-          }
-        })
-
-        const adsPostedResolved = resolveAdsPostedSelectionForDate(
-          isEditMode && editProductPostedAt ? editProductPostedAt : new Date(),
-          list,
-        )
-        if (adsPostedResolved?.fieldKey) {
-          setValue(adsPostedResolved.fieldKey, [], { shouldDirty: false, shouldTouch: false })
-        }
-
-        // Expose to Step4 via RHF watch (simple wiring without prop drilling too much)
-        setValue('__categoryFilters', list, { shouldDirty: false, shouldTouch: false })
-        setValue('__categoryFilterFieldKeys', fieldKeys, { shouldDirty: false, shouldTouch: false })
-        setValue('__categoryFiltersLoading', false, { shouldDirty: false, shouldTouch: false })
-        setValue('__categoryFiltersError', '', { shouldDirty: false, shouldTouch: false })
-
-        const aiPayload = getValues('__aiListingExtraction')
-        const extracted = getValues('__extractedData')
-
-        if (aiPayload?.filter_selections && typeof aiPayload.filter_selections === 'object') {
-          const sanitizedAiFilters = omitAdsPostedFromSelections(aiPayload.filter_selections, list)
-          Object.entries(sanitizedAiFilters).forEach(([key, value]) => {
-            if (key.startsWith('filter_') && value) {
-              setValue(key, mergeFilterValues(getValues(key), value), {
-                shouldDirty: true,
-                shouldTouch: true,
-              })
-            }
-          })
-        }
-
-        applyTranscriptFilterSelections({
-          filters: list,
-          getValues,
-          setValue,
-          extractedData: extracted,
-          aiExtraction: aiPayload,
-        })
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setCategoryFilters([])
-        const msg = err?.response?.data?.message || 'Failed to load category filters'
-        setCategoryFiltersError(msg)
-        setValue('__categoryFilters', [], { shouldDirty: false, shouldTouch: false })
-        setValue('__categoryFilterFieldKeys', [], { shouldDirty: false, shouldTouch: false })
-        setValue('__categoryFiltersLoading', false, { shouldDirty: false, shouldTouch: false })
-        setValue('__categoryFiltersError', msg, { shouldDirty: false, shouldTouch: false })
-      })
-      .finally(() => {
-        if (cancelled) return
-        setLoadingCategoryFilters(false)
-        setValue('__categoryFiltersLoading', false, { shouldDirty: false, shouldTouch: false })
-      })
-
-    // Set loading for Step4 immediately
-    setValue('__categoryFiltersLoading', true, { shouldDirty: false, shouldTouch: false })
-    return () => {
-      cancelled = true
-    }
-  }, [selectedPath, setValue, isEditMode, editProductPostedAt])
-
   // Load product data if in edit mode
   useEffect(() => {
     const loadProductData = async () => {
@@ -3602,15 +3476,15 @@ function PostAdPage() {
             const pathRes = await categoryService.getCategoryPath(categoryId)
             const pathCategories = pathRes.data?.categories || []
             if (pathCategories.length > 0) {
-              const MAX_CATEGORY_LEVEL_INDEX = 1
+              const MAX_CATEGORY_LEVEL_INDEX = 2
               const maxPathLen = MAX_CATEGORY_LEVEL_INDEX + 1
               const truncatedPathCategories = pathCategories.slice(0, maxPathLen)
 
               setSelectedPath(truncatedPathCategories.map((c) => c._id))
               const level1SubcategoryId = truncatedPathCategories[1]?._id || ''
-              const deepestId = truncatedPathCategories[truncatedPathCategories.length - 1]?._id || ''
+              const level2ChildCategoryId = truncatedPathCategories[2]?._id || ''
               setValue('subcategory', level1SubcategoryId)
-              setValue('childCategory', '')
+              setValue('childCategory', level2ChildCategoryId)
               const rootsRes = await categoryService.getCategoryChildren(null)
               const roots = Array.isArray(rootsRes.data) ? rootsRes.data : []
               const opts = [roots]
@@ -3620,18 +3494,7 @@ function PostAdPage() {
               }
               setLevelOptions(opts)
               restoredCategoryPath = true
-
-              const rootId = truncatedPathCategories[0]?._id
-              const subId = truncatedPathCategories[1]?._id
-              if (rootId) {
-                const filtersRes = await categoryService.getCategoryFilters({
-                  categoryId: rootId,
-                  ...(subId ? { subcategoryId: subId } : {}),
-                })
-                const list = Array.isArray(filtersRes?.data?.filters) ? filtersRes.data.filters : []
-                setValue('__categoryFilters', list, { shouldDirty: false, shouldTouch: false })
-                restoreProductFilterSelections(product, setValue)
-              }
+              restoreProductFilterSelections(product, setValue)
             } else {
               const category = categories.find((cat) => cat._id === categoryId)
               if (category) setSubcategories(category.subcategories || [])
@@ -3803,21 +3666,63 @@ function PostAdPage() {
     setValue('childCategory', '')
     setValue('categoryPath', [rootId, subcategoryId].filter(Boolean))
 
-    setCurrentStep(3)
-    window.scrollTo(0, 0)
-
     const roots = levelOptions[0] || []
     const subs = levelOptions[1] || []
+
+    // Motors: skip the child-category step entirely — even if children exist — so the
+    // dynamic form loads for the chosen subcategory.
+    const rootName = roots.find((c) => String(c._id) === String(rootId))?.name
+    if (isMotorsRootCategory(rootName)) {
+      setLevelOptions([roots, subs])
+      setCurrentStep(3)
+      window.scrollTo(0, 0)
+      return
+    }
+
+    setLoadingSubcategories(true)
     categoryService
       .getCategoryChildren(subcategoryId, { signal: getRouteAbortSignal() })
       .then((res) => {
         const children = Array.isArray(res.data) ? res.data : []
         setLevelOptions([roots, subs, children])
+        if (children.length > 0) {
+          setCategoryPhase('childCategory')
+          window.scrollTo(0, 0)
+        } else {
+          setCurrentStep(3)
+          window.scrollTo(0, 0)
+        }
       })
-      .catch(() => setLevelOptions([roots, subs]))
+      .catch(() => {
+        setLevelOptions([roots, subs])
+        setCurrentStep(3)
+        window.scrollTo(0, 0)
+      })
+      .finally(() => setLoadingSubcategories(false))
+  }
+
+  const handleChildCategorySelect = (childCategoryId) => {
+    if (!childCategoryId) return
+    const rootId = selectedPath[0]
+    const subId = selectedPath[1]
+    setSelectedPath([rootId, subId, childCategoryId])
+    setValue('childCategory', childCategoryId, { shouldValidate: true })
+    setValue('categoryPath', [rootId, subId, childCategoryId].filter(Boolean))
+    setCurrentStep(3)
+    window.scrollTo(0, 0)
   }
 
   const handleCategoryPhaseBack = () => {
+    if (categoryPhase === 'childCategory') {
+      const rootId = selectedPath[0]
+      const subId = selectedPath[1]
+      setCategoryPhase('subcategory')
+      setValue('childCategory', '')
+      setSelectedPath([rootId, subId].filter(Boolean))
+      setValue('categoryPath', [rootId, subId].filter(Boolean))
+      window.scrollTo(0, 0)
+      return
+    }
     const rootId = selectedPath[0]
     if (!rootId) {
       navigate('/', { replace: true })
@@ -3843,6 +3748,10 @@ function PostAdPage() {
     levelOptions[0]?.find((c) => String(c._id) === String(selectedPath[0]))?.name || ''
   const subcategoryOptions = levelOptions[1] || []
   const selectedSubcategoryId = watch('subcategory') || selectedPath[1] || ''
+  const selectedSubcategoryName =
+    subcategoryOptions.find((c) => String(c._id) === String(selectedSubcategoryId))?.name || ''
+  const childCategoryOptions = levelOptions[2] || []
+  const selectedChildCategoryId = watch('childCategory') || selectedPath[2] || ''
   const levelLabels = levelLabelsFromApi ?? getLevelLabels(rootCategoryName)
   const flatCategoriesForSteps = levelOptions.flat()
   const selectedCategoryForSteps = watch('category')
@@ -3868,10 +3777,6 @@ function PostAdPage() {
     }
 
     case 3: {
-      const title = (watch('title') || '').trim()
-      const desc = (watch('description') || '').trim()
-      if (!title || title.length < 10) return false
-      if (!desc || desc.length < 30) return false
       if (!videoFile) return false
 
       const nonScreenshotImages = imageFiles.filter(f => !f.isScreenshot)
@@ -3880,8 +3785,13 @@ function PostAdPage() {
       return nonScreenshotImages.length > 0 || screenshotImages.length > 0
     }
 
-    case 4:
+    case 4: {
+      const title = (watch('title') || '').trim()
+      const desc = (watch('description') || '').trim()
+      if (!title || title.length < 10) return false
+      if (!desc || desc.length < 30) return false
       return imageFiles.length > 0
+    }
 
     case 5:
       return isDynamicFormReadyToSubmit
@@ -3927,7 +3837,8 @@ function PostAdPage() {
         const subs = levelOptions[1] || []
         return subs.length > 0 ? ['category', 'subcategory'] : ['category']
       }
-      case 3: return ['title', 'description']
+      // Optional on the upload-video step; required on the review step below it.
+      case 3: return []
       case 4: return ['title', 'description']
       case 5: return []
       case 6: return ['acceptRules']
@@ -3960,12 +3871,6 @@ function PostAdPage() {
       return 'Please complete all required fields'
 
     case 3: {
-      const title = (watch('title') || '').trim()
-      const desc = (watch('description') || '').trim()
-      if (!title) return 'Please enter a title'
-      if (title.length < 10) return 'Title must be at least 10 characters'
-      if (!desc) return 'Please enter a description'
-      if (desc.length < 30) return 'Description must be at least 30 characters'
       if (!videoFile) return 'Please upload or capture a video'
 
       const nonScreenshotImages = imageFiles.filter(f => !f.isScreenshot)
@@ -3978,9 +3883,16 @@ function PostAdPage() {
       return 'Please complete all required fields'
     }
 
-    case 4:
+    case 4: {
+      const title = (watch('title') || '').trim()
+      const desc = (watch('description') || '').trim()
+      if (!title) return 'Please enter a title'
+      if (title.length < 10) return 'Title must be at least 10 characters'
+      if (!desc) return 'Please enter a description'
+      if (desc.length < 30) return 'Description must be at least 30 characters'
       if (imageFiles.length === 0) return 'Please add at least one photo'
       return 'Please complete all required fields'
+    }
 
     case 5:
       if (!isDynamicFormReadyToSubmit) return 'Please complete the additional details below'
@@ -4008,13 +3920,14 @@ function PostAdPage() {
         window.scrollTo(0, 0)
         return
       }
+      const hasChildCategory = selectedPath.length > 2 && (levelOptions[2] || []).length > 0
       const hasSubs = (levelOptions[1] || []).length > 0
       setCurrentStep(2)
-      setCategoryPhase(hasSubs ? 'subcategory' : 'root')
+      setCategoryPhase(hasChildCategory ? 'childCategory' : hasSubs ? 'subcategory' : 'root')
       window.scrollTo(0, 0)
       return
     }
-    if (currentStep === 2 && categoryPhase === 'subcategory') {
+    if (currentStep === 2 && (categoryPhase === 'subcategory' || categoryPhase === 'childCategory')) {
       handleCategoryPhaseBack()
       return
     }
@@ -4300,28 +4213,9 @@ function PostAdPage() {
         categoryPath: JSON.stringify(pathIds),
         categoryPathNames: JSON.stringify(pathNames),
         location: location,
-        latitude: data.latitude ?? null,
-        longitude: data.longitude ?? null,
-        locationAddress: data.locationAddress || null,
-        country: data.country,
-        city: data.city,
-        area: data.area,
-        brand: data.brand || null,
         condition: conditionValue,
-        material: data.material || null,
-        color: scalarFromMultiSelect(data.color) || null,
-        make: data.make || null,
-        model: data.model || null,
-        year: data.year !== '' && data.year != null ? Number(data.year) : null,
-        mileage: data.mileage !== '' && data.mileage != null ? Number(data.mileage) : null,
-        transmission: scalarFromMultiSelect(data.transmission) || null,
-        fuelType: scalarFromMultiSelect(data.fuelType) || null,
-        seatingCapacity: data.seatingCapacity ? Number(data.seatingCapacity) : null,
-        assemblyStatus: data.assemblyStatus || null,
         priceType: data.priceType || 'Fixed',
         adType: data.adType || 'free',
-        contactName: data.contactName,
-        contactPhone: data.contactPhone,
         images: newImages.length > 0 ? newImages : undefined,
         existingImages: isEditMode
           ? existingImageUrls
@@ -4341,6 +4235,34 @@ function PostAdPage() {
             }
           : {}),
       }
+
+      assignIfPresent(formData, 'latitude', data.latitude)
+      assignIfPresent(formData, 'longitude', data.longitude)
+      assignIfPresent(formData, 'locationAddress', data.locationAddress)
+      assignIfPresent(formData, 'country', data.country)
+      assignIfPresent(formData, 'city', data.city)
+      assignIfPresent(formData, 'area', data.area)
+      assignIfPresent(formData, 'brand', data.brand)
+      assignIfPresent(formData, 'contactName', data.contactName)
+      assignIfPresent(formData, 'contactPhone', data.contactPhone)
+      assignIfPresent(formData, 'material', data.material)
+      assignIfPresent(formData, 'make', data.make)
+      assignIfPresent(formData, 'model', data.model)
+      assignIfPresent(formData, 'assemblyStatus', data.assemblyStatus)
+
+      const colorValue = scalarFromMultiSelect(data.color)
+      if (hasFormPayloadValue(colorValue)) formData.color = colorValue
+
+      if (data.year !== '' && data.year != null) formData.year = Number(data.year)
+      if (data.mileage !== '' && data.mileage != null) formData.mileage = Number(data.mileage)
+
+      const transmissionValue = scalarFromMultiSelect(data.transmission)
+      if (hasFormPayloadValue(transmissionValue)) formData.transmission = transmissionValue
+
+      const fuelTypeValue = scalarFromMultiSelect(data.fuelType)
+      if (hasFormPayloadValue(fuelTypeValue)) formData.fuelType = fuelTypeValue
+
+      if (data.seatingCapacity) formData.seatingCapacity = Number(data.seatingCapacity)
 
       // Attach category filter selections (exclude Ads Posted — set automatically below).
       const categoryFilterList = getValues('__categoryFilters') || []
@@ -4384,8 +4306,12 @@ function PostAdPage() {
         const raw = dynamicFormSubmitValues[field.fieldName]
         if (raw === undefined || raw === null || raw === '') return
 
+        // Admin-configured field names aren't guaranteed unique against reserved
+        // top-level keys (title, description, price, ...) — never let one clobber
+        // a value already set above (e.g. a category field labeled "Description"
+        // silently truncating the real ad description before submit).
         const value = Array.isArray(raw) ? raw.join(',') : String(raw)
-        if (value) formData[field.fieldName] = value
+        if (value && !formData.hasOwnProperty(field.fieldName)) formData[field.fieldName] = value
 
         if (getFieldKind(field.fieldType) === FIELD_KIND.CHECKBOX) {
           const values = (Array.isArray(raw) ? raw : [raw]).filter(Boolean).map(String)
@@ -4488,6 +4414,8 @@ function PostAdPage() {
         }
       }
 
+      console.log('[PostAd] Submit payload:', formData)
+
       if (isEditMode) {
         const updatedProduct = await dispatch(updateProduct({ id: editProductId, productData: formData })).unwrap()
         toast.success('Product updated successfully!')
@@ -4495,9 +4423,18 @@ function PostAdPage() {
           dispatch(fetchProducts({ userId: user._id }))
         }
       } else {
-        await dispatch(createProduct(formData)).unwrap()
+        const createdProduct = await dispatch(createProduct(formData)).unwrap()
         toast.success('Product submitted for review! It will be visible after admin approval.')
         if (user?._id) clearPostAdDraft(user._id)
+
+        // Listing is saved (isPaymentDone = 0) — send the seller on to pick a package.
+        const createdId = createdProduct?._id || createdProduct?.id
+        if (createdId) {
+          navigate(`/post-ad/select-package?productId=${createdId}`, {
+            state: { breadcrumbItems: [...pathNames, 'Summary'] },
+          })
+          return
+        }
       }
       navigate('/dashboard')
     } catch (error) {
@@ -4620,6 +4557,20 @@ function PostAdPage() {
             subcategories={subcategoryOptions}
             selectedSubcategoryId={selectedSubcategoryId}
             onSubcategorySelect={handleSubcategorySelect}
+            onBack={handleCategoryPhaseBack}
+            loading={loadingSubcategories}
+            register={register}
+            errors={errors}
+          />
+        )}
+        {currentStep === 2 && categoryPhase === 'childCategory' && (
+          <Step2Subcategory
+            rootCategoryName={
+              selectedSubcategoryName ? `${rootCategoryName} > ${selectedSubcategoryName}` : rootCategoryName
+            }
+            subcategories={childCategoryOptions}
+            selectedSubcategoryId={selectedChildCategoryId}
+            onSubcategorySelect={handleChildCategorySelect}
             onBack={handleCategoryPhaseBack}
             loading={loadingSubcategories}
             register={register}

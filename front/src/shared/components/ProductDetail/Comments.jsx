@@ -4,6 +4,7 @@ import { MessageCircle, Heart, Trash2, Send, User, Flag } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { interactionService } from '../../services/api'
 import { selectIsAuthenticated, selectUser } from '../../store/slices/authSlice'
+import DetailCard from './DetailCard'
 
 function Comments({ productId }) {
   const isAuthenticated = useSelector(selectIsAuthenticated)
@@ -180,27 +181,20 @@ function Comments({ productId }) {
   }
 
   return (
-    <div id="comments-section" className="bg-white rounded-lg shadow-md p-6 mt-8">
-      <div className="flex items-center space-x-2 mb-6">
-        <MessageCircle className="h-6 w-6 text-primary-600" />
-        <h2 className="text-2xl font-bold text-gray-900">
-          Comments ({comments.length})
-        </h2>
-      </div>
-
+    <DetailCard id="comments-section" title={`Comments (${comments.length})`}>
       {/* Comment Form */}
       {isAuthenticated ? (
-        <form onSubmit={handleSubmit} className="mb-6">
-          <div className="flex space-x-3">
-            <div className="flex-shrink-0">
+        <form onSubmit={handleSubmit} className="mb-5">
+          <div className="flex gap-3">
+            <div className="shrink-0">
               {user?.avatar ? (
                 <img
                   src={user.avatar}
                   alt={user.name}
-                  className="w-10 h-10 rounded-full object-cover"
+                  className="h-10 w-10 rounded-full object-cover"
                 />
               ) : (
-                <div className="w-10 h-10 rounded-full bg-primary-600 flex items-center justify-center">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand">
                   <User className="h-5 w-5 text-white" />
                 </div>
               )}
@@ -211,17 +205,17 @@ function Comments({ productId }) {
                 onChange={(e) => setCommentText(e.target.value)}
                 placeholder="Write a comment..."
                 rows={3}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600 resize-none"
+                className="w-full resize-none rounded-xl border border-slate-200 px-4 py-2 focus:border-brand focus:ring-2 focus:ring-brand/20"
                 maxLength={1000}
               />
-              <div className="flex items-center justify-between mt-2">
-                <span className="text-xs text-gray-500">
+              <div className="mt-2 flex items-center justify-between">
+                <span className="text-xs text-slate-500">
                   {commentText.length}/1000 characters
                 </span>
                 <button
                   type="submit"
                   disabled={submitting || !commentText.trim()}
-                  className="flex items-center space-x-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <Send className="h-4 w-4" />
                   <span>{submitting ? 'Posting...' : 'Post Comment'}</span>
@@ -231,10 +225,10 @@ function Comments({ productId }) {
           </div>
         </form>
       ) : (
-        <div className="mb-6 p-4 bg-gray-50 rounded-lg text-center">
-          <p className="text-gray-600">
+        <div className="mb-5 rounded-xl bg-slate-50 p-4 text-center">
+          <p className="text-slate-600">
             Please{' '}
-            <a href="/login" className="text-primary-600 hover:underline font-semibold">
+            <a href="/login" className="font-semibold text-brand hover:underline">
               login
             </a>{' '}
             to leave a comment
@@ -245,26 +239,26 @@ function Comments({ productId }) {
       {/* Comments List */}
       {loading ? (
         <div className="flex items-center justify-center py-8">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+          <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-brand" />
         </div>
       ) : comments.length === 0 ? (
-        <div className="text-center py-8 text-gray-500">
-          <MessageCircle className="h-12 w-12 mx-auto mb-3 text-gray-400" />
+        <div className="py-8 text-center text-slate-500">
+          <MessageCircle className="mx-auto mb-3 h-12 w-12 text-slate-400" />
           <p>No comments yet. Be the first to comment!</p>
         </div>
       ) : (
         <div className="space-y-4">
           {comments.map((comment) => (
-            <div key={comment._id} className="flex space-x-3 pb-4 border-b border-gray-200 last:border-0">
-              <div className="flex-shrink-0">
+            <div key={comment._id} className="flex gap-3 border-b border-slate-100 pb-4 last:border-0">
+              <div className="shrink-0">
                 {comment.user?.avatar ? (
                   <img
                     src={comment.user.avatar}
                     alt={comment.user.name}
-                    className="w-10 h-10 rounded-full object-cover"
+                    className="h-10 w-10 rounded-full object-cover"
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-primary-600 flex items-center justify-center">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand">
                     <User className="h-5 w-5 text-white" />
                   </div>
                 )}
@@ -272,8 +266,8 @@ function Comments({ productId }) {
               <div className="flex-1">
                 <div className="flex items-start justify-between">
                   <div>
-                    <h4 className="font-semibold text-gray-900">{comment.user?.name || 'Anonymous'}</h4>
-                    <p className="text-xs text-gray-500">{formatTimeAgo(comment.createdAt)}</p>
+                    <h4 className="font-semibold text-slate-900">{comment.user?.name || 'Anonymous'}</h4>
+                    <p className="text-xs text-slate-500">{formatTimeAgo(comment.createdAt)}</p>
                   </div>
                   <div className="flex items-center gap-1">
                     {isAuthenticated && user?._id !== comment.user?._id && (
@@ -281,7 +275,7 @@ function Comments({ productId }) {
                         <button
                           type="button"
                           onClick={() => setReportOpenFor(reportOpenFor === comment._id ? null : comment._id)}
-                          className="text-gray-400 hover:text-amber-600 transition-colors p-1"
+                          className="p-1 text-slate-400 transition-colors hover:text-amber-600"
                           title="Report comment"
                           disabled={reportingId === comment._id}
                         >
@@ -294,13 +288,13 @@ function Comments({ productId }) {
                               onClick={() => setReportOpenFor(null)}
                               aria-hidden
                             />
-                            <div className="absolute right-0 top-full mt-1 py-1 w-40 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
+                            <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
                               {REPORT_REASONS.map(({ value, label }) => (
                                 <button
                                   key={value}
                                   type="button"
                                   onClick={() => handleReport(comment._id, value)}
-                                  className="block w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                                  className="block w-full px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50"
                                 >
                                   {label}
                                 </button>
@@ -313,7 +307,7 @@ function Comments({ productId }) {
                     {(user?._id === comment.user?._id || user?.role === 'admin') && (
                       <button
                         onClick={() => handleDelete(comment._id)}
-                        className="text-red-500 hover:text-red-700 transition-colors p-1"
+                        className="p-1 text-red-500 transition-colors hover:text-red-700"
                         title="Delete comment"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -321,14 +315,14 @@ function Comments({ productId }) {
                     )}
                   </div>
                 </div>
-                <p className="text-gray-700 mt-2 whitespace-pre-wrap">{comment.text}</p>
-                <div className="flex items-center space-x-4 mt-3">
+                <p className="mt-2 whitespace-pre-wrap text-slate-700">{comment.text}</p>
+                <div className="mt-3 flex items-center gap-4">
                   <button
                     onClick={() => handleLike(comment._id)}
-                    className={`flex items-center space-x-1 text-sm transition-colors ${
+                    className={`flex items-center gap-1 text-sm transition-colors ${
                       likedComments.has(comment._id)
                         ? 'text-red-500'
-                        : 'text-gray-500 hover:text-red-500'
+                        : 'text-slate-500 hover:text-red-500'
                     }`}
                   >
                     <Heart
@@ -345,7 +339,7 @@ function Comments({ productId }) {
           <div ref={commentsEndRef} />
         </div>
       )}
-    </div>
+    </DetailCard>
   )
 }
 

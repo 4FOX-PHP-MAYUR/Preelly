@@ -11,18 +11,19 @@ import {
   X,
 } from 'lucide-react'
 import BrandLogo from '@shared/components/BrandLogo'
+import MarketplaceTopBar from '../../components/Layout/MarketplaceTopBar'
+import MarketplaceLogoBlock from '../../components/Layout/MarketplaceLogoBlock'
+import { MARKETPLACE_LOGO_CELL } from '../../components/Layout/marketplaceLayoutStyles'
+import MobileAppPromoCard from '@shared/components/ProductDetail/MobileAppPromoCard'
+import SidebarCategoryList from '../../components/Layout/SidebarCategoryList'
 import { fetchRootCategories } from '@shared/store/slices/categorySlice'
 import { selectIsAuthenticated, selectUser } from '@shared/store/slices/authSlice'
 import { getMediaUrl, truncate } from '@shared/utils/helpers'
 import { useChat } from '@shared/components/Chat/ChatContext'
 import {
   buildSpecsLine,
-  CategoryBadge,
-  formatCategoryCount,
-  formatCompactCount,
   formatListingPrice,
   formatTimeAgo,
-  isVehicleCategoryName,
   ListingMedia,
 } from './categoryBrowseShared'
 
@@ -33,8 +34,12 @@ function CategoryBrowseLayout({
   activeCategoryId = null,
   featuredProducts = [],
   showMessages = true,
+  showTrending = true,
   variant = 'default',
+  layoutPreset = 'default',
   filterPanel = null,
+  filterPanelOpen = false,
+  showMobileAppPromo = false,
 }) {
   const dispatch = useDispatch()
   const navigate = useNavigate()
@@ -69,11 +74,8 @@ function CategoryBrowseLayout({
   const recentChats = useMemo(() => chats.slice(0, 4), [chats])
 
   const handleCategoryNav = (category) => {
-    if (isVehicleCategoryName(category.name)) {
-      navigate(`/categories/${category._id}/products`)
-      return
-    }
-    navigate(`/categories/${category._id}`)
+    // All categories open the unified listing page with the shared filter panel.
+    navigate(`/categories/${category._id}/products`)
   }
 
   const popularLabels =
@@ -82,8 +84,23 @@ function CategoryBrowseLayout({
       : rootCategories.slice(0, 4).map((c) => c.name)
 
   const isListingVariant = variant === 'listing'
-  const showRightFilters = isListingVariant && filterPanel
-  const showDefaultRightPanel = !isListingVariant
+  const isDetailLayout = layoutPreset === 'detail'
+  const isMarketplaceShell = layoutPreset === 'marketplace'
+  const useFullViewport = isDetailLayout || isMarketplaceShell
+  const showRightFilters = isListingVariant && (filterPanelOpen || filterPanel)
+  const showDefaultRightPanel = !isListingVariant || isDetailLayout
+
+  const gridColsClass = isMarketplaceShell
+    ? showRightFilters
+      ? 'lg:grid-cols-[270px_minmax(0,1fr)_465px]'
+      : 'lg:grid-cols-[270px_minmax(0,1fr)]'
+    : showRightFilters
+      ? 'lg:grid-cols-[minmax(240px,280px)_minmax(0,1fr)_min(400px,28vw)]'
+      : isDetailLayout
+        ? 'lg:grid-cols-[270px_minmax(0,1fr)_320px]'
+        : isListingVariant
+          ? 'lg:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]'
+          : 'lg:grid-cols-[270px_minmax(0,1fr)_320px]'
 
   const accent = {
     pageBg: isListingVariant ? 'bg-[#F7F8FC]' : 'bg-[#f7f8fa]',
@@ -96,7 +113,7 @@ function CategoryBrowseLayout({
   }
 
   return (
-    <div className={`viewport-below-header overflow-hidden ${accent.pageBg}`}>
+    <div className={`${useFullViewport ? 'h-[100dvh]' : 'viewport-below-header'} overflow-hidden ${accent.pageBg}`}>
       {mobileMenuOpen && (
         <>
           <button
@@ -137,27 +154,14 @@ function CategoryBrowseLayout({
               >
                 Categories
               </Link>
-              <div className="space-y-1">
-                {rootCategories.slice(0, 7).map((category) => {
-                  const isActive = String(category._id) === String(activeCategoryId)
-                  return (
-                    <button
-                      key={category._id}
-                      type="button"
-                      onClick={() => {
-                        handleCategoryNav(category)
-                        setMobileMenuOpen(false)
-                      }}
-                      className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                        isActive ? accent.activeCategory : 'hover:bg-slate-50'
-                      }`}
-                    >
-                      <CategoryBadge category={category} compact />
-                      <span className="min-w-0 flex-1 truncate text-sm font-medium">{category.name}</span>
-                    </button>
-                  )
-                })}
-              </div>
+              <SidebarCategoryList
+                categories={rootCategories}
+                activeId={activeCategoryId}
+                onSelect={(category) => {
+                  handleCategoryNav(category)
+                  setMobileMenuOpen(false)
+                }}
+              />
             </div>
 
             <div className="mb-8">
@@ -186,21 +190,28 @@ function CategoryBrowseLayout({
       )}
 
       <div
-        className={`flex h-full flex-col ${
-          isListingVariant
-            ? showRightFilters
-              ? 'lg:grid lg:grid-cols-[minmax(240px,280px)_minmax(0,1fr)_min(400px,28vw)]'
-              : 'lg:grid lg:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]'
-            : 'lg:grid lg:grid-cols-[270px_minmax(0,1fr)_320px]'
+        className={`grid h-full min-h-0 grid-cols-1 transition-[grid-template-columns] duration-300 ease-in-out ${
+          useFullViewport ? 'grid-rows-[auto_minmax(0,1fr)]' : ''
+        } ${
+          showRightFilters || showDefaultRightPanel ? gridColsClass : isListingVariant ? 'lg:grid-cols-[minmax(240px,280px)_minmax(0,1fr)]' : ''
         }`}
       >
-        <aside className={`hidden min-h-0 flex-col overflow-y-auto border-r bg-white p-5 lg:flex lg:w-full ${accent.border}`}>
-          <div className="mb-5">
-            <Link to="/">
-              <BrandLogo variant="light" className="h-8 w-auto" />
-            </Link>
-            <p className="mt-1.5 text-[13px] font-medium text-slate-500">Buy. Sell. Watch.</p>
-          </div>
+        {useFullViewport ? (
+          <>
+            <div className={MARKETPLACE_LOGO_CELL}>
+              <MarketplaceLogoBlock />
+            </div>
+            <MarketplaceTopBar
+              onToggleMobileMenu={() => setMobileMenuOpen(true)}
+              topBarColSpan={showRightFilters || showDefaultRightPanel ? 'lg:col-span-2' : 'lg:col-span-1'}
+            />
+          </>
+        ) : null}
+
+        <aside className={`hidden min-h-0 flex-col overflow-y-auto border-r bg-white p-5 lg:flex ${accent.border}`}>
+          {!useFullViewport ? (
+            <MarketplaceLogoBlock compact className="mb-5" />
+          ) : null}
 
           <Link
             to="/post-ad"
@@ -217,27 +228,11 @@ function CategoryBrowseLayout({
             >
               Categories
             </Link>
-            <div className="space-y-1">
-              {rootCategories.slice(0, 7).map((category) => {
-                const isActive = String(category._id) === String(activeCategoryId)
-                return (
-                  <button
-                    key={category._id}
-                    type="button"
-                    onClick={() => handleCategoryNav(category)}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                      isActive ? accent.activeCategory : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <CategoryBadge category={category} compact />
-                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{category.name}</span>
-                    <span className="text-xs font-medium text-slate-400">
-                      {formatCategoryCount(category.count) || formatCompactCount(category.count)}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
+            <SidebarCategoryList
+              categories={rootCategories}
+              activeId={activeCategoryId}
+              onSelect={handleCategoryNav}
+            />
           </div>
 
           <div className="mb-8">
@@ -281,101 +276,122 @@ function CategoryBrowseLayout({
         </aside>
 
         <section className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div className={`flex shrink-0 items-center gap-2 overflow-x-auto border-b bg-white px-3 py-2 lg:hidden ${accent.border}`}>
-            <button
-              type="button"
-              onClick={() => setMobileMenuOpen(true)}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700"
-            >
-              <Menu className="h-4 w-4" />
-              Menu
-            </button>
-            <Link
-              to="/post-ad"
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-white ${accent.btn}`}
-            >
-              <Plus className="h-4 w-4" />
-              Post Ad
-            </Link>
-            <Link
-              to="/categories"
-              className="inline-flex shrink-0 items-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700"
-            >
-              Categories
-            </Link>
-            <Link
-              to={isAuthenticated ? '/chat' : '/login'}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700"
-            >
-              <MessageCircle className="h-4 w-4" />
-              Chat
-            </Link>
-          </div>
+          {!useFullViewport ? (
+            <div className={`flex shrink-0 items-center gap-2 overflow-x-auto border-b bg-white px-3 py-2 lg:hidden ${accent.border}`}>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(true)}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700"
+              >
+                <Menu className="h-4 w-4" />
+                Menu
+              </button>
+              <Link
+                to="/post-ad"
+                className={`inline-flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-semibold text-white ${accent.btn}`}
+              >
+                <Plus className="h-4 w-4" />
+                Post Ad
+              </Link>
+              <Link
+                to="/categories"
+                className="inline-flex shrink-0 items-center rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700"
+              >
+                Categories
+              </Link>
+              <Link
+                to={isAuthenticated ? '/chat' : '/login'}
+                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-sm font-medium text-slate-700"
+              >
+                <MessageCircle className="h-4 w-4" />
+                Chat
+              </Link>
+            </div>
+          ) : null}
           {children}
         </section>
 
         <aside
           className={`${
-            showRightFilters || showDefaultRightPanel
-              ? 'hidden min-h-0 overflow-y-auto border-l border-slate-200 bg-white lg:block'
-              : 'hidden'
-          } ${showRightFilters ? 'p-0' : 'p-5'}`}
+            showRightFilters
+              ? 'hidden min-h-0 overflow-hidden border-l border-slate-200 bg-white p-0 lg:block'
+              : showDefaultRightPanel
+                ? 'hidden min-h-0 overflow-y-auto border-l border-slate-200 bg-white p-5 lg:block'
+                : 'hidden'
+          }`}
         >
           {showRightFilters ? (
             filterPanel
           ) : showDefaultRightPanel ? (
             <>
-              <div>
-                <p className="mb-4 text-lg font-semibold text-slate-900">Trending</p>
-                <div className="flex flex-wrap gap-2">
-                  {TRENDING_TOPICS.map((topic) => (
-                    <button
-                      key={topic}
-                      type="button"
-                      onClick={() => navigate(`/search?q=${encodeURIComponent(topic)}`)}
-                      className="rounded-full bg-white px-3 py-2 text-sm font-medium text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:text-primary-700"
-                    >
-                      {topic}
-                    </button>
-                  ))}
+              {showTrending ? (
+                <div>
+                  <p className="mb-4 text-base font-semibold text-slate-900">Trending</p>
+                  <div className="flex flex-wrap gap-2">
+                    {TRENDING_TOPICS.map((topic) => (
+                      <button
+                        key={topic}
+                        type="button"
+                        onClick={() => navigate(`/search?q=${encodeURIComponent(topic)}`)}
+                        className={`rounded-full bg-white px-3 py-1.5 text-sm font-medium text-slate-600 ring-1 ring-[#E8EBF2] transition ${
+                          isListingVariant ? 'hover:text-brand' : 'hover:text-primary-700'
+                        }`}
+                      >
+                        {topic}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
-          <div className="mt-8">
+          <div className={showTrending ? 'mt-8' : ''}>
             <div className="mb-4 flex items-center justify-between gap-3">
-              <p className="text-lg font-semibold text-slate-900">Featured Listings</p>
-              <Link to="/reels" className="text-sm font-semibold text-primary-700 transition hover:text-primary-800">
+              <p className="text-base font-semibold text-slate-900">Featured Listings</p>
+              <Link
+                to="/reels"
+                className={`text-sm font-semibold transition ${
+                  isListingVariant ? 'text-brand hover:text-brand-700' : 'text-primary-700 hover:text-primary-800'
+                }`}
+              >
                 See all
               </Link>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-3">
               {featuredItems.map((product) => (
                 <Link
                   key={product._id}
                   to={`/products/${product._id}`}
-                  className="block overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+                  className="block overflow-hidden rounded-xl border border-[#E8EBF2] bg-white shadow-[0_1px_4px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-md"
                 >
-                  <div className="h-36 overflow-hidden">
+                  <div className="h-32 overflow-hidden">
                     <ListingMedia product={product} className="h-full w-full object-cover" />
                   </div>
-                  <div className="p-4">
-                    <p className="text-sm font-semibold text-slate-900">{truncate(product.title || 'Listing', 42)}</p>
-                    <p className="mt-1 text-xs text-slate-500">
+                  <div className="p-3.5">
+                    <p className="text-sm font-semibold leading-snug text-slate-900">{truncate(product.title || 'Listing', 42)}</p>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-500">
                       {[buildSpecsLine(product), product.location].filter(Boolean).join(' · ') ||
                         product.category?.name ||
                         'Live on marketplace'}
                     </p>
-                    <p className="mt-3 text-lg font-bold text-primary-700">{formatListingPrice(product)}</p>
+                    <p
+                      className={`mt-2.5 text-base font-bold ${
+                        isListingVariant ? 'text-brand' : 'text-primary-700'
+                      }`}
+                    >
+                      {formatListingPrice(product)}
+                    </p>
                   </div>
                 </Link>
               ))}
               {featuredItems.length === 0 && (
-                <div className="rounded-3xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
+                <div className="rounded-xl border border-dashed border-slate-300 bg-white px-4 py-8 text-center text-sm text-slate-500">
                   Featured listings will appear here.
                 </div>
               )}
             </div>
           </div>
+
+          {showMobileAppPromo ? <MobileAppPromoCard className="mt-6" /> : null}
 
           {showMessages && isAuthenticated ? (
             <div className="mt-8">

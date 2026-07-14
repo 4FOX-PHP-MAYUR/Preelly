@@ -14,6 +14,7 @@ function ReelsFeed({
   onExploreCategories,
   heightOverride = null,
   embedded = false,
+  onOpenComments = null,
 }) {
   const containerBgClass = embedded ? 'bg-transparent' : 'bg-black'
   const itemBgClass = embedded ? 'bg-transparent' : 'bg-black'
@@ -298,6 +299,7 @@ function ReelsFeed({
                 product={product}
                 isVisible={index === visibleIndex}
                 embedded={embedded}
+                onOpenComments={onOpenComments}
               />
             </div>
             {/* End-of-feed overlay on last reel so reels always stay visible when data is finished */}

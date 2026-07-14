@@ -14,6 +14,9 @@ import {
   LayoutList,
   Settings,
   Shield,
+  Package,
+  Warehouse,
+  Ticket,
 } from 'lucide-react'
 
 export const ADMIN_MENU_GROUPS = [
@@ -40,6 +43,9 @@ export const ADMIN_MENU_GROUPS = [
     items: [
       { key: 'dealers', label: 'Dealers', to: '/admin/dealers', icon: Store },
       { key: 'emirates', label: 'Emirates', to: '/admin/emirates', icon: MapPin },
+      { key: 'packages', label: 'Packages', to: '/admin/packages', icon: Package },
+      { key: 'storage-facilities', label: 'Storage Facilities', to: '/admin/storage-facilities', icon: Warehouse },
+      { key: 'coupons', label: 'Coupons', to: '/admin/coupons', icon: Ticket },
       { key: 'products', label: 'Products', to: '/admin?tab=products', icon: Box },
       { key: 'sold', label: 'Sold', to: '/admin?tab=sold', icon: TrendingUp },
     ],
@@ -69,6 +75,9 @@ export const MENU_PERMISSION_MAP = {
   filters: 'Filters',
   dealers: 'Dealers',
   emirates: 'Emirates',
+  packages: 'Packages',
+  'storage-facilities': 'Storage Facilities',
+  coupons: 'Coupons',
   products: 'Listings',
   sold: 'Listings',
   users: 'Users',
@@ -81,6 +90,9 @@ export const ADMIN_ROUTE_META = {
   '/admin/filters': { title: 'Filters', breadcrumbs: [{ label: 'Catalog', to: '/admin/filters' }, { label: 'Filters' }] },
   '/admin/dealers': { title: 'Dealers', breadcrumbs: [{ label: 'Marketplace', to: '/admin/dealers' }, { label: 'Dealers' }] },
   '/admin/emirates': { title: 'Emirates', breadcrumbs: [{ label: 'Marketplace', to: '/admin/emirates' }, { label: 'Emirates' }] },
+  '/admin/packages': { title: 'Packages', breadcrumbs: [{ label: 'Marketplace', to: '/admin/packages' }, { label: 'Packages' }] },
+  '/admin/storage-facilities': { title: 'Storage Facilities', breadcrumbs: [{ label: 'Marketplace', to: '/admin/storage-facilities' }, { label: 'Storage Facilities' }] },
+  '/admin/coupons': { title: 'Coupons', breadcrumbs: [{ label: 'Marketplace', to: '/admin/coupons' }, { label: 'Coupons' }] },
   '/admin/roles': { title: 'Admin Roles', breadcrumbs: [{ label: 'Settings', to: '/admin/roles' }, { label: 'Admin Roles' }] },
   '/admin/identity-verification': { title: 'Identity Verification', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Verification' }] },
   '/admin/field-types': { title: 'Field Types', breadcrumbs: [{ label: 'Catalog' }, { label: 'Field Types' }] },
@@ -105,6 +117,9 @@ export const ADMIN_MODULE_FORM_META = {
   'form-fields': { listPath: '/admin/form-fields', section: 'Catalog', label: 'Form Fields', singular: 'Form Field' },
   dealers: { listPath: '/admin/dealers', section: 'Marketplace', label: 'Dealers', singular: 'Dealer' },
   emirates: { listPath: '/admin/emirates', section: 'Marketplace', label: 'Emirates', singular: 'Emirate' },
+  packages: { listPath: '/admin/packages', section: 'Marketplace', label: 'Packages', singular: 'Package' },
+  'storage-facilities': { listPath: '/admin/storage-facilities', section: 'Marketplace', label: 'Storage Facilities', singular: 'Storage Facility' },
+  coupons: { listPath: '/admin/coupons', section: 'Marketplace', label: 'Coupons', singular: 'Coupon' },
   roles: { listPath: '/admin/roles', section: 'Settings', label: 'Admin Roles', singular: 'Role' },
 }
 

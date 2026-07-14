@@ -12,6 +12,7 @@ export default function ListingVideoPreview({
   alt = 'Listing',
   interactive = true,
   autoPlayOnHover = true,
+  showVideoBadge = true,
 }) {
   const hasVideo = productHasVideo(product)
   const posterUrl = getListingPosterUrl(product)
@@ -79,7 +80,7 @@ export default function ListingVideoPreview({
         </button>
       )}
 
-      {!manualPlay && !hovered && (
+      {showVideoBadge && !manualPlay && !hovered && (
         <span className="pointer-events-none absolute bottom-2 left-2 flex items-center gap-1 rounded-md bg-black/55 px-1.5 py-0.5 text-[10px] font-semibold text-white">
           <Play className="h-2.5 w-2.5 fill-white" />
           Video

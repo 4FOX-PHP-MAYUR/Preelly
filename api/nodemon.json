@@ -1,12 +1,13 @@
 {
   "watch": [
     ".",
+    ".env",
     "routes",
     "models",
     "middleware",
     "config"
   ],
-  "ext": "js,json",
+  "ext": "js,json,env",
   "ignore": [
     "node_modules/**",
     "uploads/**",

@@ -16,6 +16,8 @@ const HomePage = lazy(() => import('./pages/HomePage'))
 const ReelsFeedPage = lazy(() => import('./pages/ReelsFeedPage'))
 const ProductDetailPage = lazy(() => import('@shared/pages/ProductDetailPage'))
 const PostAdPage = lazy(() => import('./pages/PostAdPage'))
+const SelectPackagePage = lazy(() => import('./pages/SelectPackagePage'))
+const StorageCheckoutPage = lazy(() => import('./pages/StorageCheckoutPage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const SignupPage = lazy(() => import('./pages/SignupPage'))
 const DashboardLayout = lazy(() => import('./components/Dashboard/DashboardLayout'))
@@ -161,6 +163,22 @@ function App() {
             element={
               <PrivateRoute>
                 <PostAdPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/post-ad/select-package"
+            element={
+              <PrivateRoute>
+                <SelectPackagePage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/post-ad/storage"
+            element={
+              <PrivateRoute>
+                <StorageCheckoutPage />
               </PrivateRoute>
             }
           />

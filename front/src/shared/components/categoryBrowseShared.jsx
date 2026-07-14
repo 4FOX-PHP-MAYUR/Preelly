@@ -35,8 +35,29 @@ export function formatCategoryCount(value) {
   return n ? n.toLocaleString('en-US') : null
 }
 
+/** Post-ad sets legacy `price` to 1 when the real amount lives in `productPrice`. */
+const LEGACY_PRICE_PLACEHOLDER = 1
+
+function normalizeListingPrice(raw) {
+  if (raw === undefined || raw === null || raw === '') return null
+  const amount = Number(raw)
+  return Number.isFinite(amount) && amount > 0 ? amount : null
+}
+
+/** Prefer admin/dynamic `productPrice`; fall back to legacy `price`. */
+export function getProductListingPrice(product) {
+  const productPrice = normalizeListingPrice(product?.productPrice)
+  if (productPrice != null) return productPrice
+
+  const legacyPrice = normalizeListingPrice(product?.price)
+  if (legacyPrice != null && legacyPrice !== LEGACY_PRICE_PLACEHOLDER) return legacyPrice
+
+  return null
+}
+
 export function formatListingPrice(product) {
-  const amount = Number(product?.price || 0)
+  const amount = getProductListingPrice(product)
+  if (amount == null) return 'Price on request'
   const currency =
     typeof product?.currency === 'string' && product.currency.length === 3
       ? product.currency.toUpperCase()
@@ -103,9 +124,17 @@ export function CategoryBadge({ category, compact = false }) {
   )
 }
 
-export function ListingMedia({ product, className }) {
+export function ListingMedia({ product, className, showVideoBadge = true, interactive = true }) {
   if (productHasVideo(product)) {
-    return <ListingVideoPreview product={product} className={className} alt={product?.title || 'Listing'} />
+    return (
+      <ListingVideoPreview
+        product={product}
+        className={className}
+        alt={product?.title || 'Listing'}
+        showVideoBadge={showVideoBadge}
+        interactive={interactive}
+      />
+    )
   }
 
   const imageSrc = product?.images?.[0] ? getMediaUrl(product.images[0]) || product.images[0] : null

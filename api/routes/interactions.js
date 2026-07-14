@@ -6,8 +6,31 @@ const Follow = require('../models/Follow')
 const Notification = require('../models/Notification')
 const Comment = require('../models/Comment')
 const CommentReport = require('../models/CommentReport')
+const ProductView = require('../models/ProductView')
 const authMiddleware = require('../middleware/auth')
 const validateObjectId = require('../middleware/validateObjectId')
+
+function toObjectIdString(value) {
+  if (!value) return null
+  if (typeof value === 'string') return value
+  if (typeof value === 'object' && value !== null) {
+    return String(value._id || value)
+  }
+  return String(value)
+}
+
+function serializeComment(comment) {
+  if (!comment) return null
+  const parentId = toObjectIdString(comment.parentID || comment.parentComment)
+  return {
+    ...comment,
+    _id: String(comment._id),
+    product: comment.product ? String(comment.product) : comment.product,
+    parentID: parentId,
+    parentComment: parentId,
+    likes: Array.isArray(comment.likes) ? comment.likes.map((id) => String(id)) : [],
+  }
+}
 
 // @route   POST /api/products/:id/like
 // @desc    Like/Unlike a product
@@ -77,6 +100,85 @@ router.post('/products/:id/view', validateObjectId('id'), async (req, res) => {
     }
     // Return safe JSON error message (avoid crashing client flows)
     return res.status(500).json({ message: 'Error incrementing views' })
+  }
+})
+
+// @route   POST /api/products/:id/video-view
+// @desc    Record authenticated video view (>=50% watched on client). Inserts productview row and syncs product.views.
+// @access  Private
+router.post('/products/:id/video-view', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const productId = req.params.id
+    const userId = req.user._id
+
+    const product = await Product.findById(productId).select('_id status').lean()
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' })
+    }
+
+    const existing = await ProductView.findOne({
+      productID: productId,
+      userID: userId,
+      status: 'active',
+    }).lean()
+
+    let recorded = false
+    if (!existing) {
+      try {
+        await ProductView.create({
+          productID: productId,
+          userID: userId,
+          dateAdded: new Date(),
+          status: 'active',
+        })
+        recorded = true
+      } catch (createErr) {
+        if (createErr?.code !== 11000) throw createErr
+        // Duplicate key — another concurrent request inserted first
+      }
+    }
+
+    const views = await ProductView.countDocuments({
+      productID: productId,
+      status: 'active',
+    })
+
+    await Product.findByIdAndUpdate(productId, { $set: { views } })
+
+    return res.json({ views, recorded: recorded || Boolean(existing) })
+  } catch (error) {
+    console.error('Error recording video view:', error)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid product ID' })
+    }
+    return res.status(500).json({ message: 'Error recording video view' })
+  }
+})
+
+// @route   POST /api/products/:id/share
+// @desc    Increment product share count
+// @access  Public
+router.post('/products/:id/share', validateObjectId('id'), async (req, res) => {
+  try {
+    const id = req.params.id
+    // Atomic increment to avoid race conditions and model save validation issues
+    const updated = await Product.findByIdAndUpdate(
+      id,
+      { $inc: { shares: 1 } },
+      { returnDocument: 'after' }
+    ).lean()
+
+    if (!updated) {
+      return res.status(404).json({ message: 'Product not found' })
+    }
+
+    return res.json({ shares: updated.shares })
+  } catch (error) {
+    console.error('Error incrementing shares:', error)
+    if (error && error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid product ID' })
+    }
+    return res.status(500).json({ message: 'Error incrementing shares' })
   }
 })
 
@@ -476,11 +578,28 @@ router.get('/products/:id/comments', validateObjectId('id'), async (req, res) =>
       status: 'approved',
     })
       .populate('user', 'name avatar')
+      .select('product user text status likes parentID parentComment createdAt updatedAt')
       .sort({ createdAt: -1 })
       .lean()
 
+    // Backfill parentID on legacy reply documents (parentComment set but parentID missing)
+    const legacyReplies = comments.filter((c) => c.parentComment && !c.parentID)
+    if (legacyReplies.length > 0) {
+      await Promise.all(
+        legacyReplies.map((c) =>
+          Comment.updateOne(
+            { _id: c._id },
+            { $set: { parentID: c.parentComment, parentComment: c.parentComment } }
+          )
+        )
+      )
+      legacyReplies.forEach((c) => {
+        c.parentID = c.parentComment
+      })
+    }
+
     // Always return a plain array so frontend can bind directly
-    const list = Array.isArray(comments) ? comments : []
+    const list = (Array.isArray(comments) ? comments : []).map(serializeComment)
     res.json(list)
   } catch (error) {
     console.error('Error fetching comments:', error)
@@ -496,7 +615,8 @@ router.get('/products/:id/comments', validateObjectId('id'), async (req, res) =>
 // @access  Private
 router.post('/products/:id/comments', authMiddleware, validateObjectId('id'), async (req, res) => {
   try {
-    const { text } = req.body
+    const { text, parentID, parentComment } = req.body
+    const parentId = parentID || parentComment
     const product = await Product.findById(req.params.id)
     if (!product) {
       return res.status(404).json({ message: 'Product not found' })
@@ -505,19 +625,43 @@ router.post('/products/:id/comments', authMiddleware, validateObjectId('id'), as
       return res.status(400).json({ message: 'Comment text is required' })
     }
 
+    if (parentId) {
+      const parent = await Comment.findById(parentId)
+      if (!parent) {
+        return res.status(404).json({ message: 'Parent comment not found' })
+      }
+      if (parent.product.toString() !== req.params.id) {
+        return res.status(400).json({ message: 'Parent comment does not belong to this product' })
+      }
+    }
+
     const comment = new Comment({
       product: req.params.id,
       user: req.user._id,
       text: text.trim(),
       status: 'approved',
     })
+    if (parentId) {
+      const parentIdString = String(parentId)
+      comment.parentID = parentIdString
+      comment.parentComment = parentIdString
+    }
     await comment.save()
+
+    // Ensure parent linkage is persisted even if schema cache is stale
+    if (parentId) {
+      await Comment.updateOne(
+        { _id: comment._id },
+        { $set: { parentID: String(parentId), parentComment: String(parentId) } }
+      )
+    }
 
     // Re-fetch with populate + lean so response shape matches GET (frontend can append as-is)
     const saved = await Comment.findById(comment._id)
       .populate('user', 'name avatar')
+      .select('product user text status likes parentID parentComment createdAt updatedAt')
       .lean()
-    const payload = saved || comment.toObject?.() || comment
+    const payload = serializeComment(saved || comment.toObject?.() || comment)
     res.status(201).json(payload)
   } catch (error) {
     console.error('Error creating comment:', error)

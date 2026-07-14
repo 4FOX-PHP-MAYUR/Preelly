@@ -429,6 +429,9 @@ function getQuickViewProductSelectFields() {
     'subcategory',
     'categoryPath',
     'additionalFields',
+    'productPrice',
+    'features',
+    'description',
     ...refKeys,
   ]
   return cachedQuickViewSelectFields
@@ -819,11 +822,147 @@ async function buildProductAttributesPresentation(product = {}) {
   }
 }
 
+function normalizeFeatureTitleKey(title) {
+  return String(title || '')
+    .toLowerCase()
+    .replace(/&/g, '')
+    .replace(/[^a-z0-9]/g, '')
+}
+
+function normalizeFilterName(name) {
+  return String(name || '').trim().toLowerCase()
+}
+
+/**
+ * Resolve the stored `features` column only — values must exist in the filters table
+ * (by ObjectId or by filter name). Returns [] when the column is empty or nothing matches.
+ * @param {object} product
+ * @returns {Promise<Array<{ title: string, values: string[] }>>}
+ */
+async function resolveStoredFeaturesColumn(product = {}) {
+  const raw = product?.features
+  if (!Array.isArray(raw) || !raw.length) return []
+
+  const objectIds = new Set()
+  const nameCandidates = new Set()
+
+  for (const section of raw) {
+    const values = section?.values ?? section?.items ?? []
+    if (!Array.isArray(values)) continue
+    for (const value of values) {
+      const id = toIdString(value)
+      if (id && mongoose.Types.ObjectId.isValid(id)) {
+        objectIds.add(id)
+        continue
+      }
+      const label = value == null ? '' : String(value).trim()
+      if (label) nameCandidates.add(label)
+    }
+  }
+
+  if (!objectIds.size && !nameCandidates.size) return []
+
+  const orClauses = []
+  if (objectIds.size) {
+    orClauses.push({
+      _id: { $in: [...objectIds].map((id) => new mongoose.Types.ObjectId(id)) },
+    })
+  }
+  if (nameCandidates.size) {
+    orClauses.push({ name: { $in: [...nameCandidates] } })
+  }
+
+  const filters = await Filter.find({
+    $or: orClauses,
+    isDeleted: { $ne: true },
+    isActive: { $ne: false },
+  })
+    .select('_id name')
+    .lean()
+
+  const nameById = new Map()
+  const canonicalNameByNormalized = new Map()
+  for (const filter of filters) {
+    nameById.set(String(filter._id), filter.name)
+    canonicalNameByNormalized.set(normalizeFilterName(filter.name), filter.name)
+  }
+
+  function resolveFeatureValue(value) {
+    const id = toIdString(value)
+    if (id && mongoose.Types.ObjectId.isValid(id)) {
+      return nameById.get(id) || null
+    }
+    const label = value == null ? '' : String(value).trim()
+    if (!label) return null
+    return canonicalNameByNormalized.get(normalizeFilterName(label)) || null
+  }
+
+  return raw
+    .map((section) => {
+      const title = section?.title || section?.fieldTitle || 'Features'
+      const values = section?.values ?? section?.items ?? []
+      if (!Array.isArray(values)) return null
+
+      const labels = [...new Set(values.map(resolveFeatureValue).filter(Boolean))]
+      return labels.length ? { title, values: labels } : null
+    })
+    .filter(Boolean)
+}
+
+function mergeResolvedFeatureSections(...groups) {
+  const map = new Map()
+
+  for (const group of groups) {
+    if (!Array.isArray(group)) continue
+    for (const section of group) {
+      if (!section?.title) continue
+      const values = Array.isArray(section.values)
+        ? section.values.filter(Boolean).map(String)
+        : Array.isArray(section.items)
+          ? section.items.filter(Boolean).map(String)
+          : []
+      if (!values.length) continue
+
+      const key = normalizeFeatureTitleKey(section.title)
+      if (!key) continue
+
+      const existing = map.get(key)
+      if (existing) {
+        const merged = [...new Set([...existing.values, ...values])]
+        const title =
+          String(section.title).includes('&') || section.title.length > existing.title.length
+            ? section.title
+            : existing.title
+        map.set(key, { title, values: merged })
+      } else {
+        map.set(key, { title: section.title, values: [...new Set(values)] })
+      }
+    }
+  }
+
+  return Array.from(map.values())
+}
+
+/**
+ * Resolved feature groups for product detail — only the stored `features` column,
+ * with each value matched against the filters table. Returns [] when empty or unmatched.
+ */
+async function buildDetailFeaturesPresentation(product = {}) {
+  try {
+    return await resolveStoredFeaturesColumn(product)
+  } catch (err) {
+    console.error('[productAttributesResolver] Failed to build detail features:', err)
+    return []
+  }
+}
+
 module.exports = {
   buildProductAttributesPresentation,
   buildQuickViewDataPresentation,
   buildQuickViewDataForProducts,
   buildFeaturesForProducts,
+  buildDetailFeaturesPresentation,
+  resolveStoredFeaturesColumn,
   getProductSchemaRefPaths,
   REF_SOURCE_REGISTRY,
 }

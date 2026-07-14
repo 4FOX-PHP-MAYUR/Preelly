@@ -32,6 +32,18 @@ const commentSchema = new mongoose.Schema(
         ref: 'User',
       },
     ],
+    parentComment: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Comment',
+      default: null,
+      index: true,
+    },
+    parentID: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Comment',
+      default: null,
+      index: true,
+    },
   },
   {
     timestamps: true,
@@ -41,6 +53,14 @@ const commentSchema = new mongoose.Schema(
 // Index for efficient queries
 commentSchema.index({ product: 1, createdAt: -1 })
 commentSchema.index({ user: 1 })
+
+commentSchema.pre('save', function syncParentFields() {
+  if (this.parentID && !this.parentComment) {
+    this.parentComment = this.parentID
+  } else if (this.parentComment && !this.parentID) {
+    this.parentID = this.parentComment
+  }
+})
 
 // Populate user by default
 // Use async/returned middleware (no next) to be compatible with current Mongoose hook signature

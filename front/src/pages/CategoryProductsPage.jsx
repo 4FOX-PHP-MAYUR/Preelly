@@ -3,87 +3,28 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchProducts, clearProducts } from '@shared/store/slices/productSlice'
 import { fetchRootCategories } from '@shared/store/slices/categorySlice'
+import { fetchFeedShell } from '@shared/store/slices/feedSlice'
+import { selectIsAuthenticated } from '@shared/store/slices/authSlice'
 import { productService } from '@shared/services/api'
 import { categoryService } from '@shared/services/api'
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
-import CategoryFilterChips from '../components/Categories/CategoryFilterChips'
 import {
-  CategoryBadge,
   matchesListingChip,
   isVehicleCategoryName,
   isPropertyCategoryName,
   isClassifiedsCategoryName,
 } from '../components/Categories/categoryBrowseShared'
 import AdvancedFilterPanel from '../components/Listing/AdvancedFilterPanel'
+import PriceFilterPanel from '../components/Listing/PriceFilterPanel'
 import ListingToolbar from '../components/Listing/ListingToolbar'
 import ProductGrid from '../components/Listing/ProductGrid'
 import { useCategoryApiTree } from '../hooks/useCategoryApiTree'
 import { useEmirateCities } from '../hooks/useEmirateCities'
+import useFilterPanelSlide from '../hooks/useFilterPanelSlide'
 import {
   buildCityFilterOptions,
   resolveCityNameById,
 } from '@shared/utils/buildCityFilterOptions'
-
-function buildYearOptions() {
-  const currentYear = new Date().getFullYear()
-  const options = [{ value: '', label: 'Select' }]
-  for (let y = currentYear; y >= 1990; y--) {
-    options.push({ value: String(y), label: String(y) })
-  }
-  return options
-}
-
-function buildKmsOptionsFromRange(range) {
-  const min = Math.max(0, Number(range?.min) || 0)
-  const max = Math.max(0, Number(range?.max) || 0)
-  const options = [{ value: '', label: 'Select' }]
-  if (!max || max <= 0) return options
-
-  const steps = [
-    [0, 10000, 'Under 10k'],
-    [10000, 50000, '10k - 50k'],
-    [50000, 100000, '50k - 100k'],
-    [100000, 200000, '100k - 200k'],
-    [200000, Math.max(500000, max), '200k+'],
-  ]
-
-  for (const [lo, hi, label] of steps) {
-    if (hi <= min) continue
-    const upper = Math.min(hi, Math.max(hi, max))
-    if (lo >= upper) continue
-    options.push({ value: `${lo}-${upper}`, label })
-  }
-
-  return options
-}
-
-const CONDITION_OPTIONS = [
-  { value: '', label: 'Any' },
-  { value: 'Brand New', label: 'Brand New' },
-  { value: 'Like New', label: 'Like New' },
-  { value: 'Good', label: 'Good' },
-  { value: 'Fair', label: 'Fair' },
-  { value: 'Poor', label: 'Poor' },
-]
-
-const TRANSMISSION_OPTIONS = [
-  { value: '', label: 'Any' },
-  { value: 'Automatic', label: 'Automatic' },
-  { value: 'Manual', label: 'Manual' },
-  { value: 'Semi-Automatic', label: 'Semi-Automatic' },
-  { value: 'CVT', label: 'CVT' },
-  { value: 'Dual Clutch', label: 'Dual Clutch' },
-]
-
-const FUEL_TYPE_OPTIONS = [
-  { value: '', label: 'Any' },
-  { value: 'Petrol', label: 'Petrol' },
-  { value: 'Diesel', label: 'Diesel' },
-  { value: 'Electric', label: 'Electric' },
-  { value: 'Hybrid', label: 'Hybrid' },
-  { value: 'LPG', label: 'LPG' },
-  { value: 'CNG', label: 'CNG' },
-]
 
 function CategoryProductsPage() {
   const { categoryId, subcategoryId: routeSubcategoryId } = useParams()
@@ -93,6 +34,8 @@ function CategoryProductsPage() {
   const { rootCategories, rootLoading: categoriesLoading, rootError: categoriesError } = useSelector(
     (state) => state.categories
   )
+  const isAuthenticated = useSelector(selectIsAuthenticated)
+  const shellLoaded = useSelector((state) => state.feed?.shellLoaded)
   const [selectedCategory, setSelectedCategory] = useState(null)
   const [categoryLoading, setCategoryLoading] = useState(false)
   const [categoryError, setCategoryError] = useState('')
@@ -108,10 +51,18 @@ function CategoryProductsPage() {
   const [makeModel, setMakeModel] = useState('')
   const [priceRangeSelect, setPriceRangeSelect] = useState('')
   const [year, setYear] = useState('')
+  const [yearSel, setYearSel] = useState(null)
   const [kms, setKms] = useState('')
   const [sortBy, setSortBy] = useState('newest')
   const [showMobileFilters, setShowMobileFilters] = useState(false)
-  const [showFiltersPanel, setShowFiltersPanel] = useState(true)
+  const [panelType, setPanelType] = useState(null)
+  const {
+    open: rightPanelOpen,
+    closing: rightPanelClosing,
+    visible: rightPanelVisible,
+    closePanel: closeRightPanel,
+    openPanel: openRightPanelSlide,
+  } = useFilterPanelSlide()
   const [apiParentId, setApiParentId] = useState('')
   const [bedrooms, setBedrooms] = useState('')
   const makeModelDebounceRef = useRef(null)
@@ -184,9 +135,6 @@ function CategoryProductsPage() {
     () => resolveCityNameById(cityId, emirates),
     [cityId, emirates],
   )
-  const yearOptions = facetYears.length ? facetYears : buildYearOptions()
-  const kmsOptions = buildKmsOptionsFromRange(facetMileageRange)
-
   const priceMinMax = useMemo(() => {
     if (priceRangeSelect) {
       const [minP, maxP] = priceRangeSelect.split('-').map(Number)
@@ -194,6 +142,36 @@ function CategoryProductsPage() {
     }
     return { min: priceRange.min, max: priceRange.max }
   }, [priceRangeSelect, priceRange])
+
+  const yearBounds = useMemo(() => {
+    const nums = (facetYears || [])
+      .map((y) => Number(y?.value))
+      .filter((n) => Number.isFinite(n) && n > 0)
+    if (!nums.length) return { min: 1990, max: new Date().getFullYear() }
+    return { min: Math.min(...nums), max: Math.max(...nums) }
+  }, [facetYears])
+
+  const kmsBounds = useMemo(() => {
+    const max = Number(facetMileageRange?.max)
+    return { min: 0, max: Number.isFinite(max) && max > 0 ? max : 500000 }
+  }, [facetMileageRange])
+
+  const kmsSel = useMemo(() => {
+    if (!kms) return null
+    const [lo, hi] = kms.split('-').map(Number)
+    if (Number.isFinite(lo) && Number.isFinite(hi)) return { min: lo, max: hi }
+    return null
+  }, [kms])
+
+  const yearMin = yearSel?.min ?? yearBounds.min
+  const yearMax = yearSel?.max ?? yearBounds.max
+  const kmsMin = kmsSel?.min ?? kmsBounds.min
+  const kmsMax = kmsSel?.max ?? kmsBounds.max
+
+  useEffect(() => {
+    if (!isAuthenticated || shellLoaded) return
+    dispatch(fetchFeedShell({ includeChats: true, includePriceRange: false }))
+  }, [dispatch, isAuthenticated, shellLoaded])
 
   useEffect(() => {
     // Avoid duplicate category fetches on initial load / dev StrictMode.
@@ -419,7 +397,10 @@ function CategoryProductsPage() {
         if (!isNaN(minP)) params.minPrice = minP
         if (!isNaN(maxP)) params.maxPrice = maxP
       }
-      if (year) params.year = year
+      if (yearSel && (yearSel.min > yearBounds.min || yearSel.max < yearBounds.max)) {
+        params.minYear = yearSel.min
+        params.maxYear = yearSel.max
+      }
       if (kms) {
         const [minK, maxK] = kms.split('-').map(Number)
         if (!isNaN(minK)) params.minMileage = minK
@@ -444,7 +425,8 @@ function CategoryProductsPage() {
       makeModel,
       keywords,
       priceRangeSelect,
-      year,
+      yearSel,
+      yearBounds,
       kms,
       condition,
       transmission,
@@ -476,7 +458,7 @@ function CategoryProductsPage() {
     subcategoryFilterId,
     cityId,
     priceRangeSelect,
-    year,
+    yearSel,
     kms,
     condition,
     transmission,
@@ -534,12 +516,49 @@ function CategoryProductsPage() {
     if (hasMore && !loading) fetchWithFilters(page + 1, true)
   }
 
+  const handleCloseRightPanel = useCallback(() => {
+    closeRightPanel()
+    setTimeout(() => setPanelType(null), 300)
+  }, [closeRightPanel])
+
+  const toggleRightPanel = useCallback(
+    (type) => {
+      const isDesktop =
+        typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+      if (!isDesktop) {
+        if (type === 'advanced') setShowMobileFilters(true)
+        return
+      }
+
+      if (panelType === type && rightPanelOpen) {
+        handleCloseRightPanel()
+        return
+      }
+
+      setPanelType(type)
+      if (!rightPanelOpen) openRightPanelSlide()
+    },
+    [panelType, rightPanelOpen, handleCloseRightPanel, openRightPanelSlide],
+  )
+
   const handleOpenFilters = useCallback(() => {
-    const isDesktop =
-      typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
-    if (isDesktop) setShowFiltersPanel(true)
-    else setShowMobileFilters(true)
-  }, [])
+    toggleRightPanel('advanced')
+  }, [toggleRightPanel])
+
+  const handleQuickFilter = useCallback(
+    (label) => {
+      const typeMap = {
+        Price: 'price',
+        Region: 'region',
+        Kilometres: 'kilometres',
+        Years: 'years',
+      }
+      const type = typeMap[label]
+      if (!type) return
+      if (type === 'price') toggleRightPanel('price')
+    },
+    [toggleRightPanel],
+  )
 
   const handleCityChange = useCallback(
     (nextCityId) => {
@@ -625,8 +644,30 @@ function CategoryProductsPage() {
     if (effective) handleSubcategoryChange(effective)
   }
 
+  const handlePriceApply = useCallback(
+    (lo, hi) => {
+      setPriceRangeSelect(`${lo}-${hi}`)
+      fetchWithFilters(1, false)
+    },
+    [fetchWithFilters],
+  )
+
   const handlePriceRangeChange = (lo, hi) => {
     setPriceRangeSelect(`${lo}-${hi}`)
+  }
+
+  const handleYearRangeChange = (lo, hi) => {
+    setYearSel({ min: lo, max: hi })
+  }
+
+  const handleKmsRangeChange = (lo, hi) => {
+    setKms(`${lo}-${hi}`)
+  }
+
+  const handleCategorySelect = (id) => {
+    const next = String(id || '').trim()
+    if (!next || next === String(categoryId)) return
+    navigate(`/categories/${next}/products`)
   }
 
   const clearAdvancedFilters = () => {
@@ -643,6 +684,7 @@ function CategoryProductsPage() {
     setPriceRangeSelect('')
     setCityId('')
     setYear('')
+    setYearSel(null)
     setKms('')
     setShowMobileFilters(false)
     fetchWithFilters(1, false)
@@ -672,11 +714,11 @@ function CategoryProductsPage() {
       ? 'Loading listings…'
       : `${filteredProducts.length} listing${filteredProducts.length !== 1 ? 's' : ''} found`
 
-  const breadcrumbLabel = selectedSubcategory?.name
-    ? `${categoryForUi.name} › ${selectedSubcategory.name}`
-    : categoryForUi.name
+  const quickFilterLabels = isVehicleCategory
+    ? ['Region', 'Price', 'Kilometres', 'Years']
+    : ['Region', 'Price']
 
-  const gridColumns = showFiltersPanel ? 2 : 3
+  const gridColumns = rightPanelVisible ? 2 : 3
 
   const apiSubcategoryId = useMemo(() => {
     if (!useApiCategoryTree || !apiParentId) return ''
@@ -710,15 +752,12 @@ function CategoryProductsPage() {
       isPropertyCategory,
       isClassifiedsCategory,
       isBicycleSubcategory,
-      useApiCategoryTree,
-      apiCategories,
-      apiCategoriesLoading,
-      apiCategoriesError,
-      apiParentId,
-      apiSubcategoryId,
+      rootCategories,
+      activeCategoryId: categoryId,
       subcategories,
-      selectedHierarchy,
-      sortBy,
+      subcategoryId: subcategoryFilterId,
+      makeModel,
+      trim: selectedHierarchy.trim,
       cityId,
       cities,
       citiesLoading: emiratesLoading,
@@ -726,10 +765,12 @@ function CategoryProductsPage() {
       priceRange,
       priceMin: priceMinMax.min,
       priceMax: priceMinMax.max,
-      year,
-      yearOptions,
-      kms,
-      kmsOptions,
+      yearRange: yearBounds,
+      yearMin,
+      yearMax,
+      kmsRange: kmsBounds,
+      kmsMin,
+      kmsMax,
       condition,
       transmission,
       fuelType,
@@ -745,105 +786,103 @@ function CategoryProductsPage() {
       isPropertyCategory,
       isClassifiedsCategory,
       isBicycleSubcategory,
-      useApiCategoryTree,
-      apiCategories,
-      apiCategoriesLoading,
-      apiCategoriesError,
-      apiParentId,
-      apiSubcategoryId,
+      rootCategories,
+      categoryId,
       subcategories,
-      selectedHierarchy,
-      sortBy,
+      subcategoryFilterId,
+      makeModel,
+      selectedHierarchy.trim,
       cityId,
       cities,
       emiratesLoading,
       emiratesError,
       priceRange,
       priceMinMax,
-      year,
-      yearOptions,
-      kms,
-      kmsOptions,
+      yearBounds,
+      yearMin,
+      yearMax,
+      kmsBounds,
+      kmsMin,
+      kmsMax,
       condition,
       transmission,
       fuelType,
       keywords,
       bedrooms,
-      categoryId,
-      subcategoryFilterId,
       filterChildCategoryId,
       selectedFilterIds,
     ],
   )
 
-  const filterPanel = showFiltersPanel ? (
-    <AdvancedFilterPanel
-      className="h-full"
-      {...filterPanelProps}
-      onSortChange={setSortBy}
-      onCityChange={handleCityChange}
-      onPriceRangeChange={handlePriceRangeChange}
-      onYearChange={setYear}
-      onKmsChange={setKms}
-      onConditionChange={setCondition}
-      onTransmissionChange={setTransmission}
-      onFuelTypeChange={setFuelType}
-      onKeywordsChange={setKeywords}
-      onBedroomsChange={setBedrooms}
-      onSubcategoryChange={handleSubcategoryChange}
-      onBrandChange={handleBrandChange}
-      onModelChange={handleModelChange}
-      onTrimChange={handleTrimChange}
-      onApiParentChange={handleApiParentChange}
-      onApiSubcategoryChange={handleApiSubcategoryChange}
-      onFilterIdsChange={setSelectedFilterIds}
-      onApply={applyAdvancedFilters}
-      onReset={clearAdvancedFilters}
-    />
+  const filterPanelHandlers = {
+    onCityChange: handleCityChange,
+    onCategorySelect: handleCategorySelect,
+    onSubcategoryChange: handleSubcategoryChange,
+    onMakeModelChange: setMakeModel,
+    onTrimChange: handleTrimChange,
+    onPriceRangeChange: handlePriceRangeChange,
+    onYearRangeChange: handleYearRangeChange,
+    onKmsRangeChange: handleKmsRangeChange,
+    onConditionChange: setCondition,
+    onTransmissionChange: setTransmission,
+    onFuelTypeChange: setFuelType,
+    onKeywordsChange: setKeywords,
+    onBedroomsChange: setBedrooms,
+    onFilterIdsChange: setSelectedFilterIds,
+    onApply: applyAdvancedFilters,
+    onReset: clearAdvancedFilters,
+  }
+
+  const filterPanel = rightPanelVisible ? (
+    panelType === 'price' ? (
+      <PriceFilterPanel
+        className="h-full"
+        showClose
+        closing={rightPanelClosing}
+        onClose={handleCloseRightPanel}
+        min={priceRange.min}
+        max={priceRange.max}
+        valueMin={priceMinMax.min}
+        valueMax={priceMinMax.max}
+        onApply={handlePriceApply}
+      />
+    ) : (
+      <AdvancedFilterPanel
+        className="h-full"
+        showClose
+        closing={rightPanelClosing}
+        onClose={handleCloseRightPanel}
+        {...filterPanelProps}
+        {...filterPanelHandlers}
+      />
+    )
   ) : null
 
   return (
     <CategoryBrowseLayout
       activeCategoryId={categoryId}
       variant="listing"
+      layoutPreset="marketplace"
       filterPanel={filterPanel}
+      filterPanelOpen={rightPanelVisible}
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#F7F8FC]">
-        <div className="shrink-0 border-b border-[#E8EBF2] bg-white/95 px-4 py-3 backdrop-blur-sm sm:px-6">
-          <CategoryFilterChips activeChip={activeChip} onChange={setActiveChip} />
-        </div>
-
         <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-            <div className="flex items-start gap-3">
-              <CategoryBadge category={categoryForUi} />
-              <div>
-                <nav className="mb-1.5 flex flex-wrap items-center gap-1.5 text-xs font-medium text-[#94A3B8]">
-                  <button
-                    type="button"
-                    onClick={() => navigate('/categories')}
-                    className="transition hover:text-brand"
-                  >
-                    Categories
-                  </button>
-                  <span className="text-[#CBD5E1]" aria-hidden>
-                    ›
-                  </span>
-                  <span className="text-[#475569]">{breadcrumbLabel}</span>
-                </nav>
-                <h1 className="text-2xl font-bold tracking-tight text-[#0F172A] sm:text-3xl">
-                  {categoryForUi.name}
-                </h1>
-                <p className="mt-1 text-sm text-[#64748B]">{listingCountLabel}</p>
-              </div>
+          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-[#0F172A] sm:text-3xl">
+                {categoryForUi.name}
+              </h1>
+              <p className="mt-1 text-sm text-[#64748B]">{listingCountLabel}</p>
             </div>
             <ListingToolbar
               sortBy={sortBy}
               onSortChange={setSortBy}
               onOpenFilters={handleOpenFilters}
-              onToggleFiltersPanel={() => setShowFiltersPanel((v) => !v)}
-              showFiltersPanel={showFiltersPanel}
-              filtersOpen={showMobileFilters}
+              onQuickFilterClick={handleQuickFilter}
+              quickFilters={quickFilterLabels}
+              filtersOpen={panelType === 'advanced' && rightPanelOpen}
+              activeQuickFilter={panelType === 'price' && rightPanelOpen ? 'Price' : null}
             />
           </div>
 
@@ -891,31 +930,13 @@ function CategoryProductsPage() {
             onClick={() => setShowMobileFilters(false)}
             aria-label="Close filters overlay"
           />
-          <div className="fixed inset-y-0 right-0 z-[90] w-full max-w-[420px] animate-drawer-slide-in shadow-2xl lg:hidden">
+          <div className="fixed inset-y-0 right-0 z-[90] w-full max-w-[420px] overflow-hidden shadow-2xl lg:hidden">
             <AdvancedFilterPanel
               className="h-full"
               showClose
               onClose={() => setShowMobileFilters(false)}
               {...filterPanelProps}
-              onSortChange={setSortBy}
-              onCityChange={handleCityChange}
-              onPriceRangeChange={handlePriceRangeChange}
-              onYearChange={setYear}
-              onKmsChange={setKms}
-              onConditionChange={setCondition}
-              onTransmissionChange={setTransmission}
-              onFuelTypeChange={setFuelType}
-              onKeywordsChange={setKeywords}
-              onBedroomsChange={setBedrooms}
-              onSubcategoryChange={handleSubcategoryChange}
-              onBrandChange={handleBrandChange}
-              onModelChange={handleModelChange}
-              onTrimChange={handleTrimChange}
-              onApiParentChange={handleApiParentChange}
-              onApiSubcategoryChange={handleApiSubcategoryChange}
-              onFilterIdsChange={setSelectedFilterIds}
-              onApply={applyAdvancedFilters}
-              onReset={clearAdvancedFilters}
+              {...filterPanelHandlers}
             />
           </div>
         </>

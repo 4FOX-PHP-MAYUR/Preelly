@@ -1,930 +1,407 @@
-import { useEffect, useState } from 'react'
-import { useSearchParams, Link } from 'react-router-dom'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { fetchProducts, clearProducts } from '@shared/store/slices/productSlice'
-import { fetchCategories } from '@shared/store/slices/categorySlice'
-import { productService, globalSearchService } from '@shared/services/api'
-import { getMediaUrl } from '@shared/utils/helpers'
-import GlobalSearchSections from '../components/Search/GlobalSearchSections'
-import SearchExtrasPanel from '../components/Search/SearchExtrasPanel'
-import { Search as SearchIcon, Filter, X, ChevronDown, ChevronUp, Grid, List, MapPin, Calendar } from 'lucide-react'
+import { fetchRootCategories } from '@shared/store/slices/categorySlice'
+import { fetchFeedShell } from '@shared/store/slices/feedSlice'
+import { selectIsAuthenticated } from '@shared/store/slices/authSlice'
+import { categoryService, productService } from '@shared/services/api'
+import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
+import ListingToolbar from '../components/Listing/ListingToolbar'
+import ProductGrid from '../components/Listing/ProductGrid'
+import SearchFilterPanel from '../components/Listing/SearchFilterPanel'
+import PriceFilterPanel from '../components/Listing/PriceFilterPanel'
+import useFilterPanelSlide from '../hooks/useFilterPanelSlide'
+
+function resolveCategoryFromQuery(query, rootCategories) {
+  const q = String(query || '').trim().toLowerCase()
+  if (!q || !Array.isArray(rootCategories) || !rootCategories.length) return null
+  const exact = rootCategories.find((c) => String(c.name || '').trim().toLowerCase() === q)
+  if (exact) return exact
+  return (
+    rootCategories.find((c) => {
+      const name = String(c.name || '').trim().toLowerCase()
+      return name.includes(q) || q.includes(name)
+    }) || null
+  )
+}
 
 function SearchResultsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const navigate = useNavigate()
   const dispatch = useDispatch()
   const { products, loading, hasMore, page } = useSelector((state) => state.products)
-  const { categories } = useSelector((state) => state.categories)
-  const [searchQuery, setSearchQuery] = useState('')
-  const [viewMode, setViewMode] = useState('grid') // 'grid' or 'list'
-  const [globalResults, setGlobalResults] = useState(null)
-  const [searchExtras, setSearchExtras] = useState(null)
-  const [globalLoading, setGlobalLoading] = useState(false)
-  
-  // Filter states
-  const [showFilters, setShowFilters] = useState(false)
-  const [filters, setFilters] = useState({
-    categories: [], // Changed to array for multiple selection
-    locations: [], // Changed to array for multiple selection
-    minPrice: '',
-    maxPrice: '',
-    conditions: [], // Changed to array for multiple selection
-    sortBy: 'newest',
-  })
-  
-  // Price range slider states
+  const { rootCategories, rootLoading: categoriesLoading } = useSelector((state) => state.categories)
+  const isAuthenticated = useSelector(selectIsAuthenticated)
+  const shellLoaded = useSelector((state) => state.feed?.shellLoaded)
+
+  const searchQuery = (searchParams.get('q') || '').trim()
+  const categoryParam = searchParams.get('category') || ''
+  const matchedCategory = useMemo(
+    () => resolveCategoryFromQuery(searchQuery, rootCategories),
+    [searchQuery, rootCategories],
+  )
+  const categoryId = categoryParam || matchedCategory?._id || ''
+  const isExactCategoryQuery =
+    matchedCategory &&
+    String(matchedCategory.name || '').trim().toLowerCase() === searchQuery.toLowerCase()
+
+  const [selectedCategory, setSelectedCategory] = useState(null)
   const [priceRange, setPriceRange] = useState({ min: 0, max: 100000 })
-  const [sliderValues, setSliderValues] = useState({ min: 0, max: 100000 })
-  const [expandedSections, setExpandedSections] = useState({
-    category: true,
-    location: true,
-    price: true,
-    condition: true,
-  })
+  const [city, setCity] = useState(searchParams.get('location') || '')
+  const [subcategoryId, setSubcategoryId] = useState(searchParams.get('subcategoryId') || '')
+  const [minPrice, setMinPrice] = useState(searchParams.get('minPrice') || '')
+  const [maxPrice, setMaxPrice] = useState(searchParams.get('maxPrice') || '')
+  const [keywords, setKeywords] = useState('')
+  const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'newest')
+  const [showMobileFilters, setShowMobileFilters] = useState(false)
+  const [panelType, setPanelType] = useState(null)
+  const {
+    open: rightPanelOpen,
+    closing: rightPanelClosing,
+    visible: rightPanelVisible,
+    closePanel: closeRightPanel,
+    openPanel: openRightPanelSlide,
+  } = useFilterPanelSlide()
+  const didFetchRootsRef = useRef(false)
 
-  // Get unique locations from products
-  const uniqueLocations = [...new Set(products.map(p => p.location).filter(Boolean))].sort()
-
-  // Fetch price range from database
   useEffect(() => {
-    const fetchPriceRange = async () => {
-      try {
-        const categoryIdFromQuery = searchParams.get('category') || ''
-        const categoryIdFromFilters = Array.isArray(filters.categories) ? filters.categories[0] : ''
-        const categoryId = categoryIdFromQuery || categoryIdFromFilters
-        if (!categoryId) return
-        const response = await productService.getPriceRange(categoryId)
-        const { minPrice, maxPrice } = response.data
-        setPriceRange({ min: minPrice, max: maxPrice })
-        if (!filters.minPrice && !filters.maxPrice) {
-          setSliderValues({ min: minPrice, max: maxPrice })
-        }
-      } catch (error) {
-        console.error('Error fetching price range:', error)
-      }
+    if (!isAuthenticated || shellLoaded) return
+    dispatch(fetchFeedShell({ includeChats: true, includePriceRange: false }))
+  }, [dispatch, isAuthenticated, shellLoaded])
+
+  useEffect(() => {
+    if (didFetchRootsRef.current) return
+    if ((!rootCategories || rootCategories.length === 0) && !categoriesLoading) {
+      didFetchRootsRef.current = true
+      dispatch(fetchRootCategories())
     }
-    fetchPriceRange()
-  }, [filters.categories, searchParams])
+  }, [dispatch, rootCategories, categoriesLoading])
 
   useEffect(() => {
-    // Avoid duplicate category fetches on initial load / dev StrictMode.
-    if (!categories || categories.length === 0) dispatch(fetchCategories())
-  }, [dispatch, categories])
-
-  useEffect(() => {
-    const query = searchParams.get('q') || ''
-    const category = searchParams.get('category') || ''
-    const location = searchParams.get('location') || ''
-    const minPrice = searchParams.get('minPrice') || ''
-    const maxPrice = searchParams.get('maxPrice') || ''
-    const condition = searchParams.get('condition') || ''
-    const sortBy = searchParams.get('sortBy') || 'newest'
-    
-    setSearchQuery(query)
-    setFilters({
-      categories: category ? [category] : [],
-      locations: location ? [location] : [],
-      minPrice,
-      maxPrice,
-      conditions: condition ? [condition] : [],
-      sortBy,
-    })
-    
-    if (minPrice || maxPrice) {
-      setSliderValues({
-        min: minPrice ? Math.max(priceRange.min, Number(minPrice)) : priceRange.min,
-        max: maxPrice ? Math.min(priceRange.max, Number(maxPrice)) : priceRange.max,
-      })
-    } else {
-      setSliderValues({ min: priceRange.min, max: priceRange.max })
-    }
-    
-    if (query || category || location || minPrice || maxPrice) {
-      dispatch(clearProducts())
-      const params = { page: 1, limit: 20 }
-      if (query && query.trim() !== '') {
-        params.search = query.trim()
-      }
-      if (category && category.trim() !== '') {
-        params.categoryId = category
-      }
-      if (location && location.trim() !== '') {
-        params.location = location.trim()
-      }
-      if (minPrice && minPrice.toString().trim() !== '') {
-        const min = Number(minPrice)
-        if (!isNaN(min) && min >= 0) {
-          params.minPrice = min
-        }
-      }
-      if (maxPrice && maxPrice.toString().trim() !== '') {
-        const max = Number(maxPrice)
-        if (!isNaN(max) && max > 0 && max <= priceRange.max) {
-          params.maxPrice = max
-        }
-      }
-      
-      dispatch(fetchProducts(params))
-    }
-  }, [searchParams, dispatch])
-
-  useEffect(() => {
-    const query = (searchParams.get('q') || '').trim()
-    const hasExtraFilters =
-      searchParams.get('category') ||
-      searchParams.get('location') ||
-      searchParams.get('minPrice') ||
-      searchParams.get('maxPrice') ||
-      searchParams.get('condition')
-
-    if (!query || hasExtraFilters) {
-      setGlobalResults(null)
-      setSearchExtras(null)
+    if (!categoryId) {
+      setSelectedCategory(matchedCategory || null)
       return
     }
-
     let cancelled = false
-    setGlobalLoading(true)
-
-    globalSearchService
-      .search({
-        keyword: query,
-        type: 'all',
-        perCategoryLimit: 5,
-        include: 'recent,popular,suggestions',
-        sort: 'relevance',
+    categoryService
+      .getCategoryById(categoryId)
+      .then((res) => {
+        if (!cancelled) setSelectedCategory(res.data)
       })
-      .then((response) => {
-        if (cancelled) return
-        setGlobalResults(response.data?.data?.results || null)
-        setSearchExtras(response.data?.data?.extras || null)
-      })
-      .catch((error) => {
+      .catch(() => {
         if (!cancelled) {
-          console.error('Global search error:', error)
-          setGlobalResults(null)
-          setSearchExtras(null)
+          setSelectedCategory(
+            matchedCategory || { _id: categoryId, name: searchQuery || 'Search', icon: null, emoji: '🔍' },
+          )
         }
       })
-      .finally(() => {
-        if (!cancelled) setGlobalLoading(false)
-      })
-
     return () => {
       cancelled = true
     }
-  }, [searchParams])
+  }, [categoryId, matchedCategory, searchQuery])
+
+  useEffect(() => {
+    if (!categoryId) return
+    productService
+      .getPriceRange(categoryId)
+      .then((response) => {
+        const { minPrice: minP, maxPrice: maxP } = response.data || {}
+        setPriceRange({ min: minP ?? 0, max: maxP ?? 100000 })
+      })
+      .catch(() => {})
+  }, [categoryId])
+
+  const syncUrl = useCallback(
+    (patch = {}) => {
+      const q = new URLSearchParams(searchParams.toString())
+      Object.entries(patch).forEach(([key, value]) => {
+        if (value === '' || value == null) q.delete(key)
+        else q.set(key, String(value))
+      })
+      setSearchParams(q, { replace: true })
+    },
+    [searchParams, setSearchParams],
+  )
+
+  const fetchWithFilters = useCallback(
+    (pageNum = 1, append = false) => {
+      if (!categoryId && !searchQuery) return
+      if (!append) dispatch(clearProducts())
+
+      const params = { page: pageNum, limit: 20, sortBy }
+      if (categoryId) params.categoryId = categoryId
+      if (subcategoryId) params.subcategoryId = subcategoryId
+      if (city) params.location = city
+      if (minPrice) params.minPrice = Number(minPrice)
+      if (maxPrice) params.maxPrice = Number(maxPrice)
+
+      const textParts = []
+      if (keywords.trim()) textParts.push(keywords.trim())
+      if (searchQuery && !isExactCategoryQuery) textParts.push(searchQuery)
+      if (textParts.length) params.search = textParts.join(' ').trim()
+
+      dispatch(fetchProducts(params))
+    },
+    [
+      categoryId,
+      searchQuery,
+      isExactCategoryQuery,
+      subcategoryId,
+      city,
+      minPrice,
+      maxPrice,
+      keywords,
+      sortBy,
+      dispatch,
+    ],
+  )
+
+  useEffect(() => {
+    fetchWithFilters(1, false)
+  }, [fetchWithFilters])
 
   const loadMore = () => {
-    if (hasMore && !loading) {
-      const params = { page: page + 1, limit: 20 }
-      if (searchQuery && searchQuery.trim() !== '') {
-        params.search = searchQuery.trim()
-      }
-      if (filters.categories.length > 0) {
-        params.categoryId = filters.categories[0] // Use first selected category
-      }
-      if (filters.locations.length > 0) {
-        params.location = filters.locations[0] // Use first selected location
-      }
-      if (filters.minPrice && filters.minPrice.toString().trim() !== '') {
-        const min = Number(filters.minPrice)
-        if (!isNaN(min) && min > 0) {
-          params.minPrice = min
-        }
-      }
-      if (filters.maxPrice && filters.maxPrice.toString().trim() !== '') {
-        const max = Number(filters.maxPrice)
-        if (!isNaN(max) && max > 0) {
-          params.maxPrice = max
-        }
-      }
-      
-      dispatch(fetchProducts(params))
-    }
+    if (hasMore && !loading) fetchWithFilters(page + 1, true)
   }
 
-  const handleFilterChange = (key, value) => {
-    const newFilters = { ...filters, [key]: value }
-    setFilters(newFilters)
-    
-    const newParams = new URLSearchParams(searchParams)
-    if (key === 'categories' && value.length > 0) {
-      newParams.set('category', value[0])
-    } else if (key === 'locations' && value.length > 0) {
-      newParams.set('location', value[0])
-    } else if (key === 'conditions' && value.length > 0) {
-      newParams.set('condition', value[0])
-    } else if (value && value !== '' && value !== '0' && !Array.isArray(value)) {
-      newParams.set(key, value)
-    } else {
-      if (key === 'categories') newParams.delete('category')
-      else if (key === 'locations') newParams.delete('location')
-      else if (key === 'conditions') newParams.delete('condition')
-      else newParams.delete(key)
-    }
-    setSearchParams(newParams)
-    
-    dispatch(clearProducts())
-    const params = { page: 1, limit: 20 }
-    if (searchQuery && searchQuery.trim() !== '') {
-      params.search = searchQuery.trim()
-    }
-    if (newFilters.categories.length > 0) {
-      params.categoryId = newFilters.categories[0]
-    }
-    if (newFilters.locations.length > 0) {
-      params.location = newFilters.locations[0]
-    }
-    if (newFilters.minPrice && newFilters.minPrice.toString().trim() !== '') {
-      const min = Number(newFilters.minPrice)
-      if (!isNaN(min) && min >= 0) {
-        params.minPrice = min
+  const handleCloseRightPanel = useCallback(() => {
+    closeRightPanel()
+    setTimeout(() => setPanelType(null), 300)
+  }, [closeRightPanel])
+
+  const toggleRightPanel = useCallback(
+    (type) => {
+      const isDesktop =
+        typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches
+      if (!isDesktop) {
+        if (type === 'advanced') setShowMobileFilters(true)
+        return
       }
-    }
-    if (newFilters.maxPrice && newFilters.maxPrice.toString().trim() !== '') {
-      const max = Number(newFilters.maxPrice)
-      if (!isNaN(max) && max > 0 && max <= priceRange.max) {
-        params.maxPrice = max
+
+      if (panelType === type && rightPanelOpen) {
+        handleCloseRightPanel()
+        return
       }
+
+      setPanelType(type)
+      if (!rightPanelOpen) openRightPanelSlide()
+    },
+    [panelType, rightPanelOpen, handleCloseRightPanel, openRightPanelSlide],
+  )
+
+  const handleOpenFilters = () => {
+    toggleRightPanel('advanced')
+  }
+
+  const handleQuickFilter = useCallback(
+    (label) => {
+      if (label === 'Price') toggleRightPanel('price')
+    },
+    [toggleRightPanel],
+  )
+
+  const handleCityChange = (nextCity) => {
+    setCity(nextCity)
+    syncUrl({ location: nextCity })
+  }
+
+  const handleSubcategoryChange = (nextId) => {
+    setSubcategoryId(nextId)
+    syncUrl({ subcategoryId: nextId })
+  }
+
+  const handlePriceChange = useCallback(
+    (lo, hi) => {
+      setMinPrice(String(lo))
+      setMaxPrice(String(hi))
+      syncUrl({ minPrice: lo, maxPrice: hi })
+    },
+    [syncUrl],
+  )
+
+  const handlePriceApply = useCallback(
+    (lo, hi) => {
+      handlePriceChange(lo, hi)
+      fetchWithFilters(1, false)
+    },
+    [handlePriceChange, fetchWithFilters],
+  )
+
+  const priceMinMax = useMemo(() => {
+    const lo = minPrice ? Number(minPrice) : priceRange.min
+    const hi = maxPrice ? Number(maxPrice) : priceRange.max
+    return {
+      min: Number.isFinite(lo) ? lo : priceRange.min,
+      max: Number.isFinite(hi) ? hi : priceRange.max,
     }
-    
-    dispatch(fetchProducts(params))
-  }
-
-  const toggleCategoryFilter = (categoryId) => {
-    const newCategories = filters.categories.includes(categoryId)
-      ? filters.categories.filter(id => id !== categoryId)
-      : [categoryId] // Only allow one category at a time (like Dubizzle)
-    handleFilterChange('categories', newCategories)
-  }
-
-  const toggleLocationFilter = (location) => {
-    const newLocations = filters.locations.includes(location)
-      ? filters.locations.filter(loc => loc !== location)
-      : [location] // Only allow one location at a time
-    handleFilterChange('locations', newLocations)
-  }
-
-  const toggleConditionFilter = (condition) => {
-    const newConditions = filters.conditions.includes(condition)
-      ? filters.conditions.filter(cond => cond !== condition)
-      : [condition] // Only allow one condition at a time
-    handleFilterChange('conditions', newConditions)
-  }
-
-  const removeFilter = (key) => {
-    if (key === 'category') handleFilterChange('categories', [])
-    else if (key === 'location') handleFilterChange('locations', [])
-    else if (key === 'condition') handleFilterChange('conditions', [])
-    else handleFilterChange(key, '')
-  }
+  }, [minPrice, maxPrice, priceRange])
 
   const clearFilters = () => {
-    const newParams = new URLSearchParams(searchParams)
-    newParams.delete('category')
-    newParams.delete('location')
-    newParams.delete('minPrice')
-    newParams.delete('maxPrice')
-    newParams.delete('condition')
-    newParams.delete('sortBy')
-    setSearchParams(newParams)
-    setFilters({
-      categories: [],
-      locations: [],
-      minPrice: '',
-      maxPrice: '',
-      conditions: [],
-      sortBy: 'newest',
-    })
-    setSliderValues({ min: priceRange.min, max: priceRange.max })
+    setCity('')
+    setSubcategoryId('')
+    setMinPrice('')
+    setMaxPrice('')
+    setKeywords('')
+    setShowMobileFilters(false)
+    const q = new URLSearchParams(searchParams.toString())
+    ;['location', 'subcategoryId', 'minPrice', 'maxPrice'].forEach((key) => q.delete(key))
+    setSearchParams(q, { replace: true })
+    fetchWithFilters(1, false)
   }
 
-  const toggleSection = (section) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [section]: !prev[section]
-    }))
+  const applyFilters = () => {
+    setShowMobileFilters(false)
+    fetchWithFilters(1, false)
   }
 
-  const hasActiveFilters = filters.categories.length > 0 || filters.locations.length > 0 || filters.minPrice || filters.maxPrice || filters.conditions.length > 0
+  const categoryForUi =
+    selectedCategory ||
+    (matchedCategory
+      ? matchedCategory
+      : {
+          _id: 'search',
+          name: searchQuery ? searchQuery : 'Search',
+          icon: null,
+          emoji: '🔍',
+        })
 
-  // Filter and sort products
-  let filteredProducts = [...products]
-  
-  if (filters.conditions.length > 0) {
-    filteredProducts = filteredProducts.filter(p => filters.conditions.includes(p.condition))
+  const listingCountLabel =
+    loading && products.length === 0
+      ? 'Loading listings…'
+      : `${products.length} result${products.length !== 1 ? 's' : ''} found`
+
+  const showAdvancedFilters = Boolean(categoryId)
+  const quickFilterLabels = showAdvancedFilters ? ['Region', 'Price'] : []
+  const gridColumns = rightPanelVisible && showAdvancedFilters ? 2 : 3
+
+  const filterPanelProps = {
+    categoryId,
+    city,
+    onCityChange: handleCityChange,
+    minPrice,
+    maxPrice,
+    priceMin: priceRange.min,
+    priceMax: priceRange.max,
+    onPriceChange: handlePriceChange,
+    keywords,
+    onKeywordsChange: setKeywords,
+    subcategoryId,
+    onSubcategoryChange: handleSubcategoryChange,
+    onApply: applyFilters,
+    onReset: clearFilters,
   }
-  
-  const sortedProducts = filteredProducts.sort((a, b) => {
-    switch (filters.sortBy) {
-      case 'price-low':
-        return a.price - b.price
-      case 'price-high':
-        return b.price - a.price
-      case 'newest':
-        return new Date(b.createdAt) - new Date(a.createdAt)
-      case 'oldest':
-        return new Date(a.createdAt) - new Date(b.createdAt)
-      default:
-        return 0
-    }
-  })
 
-  const hasGlobalContent = globalResults && (
-    (globalResults.products?.length || 0) +
-    (globalResults.categories?.length || 0) +
-    (globalResults.properties?.length || 0) +
-    (globalResults.agents?.length || 0) +
-    (globalResults.agencies?.length || 0)
-  ) > 0
-
-  const handleClearRecentSearches = async () => {
-    try {
-      await globalSearchService.clearRecent()
-      setSearchExtras((prev) =>
-        prev
-          ? {
-              ...prev,
-              recentSearches: { keywords: [], items: [], total: 0 },
-            }
-          : prev,
+  const filterPanel =
+    showAdvancedFilters && rightPanelVisible ? (
+      panelType === 'price' ? (
+        <PriceFilterPanel
+          className="h-full"
+          showClose
+          closing={rightPanelClosing}
+          onClose={handleCloseRightPanel}
+          min={priceRange.min}
+          max={priceRange.max}
+          valueMin={priceMinMax.min}
+          valueMax={priceMinMax.max}
+          onApply={handlePriceApply}
+        />
+      ) : (
+        <SearchFilterPanel
+          className="h-full"
+          showClose
+          closing={rightPanelClosing}
+          onClose={handleCloseRightPanel}
+          {...filterPanelProps}
+        />
       )
-    } catch (error) {
-      console.error('Error clearing recent searches:', error)
-    }
-  }
-
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-    }).format(price)
-  }
+    ) : null
 
   return (
-    <div className="bg-gray-50 min-h-screen">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Breadcrumb */}
-        <div className="mb-4 text-sm text-gray-600">
-          <Link to="/" className="hover:text-primary-600">Home</Link>
-          <span className="mx-2">/</span>
-          <span className="text-gray-900">Search Results</span>
-        </div>
-
-        {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-              <h1 className="text-2xl font-bold text-gray-900 mb-1">
-                {searchQuery ? `"${searchQuery}"` : 'All Products'}
-          </h1>
-              <p className="text-sm text-gray-600">
-            {sortedProducts.length > 0 
-                  ? `${sortedProducts.length} result${sortedProducts.length !== 1 ? 's' : ''} found`
-                  : 'No results found'
-            }
-          </p>
-        </div>
-        
-            <div className="flex items-center gap-3">
-              {/* View Toggle */}
-              <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden">
-                <button
-                  onClick={() => setViewMode('grid')}
-                  className={`p-2 ${viewMode === 'grid' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                >
-                  <Grid className="h-4 w-4" />
-                </button>
-                <button
-                  onClick={() => setViewMode('list')}
-                  className={`p-2 ${viewMode === 'list' ? 'bg-primary-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
-                >
-                  <List className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* Sort */}
-          <select
-            value={filters.sortBy}
-            onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-                className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600 text-sm"
-          >
-            <option value="newest">Newest First</option>
-            <option value="oldest">Oldest First</option>
-            <option value="price-low">Price: Low to High</option>
-            <option value="price-high">Price: High to Low</option>
-          </select>
-
-              {/* Mobile Filter Button */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-                className="md:hidden flex items-center gap-2 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-          >
-                <Filter className="h-4 w-4" />
-                <span>Filters</span>
-            {hasActiveFilters && (
-              <span className="bg-primary-600 text-white text-xs rounded-full px-2 py-0.5">
-                    {filters.categories.length + filters.locations.length + filters.conditions.length + (filters.minPrice ? 1 : 0) + (filters.maxPrice ? 1 : 0)}
-              </span>
-            )}
-          </button>
-        </div>
+    <CategoryBrowseLayout
+      activeCategoryId={categoryId || null}
+      variant="listing"
+      layoutPreset="marketplace"
+      filterPanel={filterPanel}
+      filterPanelOpen={rightPanelVisible}
+    >
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#F7F8FC]">
+        <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+          <div className="mb-6 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-[#0F172A] sm:text-3xl">
+                {categoryForUi.name}
+              </h1>
+              <p className="mt-1 text-sm text-[#64748B]">{listingCountLabel}</p>
+            </div>
+            <ListingToolbar
+              sortBy={sortBy}
+              onSortChange={(value) => {
+                setSortBy(value)
+                syncUrl({ sortBy: value })
+              }}
+              onOpenFilters={handleOpenFilters}
+              onQuickFilterClick={handleQuickFilter}
+              quickFilters={quickFilterLabels}
+              filtersOpen={panelType === 'advanced' && rightPanelOpen && showAdvancedFilters}
+              activeQuickFilter={panelType === 'price' && rightPanelOpen ? 'Price' : null}
+            />
           </div>
 
-          {/* Active Filters */}
-          {hasActiveFilters && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-sm font-medium text-gray-700">Active filters:</span>
-                {filters.categories.map(catId => {
-                  const cat = categories.find(c => c._id === catId)
-                  return cat ? (
-                    <span key={catId} className="inline-flex items-center gap-1 px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm">
-                      {cat.name}
-                      <button onClick={() => removeFilter('category')} className="ml-1 hover:text-primary-900">
-                        <X className="h-3 w-3" />
-                      </button>
-                    </span>
-                  ) : null
-                })}
-                {filters.locations.map(loc => (
-                  <span key={loc} className="inline-flex items-center gap-1 px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm">
-                    {loc}
-                    <button onClick={() => removeFilter('location')} className="ml-1 hover:text-primary-900">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-                {(filters.minPrice || filters.maxPrice) && (
-                  <span className="inline-flex items-center gap-1 px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm">
-                    {formatPrice(Number(filters.minPrice || priceRange.min))} - {formatPrice(Number(filters.maxPrice || priceRange.max))}
-                    <button onClick={() => { removeFilter('minPrice'); removeFilter('maxPrice') }} className="ml-1 hover:text-primary-900">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                )}
-                {filters.conditions.map(cond => (
-                  <span key={cond} className="inline-flex items-center gap-1 px-3 py-1 bg-primary-100 text-primary-800 rounded-full text-sm">
-                    {cond}
-                    <button onClick={() => removeFilter('condition')} className="ml-1 hover:text-primary-900">
-                      <X className="h-3 w-3" />
-                    </button>
-                  </span>
-                ))}
-                <button
-                  onClick={clearFilters}
-                  className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-                >
-                  Clear all
-                </button>
-              </div>
+          {!searchQuery && !categoryId ? (
+            <div className="rounded-2xl border border-[#E8EBF2] bg-white p-12 text-center shadow-sm">
+              <h3 className="mb-2 text-xl font-bold text-[#0F172A]">Search the marketplace</h3>
+              <p className="text-[#64748B]">Use the search bar above to find listings, categories, and more.</p>
             </div>
-          )}
-      </div>
+          ) : (
+            <>
+              <ProductGrid
+                products={products}
+                loading={loading}
+                columns={gridColumns}
+                emptyState={
+                  <div className="rounded-2xl border border-[#E8EBF2] bg-white p-12 text-center shadow-sm">
+                    <h3 className="mb-2 text-xl font-bold text-[#0F172A]">No listings found</h3>
+                    <p className="text-[#64748B]">
+                      {searchQuery
+                        ? `No results for "${searchQuery}". Try adjusting filters or another keyword.`
+                        : 'Try adjusting filters or choose another category.'}
+                    </p>
+                  </div>
+                }
+              />
 
-      <div className="flex flex-col lg:flex-row gap-6">
-        {/* Mobile Filter Overlay */}
-        {showFilters && (
-          <div 
-            className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-            onClick={() => setShowFilters(false)}
-          ></div>
-        )}
-        
-        {/* Filters Sidebar */}
-        <div className={`${
-          showFilters
-              ? 'fixed left-0 top-0 h-full w-full max-w-xs sm:w-80 bg-white z-50 shadow-2xl overflow-y-auto lg:relative lg:z-auto lg:h-auto lg:w-64 lg:shadow-none'
-            : 'hidden lg:block'
-          } flex-shrink-0`}>
-            <div className="bg-white rounded-lg shadow-sm p-4 lg:sticky lg:top-24">
-              <div className="flex items-center justify-between mb-4 pb-4 border-b">
-                <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
-                <div className="flex items-center gap-3">
-                  {hasActiveFilters && (
-                    <button
-                      onClick={clearFilters}
-                      className="text-sm text-primary-600 hover:text-primary-700"
-                    >
-                      Clear All
-                    </button>
-                  )}
+              {hasMore && products.length > 0 ? (
+                <div className="mt-8 text-center">
                   <button
-                    onClick={() => setShowFilters(false)}
-                    className="lg:hidden text-gray-500 hover:text-gray-700"
+                    type="button"
+                    onClick={loadMore}
+                    disabled={loading}
+                    className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white shadow-md shadow-brand/25 transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
                   >
-                    <X className="h-5 w-5" />
+                    {loading ? 'Loading...' : 'Load More'}
                   </button>
                 </div>
-              </div>
-
-              {/* Category Filter */}
-              <div className="mb-4 border-b pb-4">
-                <button
-                  onClick={() => toggleSection('category')}
-                  className="w-full flex items-center justify-between text-left font-medium text-gray-900 mb-3"
-                >
-                  <span>Category</span>
-                  {expandedSections.category ? (
-                    <ChevronUp className="h-4 w-4 text-gray-500" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-gray-500" />
-                  )}
-                </button>
-                {expandedSections.category && (
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {categories.map((cat) => {
-                      const isSelected = filters.categories.includes(cat._id)
-                      return (
-                        <label
-                          key={cat._id}
-                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleCategoryFilter(cat._id)}
-                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                          />
-                          <span className="text-sm text-gray-700 flex items-center gap-2">
-                            <span>{cat.emoji}</span>
-                            <span>{cat.name}</span>
-                          </span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Location Filter */}
-              <div className="mb-4 border-b pb-4">
-                <button
-                  onClick={() => toggleSection('location')}
-                  className="w-full flex items-center justify-between text-left font-medium text-gray-900 mb-3"
-                >
-                  <span>Location</span>
-                  {expandedSections.location ? (
-                    <ChevronUp className="h-4 w-4 text-gray-500" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-gray-500" />
-                  )}
-                </button>
-                {expandedSections.location && (
-                  <div className="space-y-2 max-h-64 overflow-y-auto">
-                    {uniqueLocations.length > 0 ? (
-                      uniqueLocations.map((loc) => {
-                        const isSelected = filters.locations.includes(loc)
-                        return (
-                          <label
-                            key={loc}
-                            className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleLocationFilter(loc)}
-                              className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                            />
-                            <span className="text-sm text-gray-700 flex items-center gap-2">
-                              <MapPin className="h-3 w-3 text-gray-400" />
-                              <span>{loc}</span>
-                            </span>
-                          </label>
-                        )
-                      })
-                    ) : (
-                      <p className="text-sm text-gray-500 py-2">No locations available</p>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Price Range Filter */}
-              <div className="mb-4 border-b pb-4">
-                <button
-                  onClick={() => toggleSection('price')}
-                  className="w-full flex items-center justify-between text-left font-medium text-gray-900 mb-3"
-                >
-                  <span>Price Range</span>
-                  {expandedSections.price ? (
-                    <ChevronUp className="h-4 w-4 text-gray-500" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-gray-500" />
-                  )}
-                </button>
-                {expandedSections.price && (
-                  <div className="space-y-4">
-                    {/* Price Input Fields */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Min Price</label>
-                        <input
-                          type="number"
-                          value={sliderValues.min}
-                          onChange={(e) => {
-                            const newMin = Math.max(priceRange.min, Math.min(Number(e.target.value) || priceRange.min, sliderValues.max))
-                            setSliderValues({ ...sliderValues, min: newMin })
-                            handleFilterChange('minPrice', newMin.toString())
-                          }}
-                          min={priceRange.min}
-                          max={sliderValues.max}
-                          placeholder="Min"
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-700 mb-1.5">Max Price</label>
-                        <input
-                          type="number"
-                          value={sliderValues.max}
-                          onChange={(e) => {
-                            const newMax = Math.min(priceRange.max, Math.max(Number(e.target.value) || priceRange.max, sliderValues.min))
-                            setSliderValues({ ...sliderValues, max: newMax })
-                            handleFilterChange('maxPrice', newMax.toString())
-                          }}
-                          min={sliderValues.min}
-                          max={priceRange.max}
-                          placeholder="Max"
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
-                        />
-                      </div>
-                    </div>
-                    
-                    {/* Range Slider */}
-                    <div className="relative pt-4">
-                      <div className="flex items-center justify-between mb-3 text-xs text-gray-600 font-medium">
-                        <span>{formatPrice(sliderValues.min)}</span>
-                        <span>{formatPrice(sliderValues.max)}</span>
-                      </div>
-                      
-                      <div className="relative h-8 py-2">
-                        {/* Track Background */}
-                        <div className="absolute top-1/2 left-0 right-0 h-1.5 bg-gray-200 rounded-full transform -translate-y-1/2"></div>
-                        
-                        {/* Active Range */}
-                        <div
-                          className="absolute top-1/2 h-1.5 bg-primary-600 rounded-full transform -translate-y-1/2 pointer-events-none"
-                          style={{
-                            left: `${((sliderValues.min - priceRange.min) / (priceRange.max - priceRange.min)) * 100}%`,
-                            width: `${((sliderValues.max - sliderValues.min) / (priceRange.max - priceRange.min)) * 100}%`,
-                          }}
-                        ></div>
-                        
-                        {/* Min Slider */}
-                        <input
-                          type="range"
-                          min={priceRange.min}
-                          max={sliderValues.max}
-                          value={sliderValues.min}
-                          onChange={(e) => {
-                            const newMin = Math.min(Number(e.target.value), sliderValues.max - 1)
-                            setSliderValues({ ...sliderValues, min: newMin })
-                            handleFilterChange('minPrice', newMin.toString())
-                          }}
-                          className="range-input range-input-min absolute top-0 left-0 w-full h-full"
-                        />
-                        
-                        {/* Max Slider */}
-                        <input
-                          type="range"
-                          min={sliderValues.min}
-                          max={priceRange.max}
-                          value={sliderValues.max}
-                          onChange={(e) => {
-                            const newMax = Math.max(Number(e.target.value), sliderValues.min + 1)
-                            setSliderValues({ ...sliderValues, max: newMax })
-                            handleFilterChange('maxPrice', newMax.toString())
-                          }}
-                          className="range-input range-input-max absolute top-0 left-0 w-full h-full"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Condition Filter */}
-              <div className="mb-4">
-                <button
-                  onClick={() => toggleSection('condition')}
-                  className="w-full flex items-center justify-between text-left font-medium text-gray-900 mb-3"
-                >
-                  <span>Condition</span>
-                  {expandedSections.condition ? (
-                    <ChevronUp className="h-4 w-4 text-gray-500" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4 text-gray-500" />
-                  )}
-                </button>
-                {expandedSections.condition && (
-                  <div className="space-y-2">
-                    {['New', 'Like New', 'Good', 'Fair', 'Poor'].map((condition) => {
-                      const isSelected = filters.conditions.includes(condition)
-                      return (
-                        <label
-                          key={condition}
-                          className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-2 rounded"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => toggleConditionFilter(condition)}
-                            className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
-                          />
-                          <span className="text-sm text-gray-700">{condition}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-        {/* Results Section */}
-          <div className="flex-1">
-          {globalLoading && (
-            <div className="mb-4 flex items-center gap-2 text-sm text-gray-500">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary-600" />
-              Searching across categories, agents, and more...
-            </div>
+              ) : null}
+            </>
           )}
-          {globalResults && <GlobalSearchSections results={globalResults} />}
-
-          {searchExtras && (
-            <SearchExtrasPanel
-              recentSearches={searchExtras.recentSearches}
-              popularSearches={searchExtras.popularSearches}
-              suggestions={searchExtras.suggestions}
-              currentQuery={searchQuery}
-              onClearRecent={handleClearRecentSearches}
-              className="mb-6"
-            />
-          )}
-
-          {searchQuery && !globalLoading && !hasGlobalContent && sortedProducts.length === 0 && (
-            <div className="bg-white rounded-lg shadow-sm p-6 mb-6 text-center">
-              <SearchIcon className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-              <p className="text-gray-600 text-sm">
-                No listings matched &quot;{searchQuery}&quot;. Try a popular or recent search below.
-              </p>
-            </div>
-          )}
-
-          {searchQuery && (
-            <h2 className="text-lg font-semibold text-gray-900 mb-3">Products</h2>
-          )}
-
-      {loading && products.length === 0 ? (
-              <div className="flex items-center justify-center h-64 bg-white rounded-lg shadow-sm">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-        </div>
-      ) : sortedProducts.length === 0 ? (
-              <div className="bg-white rounded-lg shadow-sm p-12 text-center">
-              <SearchIcon className="h-24 w-24 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-2xl font-bold text-gray-900 mb-3">No products found</h3>
-                <p className="text-gray-600 mb-6">
-              {hasActiveFilters
-                    ? "Try adjusting your filters or search terms."
-                : searchQuery 
-                    ? "Try different keywords or browse categories."
-                    : 'Enter a search term to find products'
-              }
-            </p>
-              {hasActiveFilters && (
-                <button
-                  onClick={clearFilters}
-                    className="px-6 py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors"
-                >
-                  Clear All Filters
-                </button>
-              )}
-        </div>
-      ) : (
-        <>
-                {/* Grid View */}
-                {viewMode === 'grid' ? (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {sortedProducts.map((product) => (
-                <Link
-                  key={product._id}
-                  to={`/products/${product._id}`}
-                        className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow"
-                >
-                  <div className="relative h-48 bg-gray-200">
-                    {product.video ? (
-                      <video
-                        src={getMediaUrl(product.video)}
-                        className="w-full h-full object-cover"
-                        muted
-                        loop
-                        autoPlay
-                        playsInline
-                      />
-                    ) : (
-                      <img
-                        src={getMediaUrl(product.images?.[0]) || '/placeholder.jpg'}
-                        alt={product.title}
-                        className="w-full h-full object-cover"
-                      />
-                    )}
-                  </div>
-                  <div className="p-4">
-                          <h3 className="font-semibold text-gray-900 mb-2 line-clamp-2 min-h-[3rem] text-sm">
-                      {product.title}
-                    </h3>
-                    <p className="text-primary-600 font-bold text-lg mb-2">
-                      {formatPrice(product.price)}
-                    </p>
-                          <div className="flex items-center text-xs text-gray-600 gap-2">
-                            <MapPin className="h-3 w-3" />
-                            <span className="truncate">{product.location}</span>
-                          </div>
-                          {product.createdAt && (
-                            <div className="flex items-center text-xs text-gray-500 mt-1 gap-1">
-                              <Calendar className="h-3 w-3" />
-                              <span>{new Date(product.createdAt).toLocaleDateString()}</span>
-                            </div>
-                          )}
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                ) : (
-                  /* List View */
-                  <div className="space-y-3">
-                    {sortedProducts.map((product) => (
-                      <Link
-                        key={product._id}
-                        to={`/products/${product._id}`}
-                        className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow flex"
-                      >
-                        <div className="relative w-24 h-24 sm:w-36 sm:h-36 md:w-48 md:h-48 bg-gray-200 flex-shrink-0">
-                          {product.video ? (
-                            <video
-                              src={getMediaUrl(product.video)}
-                              className="w-full h-full object-cover"
-                              muted
-                              loop
-                              autoPlay
-                              playsInline
-                            />
-                          ) : (
-                            <img
-                              src={getMediaUrl(product.images?.[0]) || '/placeholder.jpg'}
-                              alt={product.title}
-                              className="w-full h-full object-cover"
-                            />
-                          )}
-                        </div>
-                        <div className="p-3 sm:p-4 flex-1 min-w-0">
-                          <h3 className="font-semibold text-gray-900 mb-1 sm:mb-2 text-sm sm:text-base md:text-lg line-clamp-2">
-                            {product.title}
-                          </h3>
-                          <p className="text-primary-600 font-bold text-base sm:text-lg md:text-xl mb-1 sm:mb-3">
-                            {formatPrice(product.price)}
-                          </p>
-                          <div className="flex flex-wrap items-center text-xs sm:text-sm text-gray-600 gap-2 sm:gap-4">
-                            <div className="flex items-center gap-1">
-                              <MapPin className="h-3 w-3 sm:h-4 sm:w-4 shrink-0" />
-                              <span className="truncate max-w-[120px] sm:max-w-none">{product.location}</span>
-                            </div>
-                            {product.createdAt && (
-                              <div className="hidden sm:flex items-center gap-1">
-                                <Calendar className="h-3 w-3 sm:h-4 sm:w-4" />
-                                <span>{new Date(product.createdAt).toLocaleDateString()}</span>
-                              </div>
-                            )}
-                            {product.views > 0 && (
-                              <span className="hidden md:inline">{product.views} views</span>
-                            )}
-                          </div>
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-
-          {/* Load More */}
-          {hasMore && (
-                  <div className="text-center mt-8">
-              <button
-                onClick={loadMore}
-                disabled={loading}
-                      className="px-6 py-3 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Loading...' : 'Load More'}
-              </button>
-            </div>
-          )}
-        </>
-      )}
-          </div>
         </div>
       </div>
-    </div>
+
+      {showMobileFilters && showAdvancedFilters ? (
+        <>
+          <button
+            type="button"
+            className="fixed inset-0 z-[80] bg-[#0F172A]/45 backdrop-blur-[2px] lg:hidden"
+            onClick={() => setShowMobileFilters(false)}
+            aria-label="Close filters overlay"
+          />
+          <div className="fixed inset-y-0 right-0 z-[90] w-full max-w-[420px] shadow-2xl lg:hidden">
+            <SearchFilterPanel showClose onClose={() => setShowMobileFilters(false)} {...filterPanelProps} />
+          </div>
+        </>
+      ) : null}
+    </CategoryBrowseLayout>
   )
 }
 

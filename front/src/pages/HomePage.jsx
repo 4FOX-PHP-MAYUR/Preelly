@@ -1,12 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
-import { Bookmark, Building2, Briefcase, Car, ChevronLeft, ChevronRight, LayoutGrid, MessageCircle, Plus, Settings, Shirt, Smartphone, Sofa, X } from 'lucide-react'
+import { Bookmark, ChevronLeft, ChevronRight, MessageCircle, Plus, Settings, X } from 'lucide-react'
 import BrandLogo from '@shared/components/BrandLogo'
 import HomeTopBar from '../components/Home/HomeTopBar'
+import MarketplaceLogoBlock from '../components/Layout/MarketplaceLogoBlock'
+import SidebarCategoryList from '../components/Layout/SidebarCategoryList'
+import { MARKETPLACE_LOGO_CELL } from '../components/Layout/marketplaceLayoutStyles'
 import ReelsFeed from '@shared/components/Reels/ReelsFeed'
 import ReelsSkeleton from '@shared/components/Reels/ReelsSkeleton'
 import ReelProductDetailPanel from '@shared/components/Reels/ReelProductDetailPanel'
+import ReelCommentsModal from '@shared/components/Reels/ReelCommentsModal'
 import { fetchRootCategories } from '@shared/store/slices/categorySlice'
 import {
   selectAuthHydrating,
@@ -15,63 +19,9 @@ import {
 } from '@shared/store/slices/authSlice'
 import { clearReels, fetchFeedPage, fetchFeedShell, setCurrentFeedType, REELS_PAGE_LIMIT } from '@shared/store/slices/feedSlice'
 import { userService } from '@shared/services/api'
-import { getCategoryImageUrl } from '@shared/utils/helpers'
 import { getLocalReelsIndex, getReelsStorageKey, getSavedReelIndex, saveReelIndex } from '@shared/utils/reelsProgress'
 
-const categoryIconMap = [
-  { pattern: /\b(motor|vehicle|car|auto)\b/i, icon: Car },
-  { pattern: /\b(property|real estate|villa|apartment|home)\b/i, icon: Building2 },
-  { pattern: /\b(job|career|work)\b/i, icon: Briefcase },
-  { pattern: /\b(fashion|clothing|accessories)\b/i, icon: Shirt },
-  { pattern: /\b(furniture|garden|home decor)\b/i, icon: Sofa },
-  { pattern: /\b(electronics|mobile|phone|laptop|gaming)\b/i, icon: Smartphone },
-]
-
-function getFallbackCategoryIcon(name) {
-  const match = categoryIconMap.find((item) => item.pattern.test(name || ''))
-  return match?.icon || LayoutGrid
-}
-
-function formatCompactCount(value) {
-  if (!value || Number(value) <= 0) return '0'
-  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
-}
-
-function formatCategoryCount(value) {
-  const count = Number(value || 0)
-  if (!count) return null
-  return count.toLocaleString('en-US')
-}
-
-function CategoryBadge({ category, compact = false }) {
-  const Icon = getFallbackCategoryIcon(category?.name)
-  const sizeClass = compact ? 'h-4 w-4' : 'h-5 w-5'
-  const [imageFailed, setImageFailed] = useState(false)
-  const imageSrc = getCategoryImageUrl(category)
-
-  if (imageSrc && !imageFailed) {
-    return (
-      <div className={`flex items-center justify-center overflow-hidden rounded-md ${compact ? 'h-4 w-4' : 'h-5 w-5'}`}>
-        <img
-          src={imageSrc}
-          alt={category.name}
-          className="h-full w-full object-cover"
-          onError={() => setImageFailed(true)}
-        />
-      </div>
-    )
-  }
-
-  if (category?.emoji) {
-    return (
-      <span className={compact ? 'text-sm' : 'text-lg'} aria-hidden="true">
-        {category.emoji}
-      </span>
-    )
-  }
-
-  return <Icon className={`${sizeClass} flex-shrink-0 text-slate-700`} strokeWidth={1.75} />
-}
+const COMMENTS_SLIDE_MS = 280
 
 function HomePage() {
   const dispatch = useDispatch()
@@ -91,6 +41,9 @@ function HomePage() {
   const [visibleReelIndex, setVisibleReelIndex] = useState(0)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [commentsProduct, setCommentsProduct] = useState(null)
+  const [commentsSlideIn, setCommentsSlideIn] = useState(false)
+  const commentAddedHandlerRef = useRef(null)
   const wasOnHomeRef = useRef(false)
   const hasReadSavedIndexRef = useRef(false)
 
@@ -215,6 +168,31 @@ function HomePage() {
   const unreadChatCount = isAuthenticated ? feedUnreadCount || 0 : 0
   const currentReel = videoReels[visibleReelIndex] || videoReels[0] || null
 
+  const closeCommentsPanel = useCallback(() => {
+    setCommentsSlideIn(false)
+    window.setTimeout(() => {
+      setCommentsProduct(null)
+      commentAddedHandlerRef.current = null
+    }, COMMENTS_SLIDE_MS)
+  }, [])
+
+  const openCommentsPanel = useCallback((product, handlers = {}) => {
+    if (!product?._id) return
+    commentAddedHandlerRef.current = handlers.onCommentAdded || null
+    setCommentsProduct(product)
+    setCommentsSlideIn(false)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setCommentsSlideIn(true))
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!commentsProduct || !currentReel?._id) return
+    if (String(commentsProduct._id) !== String(currentReel._id)) {
+      closeCommentsPanel()
+    }
+  }, [commentsProduct, currentReel?._id, closeCommentsPanel])
+
   const quickLinks = [
     {
       label: 'My Bookmarks',
@@ -255,28 +233,15 @@ function HomePage() {
         >
           Categories
         </Link>
-        <div className="mt-3 space-y-1">
-          {rootCategories.slice(0, 7).map((category) => {
-            const isSelected = category._id === selectedCategoryId
-            return (
-              <button
-                key={category._id}
-                type="button"
-                onClick={() => {
-                  handleCategoryClick(category)
-                  setMobileMenuOpen(false)
-                }}
-                className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                  isSelected ? 'bg-brand-50 text-brand' : 'hover:bg-slate-50'
-                }`}
-              >
-                <CategoryBadge category={category} compact />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium text-slate-800">{category.name}</p>
-                </div>
-              </button>
-            )
-          })}
+        <div className="mt-3">
+          <SidebarCategoryList
+            categories={rootCategories}
+            activeId={selectedCategoryId}
+            onSelect={(category) => {
+              handleCategoryClick(category)
+              setMobileMenuOpen(false)
+            }}
+          />
         </div>
       </div>
 
@@ -308,7 +273,7 @@ function HomePage() {
   )
 
   return (
-    <div className="h-[100dvh] overflow-hidden bg-[#f7f8fa]">
+    <div className="h-[100dvh] overflow-hidden bg-white">
       {/* Mobile slide-out navigation */}
       {mobileMenuOpen && (
         <>
@@ -339,13 +304,16 @@ function HomePage() {
 
       <div
         className={`grid h-full grid-rows-[auto_minmax(0,1fr)] ${
-          sidebarCollapsed ? 'lg:grid-cols-[84px_minmax(0,1fr)_320px]' : 'lg:grid-cols-[270px_minmax(0,1fr)_320px]'
+          sidebarCollapsed
+            ? 'lg:grid-cols-[84px_minmax(0,1fr)_465px]'
+            : 'lg:grid-cols-[270px_minmax(0,1fr)_465px]'
         }`}
       >
-        <div className="hidden border-b border-slate-200 p-5 lg:block lg:border-b-0 lg:border-r">
-          <Link to="/" className="inline-flex items-center overflow-hidden">
-            <BrandLogo className={sidebarCollapsed ? 'h-8 w-auto flex-shrink-0' : 'h-10 w-auto'} />
-          </Link>
+        <div className={MARKETPLACE_LOGO_CELL}>
+          <MarketplaceLogoBlock
+            compact={sidebarCollapsed}
+            showTagline={!sidebarCollapsed}
+          />
         </div>
 
         <HomeTopBar mobileMenuOpen={mobileMenuOpen} onToggleMobileMenu={() => setMobileMenuOpen(true)} />
@@ -378,34 +346,16 @@ function HomePage() {
                 Could not load categories — tap to retry
               </button>
             )}
-            <div className="mt-3 space-y-1">
+            <div className="mt-3">
               {categoriesLoading && rootCategories.length === 0 && !sidebarCollapsed && (
                 <p className="px-3 py-2 text-sm text-slate-400">Loading categories…</p>
               )}
-              {rootCategories.slice(0, 7).map((category) => {
-                const isSelected = category._id === selectedCategoryId
-
-                return (
-                  <button
-                    key={category._id}
-                    onClick={() => handleCategoryClick(category)}
-                    title={category.name}
-                    className={`flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition ${
-                      isSelected ? 'bg-brand-50 text-brand' : 'hover:bg-slate-50'
-                    }`}
-                  >
-                    <CategoryBadge category={category} compact />
-                    {!sidebarCollapsed && (
-                      <>
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-medium text-slate-800">{category.name}</p>
-                        </div>
-                        <span className="text-xs font-medium text-slate-400">{formatCategoryCount(category.count) || formatCompactCount(category.count)}</span>
-                      </>
-                    )}
-                  </button>
-                )
-              })}
+              <SidebarCategoryList
+                categories={rootCategories}
+                activeId={selectedCategoryId}
+                onSelect={handleCategoryClick}
+                collapsed={sidebarCollapsed}
+              />
             </div>
           </div>
 
@@ -561,6 +511,7 @@ function HomePage() {
                   initialIndex={savedReelIndex ?? 0}
                   heightOverride="100%"
                   embedded
+                  onOpenComments={openCommentsPanel}
                   onVisibleIndexChange={(index) => {
                     setVisibleReelIndex(index)
                     saveReelIndex(reelsStorageKey, index, isAuthenticated, userService.saveReelsProgress)
@@ -571,8 +522,29 @@ function HomePage() {
           </div>
         </section>
 
-        <aside className="hidden min-h-0 overflow-hidden border-t border-slate-200 bg-white p-5 lg:block lg:border-l lg:border-t-0">
-          <ReelProductDetailPanel product={currentReel} />
+        <aside className="relative hidden min-h-0 overflow-hidden border-t border-slate-200 bg-white lg:block lg:border-l lg:border-t-0">
+          <div className="h-full overflow-y-auto p-4 sm:p-5">
+            <ReelProductDetailPanel product={currentReel} />
+          </div>
+          {commentsProduct && (
+            <div
+              className="absolute inset-0 z-10 flex flex-col bg-white shadow-[-8px_0_24px_rgba(15,23,42,0.06)] transition-transform ease-out"
+              style={{
+                transitionDuration: `${COMMENTS_SLIDE_MS}ms`,
+                transform: commentsSlideIn ? 'translateX(0)' : 'translateX(100%)',
+              }}
+            >
+              <ReelCommentsModal
+                asPanel
+                variant="light"
+                productId={String(commentsProduct._id)}
+                productTitle={commentsProduct.title}
+                product={commentsProduct}
+                onClose={closeCommentsPanel}
+                onCommentAdded={() => commentAddedHandlerRef.current?.()}
+              />
+            </div>
+          )}
         </aside>
       </div>
     </div>

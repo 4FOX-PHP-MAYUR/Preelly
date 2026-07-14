@@ -1,6 +1,6 @@
 const mongoose = require('mongoose')
 const Product = require('../models/Product')
-const { buildQuickViewDataForProducts, buildFeaturesForProducts } = require('./productAttributesResolver')
+const { buildQuickViewDataForProducts, buildDetailFeaturesPresentation } = require('./productAttributesResolver')
 
 function toIdString (value) {
   if (value == null || value === '') return null
@@ -129,19 +129,17 @@ async function enrichReelsProducts (products) {
 
   const categoryNameByProductId = await fetchCategoryNamesByProductId(products)
   const withVehicleFields = products.map((p) => attachReelsVehicleFields(p, filterNames))
-  const [quickViewDataByIndex, featuresByIndex] = await Promise.all([
+  const [quickViewDataByIndex, detailFeaturesByIndex] = await Promise.all([
     buildQuickViewDataForProducts(withVehicleFields),
-    // Every checkbox/multi-select field, independent of `showOnQuickView` — a
-    // multi-select field is a feature regardless of whether it's also surfaced in
-    // the quick-view/"Car Overview" summary above.
-    buildFeaturesForProducts(withVehicleFields),
+    // Mirror product detail: merge stored `features` column with admin checkbox fields.
+    Promise.all(withVehicleFields.map((product) => buildDetailFeaturesPresentation(product))),
   ])
 
   return withVehicleFields.map((product, index) => ({
     ...product,
     categoryName: categoryNameByProductId.get(toIdString(product._id)) || null,
     quickViewData: quickViewDataByIndex[index] || [],
-    features: featuresByIndex[index] || [],
+    features: detailFeaturesByIndex[index] || [],
   }))
 }
 

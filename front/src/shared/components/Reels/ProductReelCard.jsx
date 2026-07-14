@@ -17,11 +17,10 @@ import {
   ExternalLink,
   Play,
   Pause,
-  Maximize2,
   UserPlus,
   Plus,
 } from 'lucide-react'
-import { buildSpecsLine } from '@shared/components/categoryBrowseShared'
+import { buildSpecsLine, formatListingPrice, getProductListingPrice } from '@shared/components/categoryBrowseShared'
 import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
 // Use native <video> for precise sizing/control
 import toast from 'react-hot-toast'
@@ -37,8 +36,9 @@ import ReelCommentsModal from './ReelCommentsModal'
 import ReelShareModal from './ReelShareModal'
 import QuickViewModal from './QuickViewModal'
 import ReelStreamPlayer from './ReelStreamPlayer'
+import useProductVideoViewTracking from '@shared/hooks/useProductVideoViewTracking'
 
-function ProductReelCard({ product, isVisible, embedded = false }) {
+function ProductReelCard({ product, isVisible, embedded = false, onOpenComments = null }) {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const isAuthenticated = useSelector(selectIsAuthenticated)
@@ -62,6 +62,12 @@ function ProductReelCard({ product, isVisible, embedded = false }) {
   const [progress, setProgress] = useState(0)
   const [mediaLoaded, setMediaLoaded] = useState(false)
   const [showFallback, setShowFallback] = useState(false)
+
+  const { handleVideoTimeUpdate: handleVideoViewProgress } = useProductVideoViewTracking({
+    productId: product._id,
+    enabled: isVisible && Boolean(product.video),
+    onViewsUpdated: setViewCount,
+  })
   // Fetch comment count function (memoized)
   const fetchCommentCount = useCallback(async () => {
     if (product._id) {
@@ -107,8 +113,8 @@ function ProductReelCard({ product, isVisible, embedded = false }) {
   useEffect(() => {
       if (isVisible) {
       setIsPlaying(!userPaused)
-      // Increment view count when video becomes visible (only once)
-      if (!hasIncrementedView && isValidObjectId(product?._id)) {
+      // Guest-only legacy view bump when reel becomes visible
+      if (!hasIncrementedView && isValidObjectId(product?._id) && !isAuthenticated) {
         interactionService
           .incrementView(product._id)
           .then((res) => {
@@ -132,7 +138,7 @@ function ProductReelCard({ product, isVisible, embedded = false }) {
     return () => {
       setIsPlaying(false)
     }
-  }, [isVisible, product._id, hasIncrementedView, userPaused])
+  }, [isVisible, product._id, hasIncrementedView, userPaused, isAuthenticated])
 
   // Update video mute state when global mute state changes
   useEffect(() => {
@@ -197,6 +203,15 @@ function ProductReelCard({ product, isVisible, embedded = false }) {
   const handleComment = (e) => {
     e.stopPropagation()
     setDrawerInitialTab('comments')
+    const preferPanel =
+      embedded &&
+      onOpenComments &&
+      typeof window !== 'undefined' &&
+      window.matchMedia('(min-width: 1024px)').matches
+    if (preferPanel) {
+      onOpenComments(product, { onCommentAdded: fetchCommentCount })
+      return
+    }
     setShowCommentModal(true)
   }
 
@@ -206,7 +221,7 @@ function ProductReelCard({ product, isVisible, embedded = false }) {
       if (navigator.share) {
         navigator.share({
           title: product.title,
-          text: `Check out ${product.title} - ${formatPrice(product.price)}`,
+          text: `Check out ${product.title} - ${formatListingPrice(product)}`,
           url: buildReelShareUrl(product._id),
         }).catch(() => {
           copyToClipboard()
@@ -318,13 +333,7 @@ function ProductReelCard({ product, isVisible, embedded = false }) {
     }
   }
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: product.currency || 'USD',
-      minimumFractionDigits: 0,
-    }).format(price)
-  }
+  const listingPrice = getProductListingPrice(product)
 
   const formatCount = (count) => {
     if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M`
@@ -441,6 +450,7 @@ function ProductReelCard({ product, isVisible, embedded = false }) {
                       const vid = e.target
                       setProgress(vid.currentTime / Math.max(vid.duration || 1, 1))
                     }
+                    handleVideoViewProgress(e)
                   }}
                   onEnded={() => { setProgress(0) }}
                 />
@@ -458,7 +468,7 @@ function ProductReelCard({ product, isVisible, embedded = false }) {
                 <div className="w-full h-full flex items-center justify-center bg-gray-900">
                   <div className="text-center px-6">
                     <div className="text-white text-lg sm:text-2xl font-semibold mb-2">{product.title || 'Product'}</div>
-                    {product.price && <div className="text-primary-600 font-bold mb-2">{formatPrice(product.price)}</div>}
+                    {listingPrice != null && <div className="text-primary-600 font-bold mb-2">{formatListingPrice(product)}</div>}
                     <div className="text-gray-300 text-sm">Media unavailable</div>
                   </div>
                 </div>
@@ -507,7 +517,7 @@ function ProductReelCard({ product, isVisible, embedded = false }) {
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1.5">
                     <span className="rounded-full bg-black/60 px-3 py-1 text-sm font-bold text-white backdrop-blur-sm">
-                      {product.price ? formatPrice(product.price) : 'Price on request'}
+                      {listingPrice != null ? formatListingPrice(product) : 'Price on request'}
                     </span>
                     <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold text-white ${listingStatusBadge.className}`}>
                       {listingStatusBadge.label}
@@ -534,7 +544,7 @@ function ProductReelCard({ product, isVisible, embedded = false }) {
                   </p>
 
                   <div className="flex items-center gap-2 sm:gap-4 text-[10px] sm:text-xs text-gray-300 mt-0.5 sm:mt-1 flex-wrap">
-                    {product.price && (<span className="font-semibold text-white">{formatPrice(product.price)}</span>)}
+                    {listingPrice != null && (<span className="font-semibold text-white">{formatListingPrice(product)}</span>)}
                     {viewCount > 0 && (<span>{formatCount(viewCount)} views</span>)}
                     {product.createdAt && (<span>{formatTimeAgo(product.createdAt)}</span>)}
                   </div>
@@ -596,7 +606,12 @@ function ProductReelCard({ product, isVisible, embedded = false }) {
               'View',
               viewCount,
               (e) => { e.stopPropagation(); setShowQuickView(true) },
-              <Maximize2 className={embeddedIconClass} strokeWidth={1.75} />,
+              <img
+                src="/images/view-count-icon.png"
+                alt=""
+                className={`${embeddedIconClass} object-contain`}
+                aria-hidden="true"
+              />,
             )}
 
             {renderActionButton(

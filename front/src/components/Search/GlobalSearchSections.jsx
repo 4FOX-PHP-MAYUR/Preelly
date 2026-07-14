@@ -72,7 +72,7 @@ function GlobalSearchSections({ results = {} }) {
             {categories.map((cat) => (
               <Link
                 key={cat._id}
-                to={`/categories/${cat._id}`}
+                to={`/categories/${cat._id}/products`}
                 className="inline-flex items-center gap-2 px-3 py-2 bg-gray-50 hover:bg-primary-50 rounded-lg text-sm text-gray-800"
               >
                 <span>{cat.emoji || '📦'}</span>

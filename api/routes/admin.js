@@ -27,6 +27,16 @@ const { REJECTION_REASON_CATEGORIES } = require('../constants/rejectionReasons')
 const { buildDuplicateFormFieldQuery, normalizeCategoryFilterId, normalizeChildCategoryId } = require('../utils/formFieldScope')
 const emirateService = require('../core/services/emirateService')
 const { toPaginatedEmiratesResponse, toEmirateDto } = require('../dto/emirate.dto')
+const packageService = require('../core/services/packageService')
+const packageValidator = require('../core/validators/package.validator')
+const validateRequest = require('../middleware/validateRequest')
+const { toPaginatedPackagesResponse, toPackageDto } = require('../dto/package.dto')
+const storageFacilityService = require('../core/services/storageFacilityService')
+const storageFacilityValidator = require('../core/validators/storageFacility.validator')
+const {
+  toPaginatedStorageFacilitiesResponse,
+  toStorageFacilityDto,
+} = require('../dto/storageFacility.dto')
 const {
   resolveTableConfig,
   validateTableConfig,
@@ -2335,6 +2345,274 @@ router.delete('/emirates/:id', adminMiddleware, async (req, res) => {
 })
 
 // ---------------------------------------------------------------------------
+// Packages
+// ---------------------------------------------------------------------------
+
+// GET /api/admin/packages - paginated list with search + filters
+router.get(
+  '/packages',
+  adminMiddleware,
+  packageValidator.listQueryRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const {
+        page = 1,
+        limit = 20,
+        search,
+        status,
+        isRecomended,
+        sortBy = 'displayOrder',
+        sortDir = 'asc',
+      } = req.query
+      const result = await packageService.listPackages({
+        page: Number(page),
+        limit: Number(limit),
+        search,
+        status: status || 'all',
+        isRecomended: isRecomended || 'all',
+        sortBy,
+        sortDir,
+      })
+      res.json(toPaginatedPackagesResponse(result))
+    } catch (error) {
+      console.error('Error fetching packages:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching packages' })
+    }
+  }
+)
+
+// GET /api/admin/packages/:id
+router.get(
+  '/packages/:id',
+  adminMiddleware,
+  packageValidator.mongoIdParamRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const pkg = await packageService.getPackageById(req.params.id)
+      res.json(toPackageDto(pkg))
+    } catch (error) {
+      console.error('Error fetching package:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching package' })
+    }
+  }
+)
+
+// POST /api/admin/packages - create
+router.post(
+  '/packages',
+  adminMiddleware,
+  packageValidator.createPackageRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const pkg = await packageService.createPackage(req.body, req.user?._id)
+      res.status(201).json(toPackageDto(pkg))
+    } catch (error) {
+      console.error('Error creating package:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error creating package' })
+    }
+  }
+)
+
+// PATCH /api/admin/packages/:id - update
+router.patch(
+  '/packages/:id',
+  adminMiddleware,
+  packageValidator.updatePackageRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const pkg = await packageService.updatePackage(req.params.id, req.body, req.user?._id)
+      res.json(toPackageDto(pkg))
+    } catch (error) {
+      console.error('Error updating package:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error updating package' })
+    }
+  }
+)
+
+// PUT /api/admin/packages/:id/status - activate / deactivate
+router.put(
+  '/packages/:id/status',
+  adminMiddleware,
+  packageValidator.statusRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const pkg = await packageService.setPackageStatus(req.params.id, req.body.status, req.user?._id)
+      res.json({
+        message: `Package ${pkg.status ? 'activated' : 'deactivated'}`,
+        package: toPackageDto(pkg),
+      })
+    } catch (error) {
+      console.error('Error updating package status:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error updating package status' })
+    }
+  }
+)
+
+// DELETE /api/admin/packages/:id - soft delete
+router.delete(
+  '/packages/:id',
+  adminMiddleware,
+  packageValidator.mongoIdParamRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      await packageService.deletePackage(req.params.id, req.user?._id)
+      res.json({ message: 'Package deleted successfully' })
+    } catch (error) {
+      console.error('Error deleting package:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error deleting package' })
+    }
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Storage Facilities
+// ---------------------------------------------------------------------------
+
+/** Multer writes icons into uploads/images — expose the public relative path. */
+function resolveFacilityIcon(req) {
+  return req.file ? `/uploads/images/${req.file.filename}` : null
+}
+
+// GET /api/admin/storage-facilities - paginated list with search + status filter
+router.get(
+  '/storage-facilities',
+  adminMiddleware,
+  storageFacilityValidator.listQueryRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const {
+        page = 1,
+        limit = 20,
+        search,
+        status,
+        sortBy = 'displayOrder',
+        sortDir = 'asc',
+      } = req.query
+      const result = await storageFacilityService.listStorageFacilities({
+        page: Number(page),
+        limit: Number(limit),
+        search,
+        status: status || 'all',
+        sortBy,
+        sortDir,
+      })
+      res.json(toPaginatedStorageFacilitiesResponse(result))
+    } catch (error) {
+      console.error('Error fetching storage facilities:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching storage facilities' })
+    }
+  }
+)
+
+// GET /api/admin/storage-facilities/:id
+router.get(
+  '/storage-facilities/:id',
+  adminMiddleware,
+  storageFacilityValidator.mongoIdParamRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const facility = await storageFacilityService.getStorageFacilityById(req.params.id)
+      res.json(toStorageFacilityDto(facility))
+    } catch (error) {
+      console.error('Error fetching storage facility:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching storage facility' })
+    }
+  }
+)
+
+// POST /api/admin/storage-facilities - create (with optional icon)
+router.post(
+  '/storage-facilities',
+  adminMiddleware,
+  upload.single('imageIcon'),
+  storageFacilityValidator.createStorageFacilityRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const facility = await storageFacilityService.createStorageFacility(
+        { ...req.body, imageIcon: resolveFacilityIcon(req) },
+        req.user?._id
+      )
+      res.status(201).json(toStorageFacilityDto(facility))
+    } catch (error) {
+      console.error('Error creating storage facility:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error creating storage facility' })
+    }
+  }
+)
+
+// PATCH /api/admin/storage-facilities/:id - update (optional icon replace / clear)
+router.patch(
+  '/storage-facilities/:id',
+  adminMiddleware,
+  upload.single('imageIcon'),
+  storageFacilityValidator.updateStorageFacilityRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const facility = await storageFacilityService.updateStorageFacility(
+        req.params.id,
+        { ...req.body, imageIcon: resolveFacilityIcon(req) },
+        req.user?._id
+      )
+      res.json(toStorageFacilityDto(facility))
+    } catch (error) {
+      console.error('Error updating storage facility:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error updating storage facility' })
+    }
+  }
+)
+
+// PUT /api/admin/storage-facilities/:id/status - activate / deactivate
+router.put(
+  '/storage-facilities/:id/status',
+  adminMiddleware,
+  storageFacilityValidator.statusRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const facility = await storageFacilityService.setStorageFacilityStatus(
+        req.params.id,
+        req.body.status,
+        req.user?._id
+      )
+      res.json({
+        message: `Storage facility ${facility.status ? 'activated' : 'deactivated'}`,
+        storageFacility: toStorageFacilityDto(facility),
+      })
+    } catch (error) {
+      console.error('Error updating storage facility status:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error updating storage facility status' })
+    }
+  }
+)
+
+// DELETE /api/admin/storage-facilities/:id - soft delete
+router.delete(
+  '/storage-facilities/:id',
+  adminMiddleware,
+  storageFacilityValidator.mongoIdParamRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      await storageFacilityService.deleteStorageFacility(req.params.id, req.user?._id)
+      res.json({ message: 'Storage facility deleted successfully' })
+    } catch (error) {
+      console.error('Error deleting storage facility:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error deleting storage facility' })
+    }
+  }
+)
+
+// ---------------------------------------------------------------------------
 // Category-Filter assignments (pivot)
 // ---------------------------------------------------------------------------
 
@@ -2582,6 +2860,9 @@ const AVAILABLE_MODULES = [
   'Filter Assignments',
   'Dealers',
   'Emirates',
+  'Packages',
+  'Storage Facilities',
+  'Coupons',
   'Form Fields',
   'Users',
   'Listings',

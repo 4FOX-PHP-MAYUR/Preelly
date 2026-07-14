@@ -16,6 +16,9 @@ const AdminCategoriesRoutes = lazy(() => import('./pages/categories'))
 const AdminFiltersRoutes = lazy(() => import('./pages/filters'))
 const AdminDealersRoutes = lazy(() => import('./pages/dealers'))
 const AdminEmiratesRoutes = lazy(() => import('./pages/emirates'))
+const AdminPackagesRoutes = lazy(() => import('./pages/packages'))
+const AdminStorageFacilitiesRoutes = lazy(() => import('./pages/storage-facilities'))
+const AdminCouponsRoutes = lazy(() => import('./pages/coupons'))
 const AdminRolesRoutes = lazy(() => import('./pages/roles'))
 const AdminIdentityVerificationPage = lazy(() => import('./pages/AdminIdentityVerificationPage'))
 const AdminFieldTypesRoutes = lazy(() => import('./pages/field-types'))
@@ -120,6 +123,30 @@ function App() {
             element={
               <AdminRoute>
                 <AdminEmiratesRoutes />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/packages/*"
+            element={
+              <AdminRoute>
+                <AdminPackagesRoutes />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/storage-facilities/*"
+            element={
+              <AdminRoute>
+                <AdminStorageFacilitiesRoutes />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/coupons/*"
+            element={
+              <AdminRoute>
+                <AdminCouponsRoutes />
               </AdminRoute>
             }
           />

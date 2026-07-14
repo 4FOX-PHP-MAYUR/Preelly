@@ -80,6 +80,12 @@ function Header() {
   }, [isAuthenticated])
 
   const isHomePage = location.pathname === '/'
+  const isSearchPage = location.pathname.startsWith('/search')
+  const isCategoryProductsPage =
+    /^\/categories\/[^/]+\/products/.test(location.pathname) ||
+    /^\/categories\/[^/]+\/subcategory\/[^/]+/.test(location.pathname)
+  const isProductDetailPage = /^\/products\/[^/]+$/.test(location.pathname)
+  const isChatPage = location.pathname.startsWith('/chat')
   const isReelsPage = location.pathname === '/reels'
   const isAuthRoute =
     location.pathname === '/login' ||
@@ -89,7 +95,10 @@ function Header() {
     location.pathname === '/verify-phone-otp'
 
   const isPostAdFlow =
-    location.pathname === '/post-ad' || location.pathname === '/post-ad-dynamic'
+    location.pathname === '/post-ad' ||
+    location.pathname === '/post-ad-dynamic' ||
+    location.pathname === '/post-ad/select-package' ||
+    location.pathname === '/post-ad/storage'
 
   const handleLogout = () => {
     dispatch(logout('user-click'))
@@ -104,12 +113,12 @@ function Header() {
 
   return (
     <>
-      {isAuthRoute || isHomePage ? null : isPostAdFlow ? (
-        <header className="bg-white sticky top-0 z-50">
-          <div className="max-w-6xl mx-auto px-3 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
-            <Link to="/" className="flex flex-col items-start flex-shrink-0">
+      {isAuthRoute || isHomePage || isSearchPage || isCategoryProductsPage || isProductDetailPage || isChatPage ? null : isPostAdFlow ? (
+        <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
+          <div className="w-full px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
+            {/* Tagline is part of the logo artwork — do not add a text one. */}
+            <Link to="/" className="flex items-center flex-shrink-0">
               <BrandLogo variant="light" className="h-9 w-auto" />
-              
             </Link>
             <div className="flex items-center gap-3">
               {isAuthenticated ? (
@@ -133,7 +142,9 @@ function Header() {
                     <div className="min-w-0 text-left hidden sm:block">
                       <div className="flex items-center gap-1">
                         <span className="block truncate text-sm font-semibold text-slate-800 max-w-[140px]">{displayName}</span>
-                        {isUserVerified(user) && <CheckCircle2 className="h-3.5 w-3.5 text-primary-600 flex-shrink-0" />}
+                        {isUserVerified(user) && (
+                          <img src="/images/isverified.svg" alt="Verified" className="h-4 w-4 flex-shrink-0" />
+                        )}
                       </div>
                       <span className="block text-xs text-slate-500">5.0k Followers</span>
                     </div>
@@ -176,7 +187,7 @@ function Header() {
               {/* Left: Logo + tagline */}
               <Link to="/" className="flex flex-col items-start flex-shrink-0">
                 <BrandLogo variant="light" className="h-9 w-auto" />
-                <span className="text-[10px] text-slate-400 font-medium tracking-wide mt-0.5">Buy. Sell. Watch.</span>
+                
               </Link>
 
               {/* Center: Search */}

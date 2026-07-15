@@ -227,6 +227,18 @@ export const couponService = {
   validate: (payload, config) => api.post('/coupon/validate', payload, config),
 }
 
+// Payment — amounts computed server-side; CCAvenue redirect built by the API.
+export const paymentService = {
+  initiate: (payload, config) => api.post('/payment/initiate', payload, config),
+  getTransaction: (orderId, config) => api.get(`/payment/transaction/${orderId}`, config),
+  // Authenticated PDF download — returned as a blob so the bearer token is carried.
+  // Prefers the transaction's BASE_URL-based invoiceUrl; falls back to the relative
+  // endpoint. A full URL passed to axios overrides baseURL but still runs the
+  // request interceptor, so the bearer token is attached either way.
+  downloadInvoice: (orderId, invoiceUrl, config) =>
+    api.get(invoiceUrl || `/payment/invoice/${orderId}`, { ...config, responseType: 'blob' }),
+}
+
 // Post-ad checkout — order summary is priced server-side, never in the browser.
 export const checkoutService = {
   getSummary: ({ productId, packageId, storageFacilityId }, config) =>

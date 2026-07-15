@@ -544,6 +544,18 @@ const productSchema = new mongoose.Schema(
       ref: 'Package',
       default: null,
     },
+    // Optional storage-facility add-on purchased alongside the package.
+    storageFacility: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'StorageFacility',
+      default: null,
+    },
+    // Set to the SUCCESS transaction once payment completes (audit trail).
+    paymentTransaction: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'PaymentTransaction',
+      default: null,
+    },
     views: {
       type: Number,
       default: 0,

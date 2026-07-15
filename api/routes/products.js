@@ -1752,17 +1752,6 @@ router.post(
         return res.status(400).json({ message: 'Price seems unrealistic. Please verify.' })
       }
 
-      // Check for duplicate listings (same seller, exact same title)
-      const escapedTitle = title.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-      const existingProduct = await Product.findOne({
-        seller: req.user._id,
-        title: new RegExp(`^${escapedTitle}$`, 'i'),
-        status: { $in: ['pending', 'active'] }
-      })
-      if (existingProduct) {
-        return res.status(400).json({ message: 'You already have a similar active listing. Please edit or delete it first.' })
-      }
-
       // Validate selected categories exist in the database
       let validCategoryId = category || null
       let validSubcategoryId = subcategory || null

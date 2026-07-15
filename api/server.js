@@ -173,6 +173,7 @@ app.use('/api/products',      require('./routes/products'))
 app.use('/api',               require('./routes/dynamicForm'))
 app.use('/api/admin',         require('./routes/admin'))
 app.use('/api/coupon',        require('./routes/coupons'))
+app.use('/api/payment',       require('./routes/payment'))
 app.use('/api',               require('./routes/ai'))
 app.use('/api/video',         require('./routes/video'))
 app.use('/api/streaming',     require('./routes/streaming'))
@@ -282,6 +283,8 @@ connectDB().then(() => {
     require('./models/StorageFacility').fixIndexes?.() ?? Promise.resolve(),
     require('./models/Coupon').fixIndexes?.() ?? Promise.resolve(),
     require('./models/CouponRedemption').fixIndexes?.() ?? Promise.resolve(),
+    require('./models/PaymentTransaction').fixIndexes?.() ?? Promise.resolve(),
+    require('./models/PaymentLog').fixIndexes?.() ?? Promise.resolve(),
     require('./models/Product').syncIndexes(),
     require('./models/User').syncIndexes(),
     require('./models/Chat').syncIndexes(),

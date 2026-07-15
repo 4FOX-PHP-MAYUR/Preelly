@@ -18,6 +18,7 @@ const ProductDetailPage = lazy(() => import('@shared/pages/ProductDetailPage'))
 const PostAdPage = lazy(() => import('./pages/PostAdPage'))
 const SelectPackagePage = lazy(() => import('./pages/SelectPackagePage'))
 const StorageCheckoutPage = lazy(() => import('./pages/StorageCheckoutPage'))
+const PaymentResultPage = lazy(() => import('./pages/PaymentResultPage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const SignupPage = lazy(() => import('./pages/SignupPage'))
 const DashboardLayout = lazy(() => import('./components/Dashboard/DashboardLayout'))
@@ -179,6 +180,22 @@ function App() {
             element={
               <PrivateRoute>
                 <StorageCheckoutPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/post-ad/payment/success"
+            element={
+              <PrivateRoute>
+                <PaymentResultPage variant="success" />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/post-ad/payment/failure"
+            element={
+              <PrivateRoute>
+                <PaymentResultPage variant="failure" />
               </PrivateRoute>
             }
           />

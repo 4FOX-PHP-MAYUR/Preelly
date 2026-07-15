@@ -22,7 +22,7 @@ const getTransporter = () => {
   })
 }
 
-const sendEmail = async ({ to, subject, text, html }) => {
+const sendEmail = async ({ to, subject, text, html, attachments }) => {
   const fromEmail = process.env.GOOGLE_SMTP_FROM_EMAIL || process.env.GOOGLE_SMTP_USER
   const fromName = process.env.GOOGLE_SMTP_FROM_NAME || 'Preelly'
 
@@ -34,6 +34,8 @@ const sendEmail = async ({ to, subject, text, html }) => {
     subject,
     text,
     html,
+    // Optional nodemailer attachments (e.g. the invoice PDF) — omitted when absent.
+    ...(Array.isArray(attachments) && attachments.length ? { attachments } : {}),
   })
 }
 

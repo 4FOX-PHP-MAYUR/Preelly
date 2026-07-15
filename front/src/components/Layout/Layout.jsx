@@ -25,7 +25,8 @@ function Layout({ children }) {
     location.pathname === '/post-ad' ||
     location.pathname === '/post-ad-dynamic' ||
     location.pathname === '/post-ad/select-package' ||
-    location.pathname === '/post-ad/storage'
+    location.pathname === '/post-ad/storage' ||
+    location.pathname.startsWith('/post-ad/payment')
 
   return (
     <div className={`min-h-screen ${isReelsPage ? 'bg-black' : isHomePage || isChatPage || isProductDetailPage || isSearchPage || isCategoryProductsPage ? 'bg-white' : isCategoryBrowsePage || isUserProfilePage ? 'bg-[#f7f8fa]' : isAuthRoute ? 'bg-[#f6f7fb]' : isPostAdFlow ? 'bg-white' : 'bg-gray-50'}`}>

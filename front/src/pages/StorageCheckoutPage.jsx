@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Calendar, Gauge, Info, X } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { checkoutService, storageFacilityService, couponService } from '@shared/services/api'
+import { checkoutService, storageFacilityService, couponService, paymentService } from '@shared/services/api'
 import { getMediaUrl } from '@shared/utils/helpers'
 import { PostAdListingBreadcrumb } from '../components/PostAd/PostAdListingBreadcrumb'
 
@@ -198,8 +198,48 @@ function StorageCheckoutPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedCode, currentBase, withStorage, selectedFacilityId])
 
-  const handlePay = () => {
-    toast.error('Payment gateway is not connected yet')
+  const [paying, setPaying] = useState(false)
+
+  /** Builds a hidden form and POSTs to CCAvenue — a full-page navigation, as the gateway requires. */
+  const redirectToGateway = ({ paymentUrl, accessCode, encRequest }) => {
+    const form = document.createElement('form')
+    form.method = 'POST'
+    form.action = paymentUrl
+    const fields = { encRequest, access_code: accessCode }
+    Object.entries(fields).forEach(([name, value]) => {
+      const input = document.createElement('input')
+      input.type = 'hidden'
+      input.name = name
+      input.value = value
+      form.appendChild(input)
+    })
+    document.body.appendChild(form)
+    form.submit()
+  }
+
+  const handlePay = async () => {
+    if (!productId || !packageId) {
+      toast.error('Missing listing or package reference')
+      return
+    }
+    try {
+      setPaying(true)
+      const res = await paymentService.initiate({
+        productId,
+        packageId,
+        ...(withStorage && selectedFacilityId ? { storageFacilityId: selectedFacilityId } : {}),
+        ...(appliedCoupon?.couponCode ? { couponCode: appliedCoupon.couponCode } : {}),
+      })
+      const data = res.data?.data
+      if (!data?.paymentUrl || !data?.encRequest) {
+        throw new Error('Invalid payment session')
+      }
+      redirectToGateway(data)
+      // No setPaying(false): the page is navigating away to the gateway.
+    } catch (err) {
+      setPaying(false)
+      toast.error(err.response?.data?.message || err.message || 'Could not start payment')
+    }
   }
 
   if (loading) {
@@ -478,9 +518,10 @@ function StorageCheckoutPage() {
           <button
             type="button"
             onClick={handlePay}
-            className="mt-8 w-full rounded-full bg-[#1414e6] px-6 py-4 text-base font-bold text-white transition hover:bg-[#1010c4]"
+            disabled={paying}
+            className="mt-8 w-full rounded-full bg-[#1414e6] px-6 py-4 text-base font-bold text-white transition hover:bg-[#1010c4] disabled:cursor-not-allowed disabled:opacity-70"
           >
-            Pay {totals.currency} {money(totals.total)}
+            {paying ? 'Redirecting to payment…' : `Pay ${totals.currency} ${money(totals.total)}`}
           </button>
         </aside>
       </div>

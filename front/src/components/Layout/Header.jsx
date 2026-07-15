@@ -98,7 +98,8 @@ function Header() {
     location.pathname === '/post-ad' ||
     location.pathname === '/post-ad-dynamic' ||
     location.pathname === '/post-ad/select-package' ||
-    location.pathname === '/post-ad/storage'
+    location.pathname === '/post-ad/storage' ||
+    location.pathname.startsWith('/post-ad/payment')
 
   const handleLogout = () => {
     dispatch(logout('user-click'))

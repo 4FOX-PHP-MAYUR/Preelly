@@ -12,6 +12,7 @@ import BrandLogo from '@shared/components/BrandLogo'
 import MarketplaceTopBar from '../components/Layout/MarketplaceTopBar'
 import MarketplaceLogoBlock from '../components/Layout/MarketplaceLogoBlock'
 import { MARKETPLACE_LOGO_CELL } from '../components/Layout/marketplaceLayoutStyles'
+import { cartService } from '@shared/services/api'
 import { useChat } from '@shared/components/Chat/ChatContext'
 import { useCall } from '@shared/components/Call/CallContext'
 import { getMediaUrl } from '@shared/utils/helpers'
@@ -26,6 +27,7 @@ const QUICK_REPLIES = [
   'when can i call you?',
   'what is your location',
   'what is the final price?',
+  'Make an offer',
 ]
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -124,6 +126,98 @@ function CallBubble({ message, isSelf }) {
       <span className={`text-sm font-medium ${missed ? 'text-red-600' : 'text-gray-800'}`}>
         {label}
       </span>
+    </div>
+  )
+}
+
+// ── Offer message ─────────────────────────────────────────────────────────────
+// Offers are sent as plain text `💰 Offer: AED 55,000` so they persist and sync
+// like any message; here we detect that shape and render the negotiation card.
+const OFFER_RE = /^💰\s*Offer:\s*AED\s*([\d,.]+)/
+export function parseOfferAmount(text) {
+  const m = OFFER_RE.exec(String(text || '').trim())
+  return m ? m[1] : null
+}
+
+function OfferBubble({ amount, isSelf, senderName, senderAvatar, onAccept, onReject, onCounter }) {
+  const [counter, setCounter] = useState('')
+  const [done, setDone] = useState(null) // 'accepted' | 'rejected' | 'countered'
+
+  // The person who made the offer sees a compact read-only summary.
+  if (isSelf) {
+    return (
+      <div className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl rounded-br-sm border border-violet-200 bg-violet-50 shadow-sm">
+        <span className="text-sm text-gray-700">You offered</span>
+        <span className="text-sm font-bold text-violet-700">AED {amount}</span>
+      </div>
+    )
+  }
+
+  const submitCounter = () => {
+    const val = Number(String(counter).replace(/[^0-9.]/g, ''))
+    if (!val || val <= 0) { toast.error('Enter a valid counter offer'); return }
+    onCounter(val)
+    setDone('countered')
+  }
+
+  return (
+    <div className="w-[300px] max-w-full rounded-2xl rounded-bl-sm border border-gray-200 bg-white shadow-sm overflow-hidden">
+      <div className="px-4 pt-3 pb-2 border-b border-gray-100">
+        <p className="text-xs font-semibold text-gray-500">Offer For Your Ad</p>
+        <div className="flex items-center gap-2 mt-2">
+          <Ava src={senderAvatar} name={senderName} size={28} />
+          <span className="text-sm font-medium text-gray-800">{senderName || 'Buyer'}</span>
+        </div>
+      </div>
+
+      <div className="px-4 py-3">
+        <p className="text-sm text-gray-700">
+          You have got an offer of{' '}
+          <span className="font-bold text-blue-600">AED {amount}</span>
+        </p>
+
+        {done === 'accepted' ? (
+          <p className="mt-3 text-sm font-medium text-green-600">You accepted this offer</p>
+        ) : done === 'rejected' ? (
+          <p className="mt-3 text-sm font-medium text-red-500">You rejected this offer</p>
+        ) : done === 'countered' ? (
+          <p className="mt-3 text-sm font-medium text-violet-600">Counter offer sent</p>
+        ) : (
+          <>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={counter}
+              onChange={e => setCounter(e.target.value)}
+              placeholder="Enter your counter offer"
+              className="mt-3 w-full rounded-lg border border-gray-200 px-3 py-2 text-sm outline-none focus:border-violet-400"
+            />
+            <button
+              type="button"
+              onClick={() => { onAccept(); setDone('accepted') }}
+              className="mt-3 w-full rounded-lg bg-green-600 py-2 text-sm font-medium text-white hover:bg-green-700"
+            >
+              Accept
+            </button>
+            <div className="flex items-center gap-2 mt-2">
+              <button
+                type="button"
+                onClick={() => { onReject(); setDone('rejected') }}
+                className="flex-1 rounded-lg bg-violet-100 py-2 text-sm font-medium text-violet-700 hover:bg-violet-200"
+              >
+                Reject
+              </button>
+              <button
+                type="button"
+                onClick={submitCounter}
+                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              >
+                Send Counter offer
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   )
 }
@@ -437,6 +531,7 @@ export default function ChatInboxPage() {
   const [activeId,     setActiveId]     = useState(urlId || null)
   const [activeThread, setActiveThread] = useState(null)
   const [loadingThread, setLoadingThread] = useState(false)
+  const [cartCount, setCartCount] = useState(0)
   const [search,  setSearch]  = useState('')
   const [tab,     setTab]     = useState('All')
   const [text,    setText]    = useState('')
@@ -445,6 +540,8 @@ export default function ChatInboxPage() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const [attachFiles, setAttachFiles] = useState([])
+  const [offerOpen, setOfferOpen] = useState(false)
+  const [offerAmount, setOfferAmount] = useState('')
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
 
@@ -580,6 +677,34 @@ export default function ChatInboxPage() {
 
   const handleKey = e => { if (e.key === 'Enter' && !e.shiftKey && !attachFiles.length) { e.preventDefault(); doSend() } }
 
+  // A quick-reply chip either sends its text, or — for "Make an offer" — opens the offer modal.
+  const handleQuickReply = qr => {
+    if (qr === 'Make an offer') { setOfferAmount(''); setOfferOpen(true) }
+    else doSend(qr)
+  }
+
+  const sendOffer = () => {
+    const amount = Number(String(offerAmount).replace(/[^0-9.]/g, ''))
+    if (!amount || amount <= 0) { toast.error('Enter a valid offer amount'); return }
+    doSend(`💰 Offer: AED ${amount.toLocaleString()}`)
+    setOfferOpen(false)
+    setOfferAmount('')
+  }
+
+  // Accept an offer: notify the chat AND add the product to the buyer's cart.
+  // Either party can accept; the backend always files it under the buyer's id.
+  const acceptOffer = async (amountStr) => {
+    const amount = Number(String(amountStr).replace(/[^0-9.]/g, ''))
+    doSend(`✅ Offer accepted for AED ${amountStr}`)
+    try {
+      await cartService.addFromOffer(activeId, amount)
+      toast.success('Product added to cart')
+      refreshCartCount()
+    } catch {
+      toast.error('Could not add product to cart')
+    }
+  }
+
   // filtered list
   const filtered = useMemo(() => threads.filter(t => {
     const isBuyer = t.buyer?.id && String(t.buyer.id) === String(currentUser?._id)
@@ -604,6 +729,31 @@ export default function ChatInboxPage() {
     const isBuyer = activeThread.buyer?.id && String(activeThread.buyer.id) === String(currentUser._id)
     return isBuyer ? activeThread.seller : activeThread.buyer
   }, [activeThread, currentUser])
+
+  // Is the current user the BUYER of this thread? The cart icon/count is a
+  // buyer-only affordance (carts are always filed under the buyer).
+  const isBuyer = useMemo(() => {
+    if (!activeThread || !currentUser || activeThread.type === 'support') return false
+    return activeThread.buyer?.id && String(activeThread.buyer.id) === String(currentUser._id)
+  }, [activeThread, currentUser])
+
+  // Count this thread's product in the buyer's active cart.
+  const refreshCartCount = useCallback(async () => {
+    const productId = activeThread?.productId
+    if (!isBuyer || !productId) { setCartCount(0); return }
+    try {
+      const res = await cartService.getCart()
+      const items = res?.data?.data || []
+      const count = items
+        .filter(it => String(it.productId?._id || it.productId) === String(productId))
+        .reduce((n, it) => n + (it.quantity || 1), 0)
+      setCartCount(count)
+    } catch {
+      setCartCount(0)
+    }
+  }, [isBuyer, activeThread?.productId])
+
+  useEffect(() => { refreshCartCount() }, [refreshCartCount])
 
   const grouped = useMemo(() => {
     if (!activeThread) return []
@@ -775,6 +925,20 @@ export default function ChatInboxPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
+                  {isBuyer && (
+                    <button
+                      title="View cart"
+                      onClick={() => navigate(`/cart${activeThread?.productId ? `?productId=${activeThread.productId}` : ''}`)}
+                      className="relative text-gray-400 hover:opacity-80 transition-opacity"
+                    >
+                      <img src="/images/shopping_cart.png" alt="Cart" className="h-5 w-5 object-contain" />
+                      {cartCount > 0 && (
+                        <span className="absolute -top-2 -right-2 min-w-[16px] h-4 px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
+                          {cartCount}
+                        </span>
+                      )}
+                    </button>
+                  )}
                   <button
                     title="Voice call"
                     onClick={() => otherParty?.id && startCall(
@@ -832,6 +996,7 @@ export default function ChatInboxPage() {
                           {group.msgs.map(m => {
                             const isSelf = m.senderId === currentUser?._id
                             const isTemp = m.id?.startsWith('temp-')
+                            const offerAmount = parseOfferAmount(m.text)
                             return (
                               <div key={m.id}
                                 className={`flex items-end gap-2 ${isSelf ? 'justify-end' : 'justify-start'}`}>
@@ -844,6 +1009,16 @@ export default function ChatInboxPage() {
                                 <div className={`flex flex-col max-w-[60%] ${isSelf ? 'items-end' : 'items-start'}`}>
                                   {m.type === 'call' ? (
                                     <CallBubble message={m} isSelf={isSelf} />
+                                  ) : offerAmount ? (
+                                    <OfferBubble
+                                      amount={offerAmount}
+                                      isSelf={isSelf}
+                                      senderName={otherParty?.name}
+                                      senderAvatar={otherParty?.avatar || otherParty?.image}
+                                      onAccept={() => acceptOffer(offerAmount)}
+                                      onReject={() => doSend('❌ Offer rejected')}
+                                      onCounter={amt => doSend(`💰 Offer: AED ${amt.toLocaleString()}`)}
+                                    />
                                   ) : (m.attachments?.length > 0 || m.attachment) ? (() => {
                                     const atts = m.attachments?.length > 0 ? m.attachments : (m.attachment ? [m.attachment] : [])
                                     return (
@@ -886,12 +1061,69 @@ export default function ChatInboxPage() {
               {/* quick replies */}
               <div className="flex gap-2 px-5 py-2.5 bg-white border-t border-gray-100 overflow-x-auto shrink-0">
                 {QUICK_REPLIES.map(qr => (
-                  <button key={qr} onClick={() => doSend(qr)}
+                  <button key={qr} onClick={() => handleQuickReply(qr)}
                     className="whitespace-nowrap px-4 py-1.5 rounded-full border border-gray-200 bg-white text-xs text-gray-600 hover:border-purple-300 hover:text-purple-700 hover:bg-purple-50 transition-colors shrink-0">
                     {qr}
                   </button>
                 ))}
               </div>
+
+              {/* Make an offer modal */}
+              {offerOpen && (
+                <div
+                  className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4"
+                  onClick={() => setOfferOpen(false)}
+                >
+                  <div
+                    className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="flex items-start justify-between">
+                      <h2 className="text-xl font-bold text-gray-900">Make an Offer</h2>
+                      <button
+                        type="button"
+                        onClick={() => setOfferOpen(false)}
+                        className="rounded-full p-1 text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+                        aria-label="Close"
+                      >
+                        <X className="h-6 w-6" />
+                      </button>
+                    </div>
+
+                    <label className="mt-6 block text-sm font-medium text-gray-700">Your offer amount</label>
+                    <div className="mt-2 flex items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 focus-within:border-[#1414e6]">
+                      <span className="text-sm font-semibold text-gray-500">AED</span>
+                      <input
+                        type="number"
+                        min="0"
+                        autoFocus
+                        value={offerAmount}
+                        onChange={e => setOfferAmount(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') sendOffer() }}
+                        placeholder="Enter amount"
+                        className="flex-1 bg-transparent text-sm text-gray-900 placeholder:text-gray-400 focus:outline-none"
+                      />
+                    </div>
+
+                    <div className="mt-6 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setOfferOpen(false)}
+                        className="flex-1 rounded-full border border-gray-200 px-6 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={sendOffer}
+                        className="flex-1 rounded-full bg-[#1414e6] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#1010c4]"
+                      >
+                        Send
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* input */}
               <div className="px-5 py-3 bg-white border-t border-gray-200 shrink-0">

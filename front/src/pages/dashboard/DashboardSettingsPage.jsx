@@ -18,6 +18,7 @@ import LocationDetailsModal from '../../components/LocationDetailsModal'
 import VerificationFlow, { OtpVerificationCard } from '@shared/components/VerificationFlow'
 import IdentityVerificationFlow, { IdentityVerificationCard } from '@shared/components/IdentityVerificationFlow'
 import { refreshUser } from '@shared/store/slices/authSlice'
+import SettingsPageShell from '../../components/Dashboard/SettingsPageShell'
 
 function Toggle({ checked, onChange }) {
   return (
@@ -220,6 +221,7 @@ export default function DashboardSettingsPage() {
   }
 
   return (
+    <SettingsPageShell>
     <div className="max-w-3xl">
       {/* Header row */}
       <div className="flex flex-wrap items-start justify-between gap-3 mb-6 sm:mb-8">
@@ -466,5 +468,6 @@ export default function DashboardSettingsPage() {
         )}
       </div>
     </div>
+    </SettingsPageShell>
   )
 }

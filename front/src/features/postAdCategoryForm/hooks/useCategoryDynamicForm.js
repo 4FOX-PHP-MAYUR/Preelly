@@ -13,6 +13,7 @@ import {
 import { validateFieldValue } from '../../../shared/utils/dynamicFormValidation'
 import { hasFieldFunction, parseFunctionForFieldNames } from '../../../shared/utils/dynamicFormFieldFunction'
 import { hasNestedOptions, deriveFunctionTargetFieldName } from '../../../shared/utils/nestedFieldOptions'
+import { resolveFieldPrefillValue, isFieldEmpty } from '../../../shared/utils/dynamicFormAiPrefill'
 
 /**
  * FormField scoping is a 3-level category chain: categoryId -> categoryFilterId
@@ -47,7 +48,7 @@ function firstScopeValue(value) {
  * after `setActiveCategory` — which otherwise wipes `values` back to `{}` on mount.
  * @param {{ categoryId: string, initialValues?: Record<string, unknown> }} params
  */
-export function useCategoryDynamicForm({ categoryId, initialValues }) {
+export function useCategoryDynamicForm({ categoryId, initialValues, aiSignals = null }) {
   const dispatch = useDispatch()
   const dynamicFormState = useSelector((state) => state.dynamicForm)
   const entry = useSelector(selectDynamicFormEntry)
@@ -178,6 +179,51 @@ export function useCategoryDynamicForm({ categoryId, initialValues }) {
     },
     [dispatch, categoryFilterId, values, allFields]
   )
+
+  // ── AI transcript auto-fill ──────────────────────────────────────────────
+  // Once the form + its options are loaded, fill any EMPTY field whose value the
+  // video transcription already extracted. Re-entrant on purpose: setting a cascade
+  // source (e.g. Model) loads its target's options (Trim) on a later pass, which then
+  // gets filled too. A per-category "handled" set guarantees each field is auto-filled
+  // at most once, so a user clearing a field is never overwritten.
+  const prefillRef = useRef({ categoryId: null, handled: new Set() })
+  const valuesRef = useRef(values)
+  valuesRef.current = values
+
+  useEffect(() => {
+    if (!aiSignals || Object.keys(aiSignals).length === 0) return
+    // Fields (and their options) are loaded once allFields is populated — this is a
+    // more reliable signal than matching an exact status string.
+    if (allFields.length === 0) return
+
+    if (prefillRef.current.categoryId !== categoryId) {
+      prefillRef.current = { categoryId, handled: new Set() }
+    }
+    const handled = prefillRef.current.handled
+    const currentValues = valuesRef.current
+    const filled = []
+
+    allFields.forEach((field) => {
+      if (handled.has(field.fieldName)) return
+      if (!isFieldEmpty(currentValues[field.fieldName])) return
+
+      // Use the field's live (computed) options when a cascade has produced them.
+      const computed = computedOptions[field.fieldName]
+      const resolveField = computed !== undefined ? { ...field, options: computed } : field
+
+      const resolved = resolveFieldPrefillValue(resolveField, aiSignals)
+      if (resolved === undefined) return
+
+      handled.add(field.fieldName)
+      setFieldValue(resolveField, resolved.value)
+      filled.push(field.fieldName)
+    })
+
+    if (filled.length) {
+      // eslint-disable-next-line no-console
+      console.log('[PostAd] AI auto-filled dynamic fields:', filled.join(', '))
+    }
+  }, [aiSignals, allFields, computedOptions, categoryId, setFieldValue])
 
   const validateCurrentStep = useCallback(() => {
     const errors = {}

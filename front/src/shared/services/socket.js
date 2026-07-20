@@ -6,7 +6,11 @@ let socket = null
 export const getSocket = () => {
   if (!socket) {
     const token = localStorage.getItem('token')
-    
+
+    // Diagnostic: shows exactly where the socket is dialing. If this logs a
+    // localhost URL while the page is on a remote host, the build is stale.
+    console.log('🔌 Connecting socket to', SOCKET_URL, '(page:', typeof window !== 'undefined' ? window.location.origin : 'n/a', ')')
+
     socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,

@@ -60,6 +60,49 @@ function ChatThreadPage() {
     }
   }, [threadId, isAuthenticated])
 
+  // Real-time: update the OPEN conversation directly from the socket, so a message
+  // shows the instant it arrives (rather than depending on the inbox-list sync).
+  // A named handler is used so socket.off removes only this listener, not the
+  // ChatContext one that keeps the inbox in sync.
+  useEffect(() => {
+    if (!threadId || !isAuthenticated) return
+    const socket = getSocket()
+    const onNewMessage = (data) => {
+      if (!data || data.chatId !== threadId || !data.message) return
+      const m = data.message
+      const senderId =
+        typeof m.sender === 'object' ? (m.sender._id || m.sender.id) : m.sender
+      const realId = m._id || m.id
+      console.log('💬 live message on open thread', { threadId, realId, text: m.text })
+      setThread((prev) => {
+        if (!prev) return prev
+        if (prev.messages.some((x) => x.id === realId)) return prev // dedupe
+        const localMsg = {
+          id: realId,
+          senderId,
+          senderRole: String(senderId) === String(prev.buyer?.id) ? 'buyer' : 'seller',
+          type: m.type || 'text',
+          text: m.text || '',
+          attachment: m.attachment || null,
+          attachments: m.attachments?.length ? m.attachments : m.attachment ? [m.attachment] : [],
+          callMeta: m.callMeta || null,
+          createdAt: m.createdAt || new Date().toISOString(),
+          read: m.read || false,
+        }
+        // Replace our own optimistic temp bubble (same text/sender) with the real one.
+        const withoutTemp = prev.messages.filter(
+          (x) =>
+            !(String(x.id).startsWith('temp-') &&
+              x.text === localMsg.text &&
+              String(x.senderId) === String(senderId)),
+        )
+        return { ...prev, messages: [...withoutTemp, localMsg], updatedAt: localMsg.createdAt }
+      })
+    }
+    socket.on('new-message', onNewMessage)
+    return () => socket.off('new-message', onNewMessage)
+  }, [threadId, isAuthenticated])
+
   // Sync thread with context threads when they update (e.g., after sending message)
   useEffect(() => {
     if (threadId && contextThreads.length > 0) {

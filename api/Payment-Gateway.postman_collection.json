@@ -1,0 +1,141 @@
+{
+  "info": {
+    "name": "Preelly — Payment Gateway (CCAvenue)",
+    "description": "Payment gateway integration for the Preelly mobile app.\n\nFlow:\n1. (optional) GET checkout summary to show the payable amount.\n2. (optional) POST coupon validate to apply a discount.\n3. POST /payment/initiate → returns paymentUrl + encRequest + accessCode.\n4. Open a WebView/Custom Tab and POST encRequest + access_code to paymentUrl.\n5. CCAvenue redirects to the API callback, which 302s to a success/failure URL — detect it in the WebView and close it.\n6. GET /payment/transaction/:orderId to confirm the final status.\n7. GET /payment/invoice/:orderId to download the PDF invoice (owner only).\n\nAuth: all app-facing calls use a Bearer JWT (Authorization: Bearer {{token}}). The /ccavenue/callback endpoint is called by CCAvenue, not the app.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8029/api", "type": "string" },
+    { "key": "token", "value": "PASTE_JWT_HERE", "type": "string" },
+    { "key": "productId", "value": "", "type": "string" },
+    { "key": "packageId", "value": "", "type": "string" },
+    { "key": "storageFacilityId", "value": "", "type": "string" },
+    { "key": "couponCode", "value": "", "type": "string" },
+    { "key": "orderId", "value": "", "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "item": [
+    {
+      "name": "1. Catalog — List Active Packages",
+      "request": {
+        "method": "GET",
+        "auth": { "type": "noauth" },
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/v1/web/packages", "host": ["{{baseUrl}}"], "path": ["v1", "web", "packages"] },
+        "description": "Public. Returns active packages (id, packageName, packageAmount, isVatApplicable, vatAmount, packageFeatures, isRecomended). Use a package's id as packageId."
+      }
+    },
+    {
+      "name": "2. Catalog — List Storage Facilities",
+      "request": {
+        "method": "GET",
+        "auth": { "type": "noauth" },
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/v1/web/storage-facilities", "host": ["{{baseUrl}}"], "path": ["v1", "web", "storage-facilities"] },
+        "description": "Public. Returns active storage-facility durations (id, facilityWeek, facilityAmount). Optional add-on; use an id as storageFacilityId."
+      }
+    },
+    {
+      "name": "3. Checkout Summary",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/v1/web/checkout/summary?productId={{productId}}&packageId={{packageId}}&storageFacilityId={{storageFacilityId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["v1", "web", "checkout", "summary"],
+          "query": [
+            { "key": "productId", "value": "{{productId}}" },
+            { "key": "packageId", "value": "{{packageId}}" },
+            { "key": "storageFacilityId", "value": "{{storageFacilityId}}", "description": "optional" }
+          ]
+        },
+        "description": "JWT, owner-only. Returns the priced order summary: data.summary { packageAmount, storageAmount, vatPercentage, vatValue, total, currency }. Amount is computed server-side."
+      }
+    },
+    {
+      "name": "4. Coupon — Validate (optional)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"couponCode\": \"{{couponCode}}\",\n  \"orderAmount\": 399,\n  \"packageId\": \"{{packageId}}\",\n  \"storageFacilityId\": \"{{storageFacilityId}}\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/coupon/validate", "host": ["{{baseUrl}}"], "path": ["coupon", "validate"] },
+        "description": "JWT. On success: data { valid:true, discountAmount, finalAmount, message }. On rejection: success:false with the reason in `message` (expired, limit reached, not applicable, etc.). orderAmount = pre-VAT base (packageAmount + storageAmount)."
+      }
+    },
+    {
+      "name": "5. Payment — Initiate",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const j = pm.response.json();",
+              "if (j && j.data && j.data.orderId) {",
+              "  pm.collectionVariables.set('orderId', j.data.orderId);",
+              "  console.log('orderId saved:', j.data.orderId);",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"packageId\": \"{{packageId}}\",\n  \"storageFacilityId\": \"{{storageFacilityId}}\",\n  \"couponCode\": \"{{couponCode}}\"\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/payment/initiate", "host": ["{{baseUrl}}"], "path": ["payment", "initiate"] },
+        "description": "JWT, owner-only. Required: productId, packageId. Optional: storageFacilityId, couponCode.\n\nReturns data { orderId, amount, currency, paymentUrl, accessCode, encRequest }.\n\nMOBILE: open a WebView and POST two fields to paymentUrl — `encRequest`={{data.encRequest}} and `access_code`={{data.accessCode}}. The amount is authoritative (recomputed server-side); do not send it from the client."
+      }
+    },
+    {
+      "name": "6. Payment — Get Transaction (poll status)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/payment/transaction/{{orderId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["payment", "transaction", "{{orderId}}"]
+        },
+        "description": "JWT, owner-only. Returns data { orderStatus (INITIATED|SUCCESS|FAILED|CANCELLED|PENDING), trackingId, amount, currency, paymentMode, paymentDate, invoiceNumber, invoiceUrl, hasInvoice, product, package, storageFacility, failureMessage }. Poll this after the WebView closes to confirm the outcome."
+      }
+    },
+    {
+      "name": "7. Payment — Download Invoice (PDF)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/payment/invoice/{{orderId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["payment", "invoice", "{{orderId}}"]
+        },
+        "description": "JWT, owner-only. Streams application/pdf (Content-Disposition: attachment). Only available for a SUCCESS transaction; regenerates the file automatically if missing. In Postman use 'Send and Download' to save the PDF."
+      }
+    },
+    {
+      "name": "CCAvenue Callback (gateway → server; NOT called by the app)",
+      "request": {
+        "method": "POST",
+        "auth": { "type": "noauth" },
+        "header": [{ "key": "Content-Type", "value": "application/x-www-form-urlencoded" }],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [{ "key": "encResp", "value": "<encrypted response from CCAvenue>" }]
+        },
+        "url": { "raw": "{{baseUrl}}/payment/ccavenue/callback", "host": ["{{baseUrl}}"], "path": ["payment", "ccavenue", "callback"] },
+        "description": "Documented for reference only. CCAvenue POSTs `encResp` here after payment; the server decrypts it, updates the transaction, and 302-redirects to the success/failure page. The mobile app never calls this — set redirect_url to this endpoint via BASE_URL in the server env."
+      }
+    }
+  ]
+}

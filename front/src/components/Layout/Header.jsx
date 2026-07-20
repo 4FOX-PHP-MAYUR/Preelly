@@ -94,6 +94,11 @@ function Header() {
     location.pathname === '/verify-email-otp' ||
     location.pathname === '/verify-phone-otp'
 
+  // Settings and the self profile render their own home-style header, so suppress
+  // the app header on those routes.
+  const isDashboardSettings = location.pathname === '/dashboard/settings'
+  const isMyProfile = location.pathname === '/my-profile'
+  const isCartPage = location.pathname === '/cart'
   const isPostAdFlow =
     location.pathname === '/post-ad' ||
     location.pathname === '/post-ad-dynamic' ||
@@ -114,7 +119,7 @@ function Header() {
 
   return (
     <>
-      {isAuthRoute || isHomePage || isSearchPage || isCategoryProductsPage || isProductDetailPage || isChatPage ? null : isPostAdFlow ? (
+      {isAuthRoute || isHomePage || isSearchPage || isCategoryProductsPage || isProductDetailPage || isChatPage || isDashboardSettings || isMyProfile || isCartPage ? null : isPostAdFlow ? (
         <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
           <div className="w-full px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
             {/* Tagline is part of the logo artwork — do not add a text one. */}

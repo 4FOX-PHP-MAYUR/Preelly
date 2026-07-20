@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ListingMedia, formatListingPrice } from '@shared/components/categoryBrowseShared'
 import AvailabilityBadge from '@shared/components/ProductDetail/AvailabilityBadge'
 
-function ProductCard({ product, index = 0 }) {
+function ProductCard({ product, index = 0, bordered = true }) {
   const navigate = useNavigate()
   const title = product?.title || 'Listing'
   const headline = index % 3 === 0 ? `Urgent Sale – ${title}` : title
@@ -19,7 +19,9 @@ function ProductCard({ product, index = 0 }) {
           navigate(`/products/${product._id}`)
         }
       }}
-      className="group relative aspect-[4/5] w-full cursor-pointer overflow-hidden bg-slate-100 shadow-sm ring-1 ring-[#E8EBF2] transition hover:-translate-y-0.5 hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand/40"
+      className={`group relative aspect-[4/5] w-full cursor-pointer overflow-hidden bg-slate-100 transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-brand/40 ${
+        bordered ? 'shadow-sm ring-1 ring-[#E8EBF2] hover:shadow-md' : ''
+      }`}
       aria-label={`View ${title}`}
     >
       <ListingMedia

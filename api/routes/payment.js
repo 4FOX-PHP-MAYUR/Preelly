@@ -70,6 +70,62 @@ router.post(
 )
 
 /**
+ * POST /api/payment/checkout/initiate  (JWT)
+ * Product Checkout flow (paymentType 2). A buyer pays for a product + the selected
+ * checkout-service add-ons. Reuses the same gateway/redirect/transaction as Ads.
+ */
+router.post(
+  '/checkout/initiate',
+  authMiddleware,
+  [
+    body('productId').exists().withMessage('productId is required').isMongoId(),
+    body('services').optional().isArray(),
+    body('services.*.checkoutServiceId').optional().isMongoId(),
+    body('services.*.amount').optional().isFloat({ min: 0 }),
+    body('couponCode').optional({ nullable: true }).isString().trim(),
+  ],
+  validateRequest,
+  async (req, res) => {
+    try {
+      const result = await paymentService.initiateCheckoutPayment({
+        userId: req.user._id,
+        user: req.user,
+        productId: req.body.productId,
+        services: req.body.services || [],
+        couponCode: req.body.couponCode || null,
+        pickDrop: req.body.pickDrop || null,
+        preelly: req.body.preelly || null,
+        baseUrl: baseUrl(req),
+        frontendUrl: frontendUrl(),
+        context: {
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'] || null,
+          requestTime: new Date(),
+        },
+      })
+      res.json({
+        success: true,
+        message: 'Payment initiated',
+        data: {
+          orderId: result.orderId,
+          amount: result.amount,
+          currency: result.currency,
+          paymentUrl: result.paymentUrl,
+          accessCode: result.accessCode,
+          encRequest: result.encRequest,
+        },
+      })
+    } catch (error) {
+      logger.error('payment.checkout_initiate_failed', { message: error.message, userId: String(req.user?._id) })
+      res.status(error.statusCode || 500).json({
+        success: false,
+        message: error.message || 'Failed to initiate payment',
+      })
+    }
+  }
+)
+
+/**
  * POST /api/payment/ccavenue/callback  (public — CCAvenue posts here)
  * Decrypts, verifies, updates the transaction, then 302-redirects the browser to the
  * success/failure page. Never trusts anything except the decrypted response.
@@ -89,7 +145,9 @@ async function handleCallback(req, res) {
       },
     })
     const page = status === 'SUCCESS' ? 'success' : 'failure'
-    return res.redirect(`${fe}/post-ad/payment/${page}?orderId=${encodeURIComponent(txn.orderId)}`)
+    // Buyers (Product Checkout) land on the cart result page; sellers on the ad one.
+    const basePath = txn?.paymentType === 2 ? '/cart/payment' : '/post-ad/payment'
+    return res.redirect(`${fe}${basePath}/${page}?orderId=${encodeURIComponent(txn.orderId)}`)
   } catch (error) {
     logger.error('payment.callback_failed', { message: error.message })
     // Send the user somewhere sensible even when the callback can't be matched.

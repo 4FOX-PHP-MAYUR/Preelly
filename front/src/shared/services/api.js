@@ -222,14 +222,28 @@ export const storageFacilityService = {
   listActiveStorageFacilities: (config) => api.get('/v1/web/storage-facilities', config),
 }
 
+// Public checkout-service add-ons (Pay Through Preelly, Pick & Drop, …).
+export const checkoutServicePublicService = {
+  listActiveCheckoutServices: (config) => api.get('/v1/web/checkout-services', config),
+}
+
 // Coupons — validation is server-side; the API returns the reason on rejection.
 export const couponService = {
   validate: (payload, config) => api.post('/coupon/validate', payload, config),
 }
 
+// Buyer coupons — discount only checkout-service charges. Validate/apply are
+// server-authoritative; the API returns the reason on rejection.
+export const buyerCouponService = {
+  validate: (payload, config) => api.post('/buyer-coupon/validate', payload, config),
+  apply: (payload, config) => api.post('/buyer-coupon/apply', payload, config),
+}
+
 // Payment — amounts computed server-side; CCAvenue redirect built by the API.
 export const paymentService = {
   initiate: (payload, config) => api.post('/payment/initiate', payload, config),
+  // Product Checkout flow (buyer pays for product + checkout-service add-ons).
+  initiateCheckout: (payload, config) => api.post('/payment/checkout/initiate', payload, config),
   getTransaction: (orderId, config) => api.get(`/payment/transaction/${orderId}`, config),
   // Authenticated PDF download — returned as a blob so the bearer token is carried.
   // Prefers the transaction's BASE_URL-based invoiceUrl; falls back to the relative
@@ -471,6 +485,12 @@ export const chatService = {
   saveCallEvent: (chatId, data) => api.post(`/chats/${chatId}/call-event`, data),
 }
 
+export const cartService = {
+  getCart: () => api.get('/cart'),
+  // Add the product of a chat to the buyer's cart when an offer is accepted.
+  addFromOffer: (chatId, amount) => api.post('/cart/from-offer', { chatId, amount }),
+}
+
 /**
  * Storage facilities are sent as multipart so the icon can ride along.
  * `imageIcon` is a File when replacing the icon; everything else is coerced to a
@@ -665,6 +685,14 @@ export const adminService = {
   setStorageFacilityStatus: (id, status) =>
     api.put(`/admin/storage-facilities/${id}/status`, { status }),
   deleteStorageFacility: (id) => api.delete(`/admin/storage-facilities/${id}`),
+  // Checkout Service endpoints (JSON; highlights ride along as an array)
+  getCheckoutServices: (params) => api.get('/admin/checkout-services', { params }),
+  getCheckoutServiceById: (id) => api.get(`/admin/checkout-services/${id}`),
+  createCheckoutService: (data) => api.post('/admin/checkout-services', data),
+  updateCheckoutService: (id, data) => api.patch(`/admin/checkout-services/${id}`, data),
+  setCheckoutServiceStatus: (id, status) =>
+    api.put(`/admin/checkout-services/${id}/status`, { status }),
+  deleteCheckoutService: (id) => api.delete(`/admin/checkout-services/${id}`),
   // Coupon endpoints (mounted at /api/coupon)
   getCoupons: (params) => api.get('/coupon/list', { params }),
   getCouponById: (id) => api.get(`/coupon/${id}`),
@@ -673,6 +701,13 @@ export const adminService = {
   setCouponStatus: (id, status) => api.patch(`/coupon/status/${id}`, { status }),
   deleteCoupon: (id) => api.delete(`/coupon/${id}`),
   generateCouponCode: () => api.get('/coupon/generate-code'),
+  // Buyer Coupons (checkout-service-only coupons; mounted at /api/buyer-coupon)
+  getBuyerCoupons: (params) => api.get('/buyer-coupon/list', { params }),
+  getBuyerCouponById: (id) => api.get(`/buyer-coupon/${id}`),
+  createBuyerCoupon: (data) => api.post('/buyer-coupon/create', data),
+  updateBuyerCoupon: (id, data) => api.put(`/buyer-coupon/update/${id}`, data),
+  setBuyerCouponStatus: (id, status) => api.patch(`/buyer-coupon/status/${id}`, { status }),
+  deleteBuyerCoupon: (id) => api.delete(`/buyer-coupon/${id}`),
   // Admin Roles endpoints
   getRoles: (params) => api.get('/admin/roles', { params }),
   getRoleById: (id) => api.get(`/admin/roles/${id}`),

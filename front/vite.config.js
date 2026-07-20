@@ -48,6 +48,23 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 8030,
       strictPort: true,
+      // Same proxy as dev, so a production `vite preview` on :8030 forwards API and
+      // the Socket.IO connection (with WebSocket upgrade) to the backend :8029.
+      proxy: {
+        '/api': {
+          target: backendUrl,
+          changeOrigin: true,
+        },
+        '/uploads': {
+          target: backendUrl,
+          changeOrigin: true,
+        },
+        '/socket.io': {
+          target: backendUrl,
+          changeOrigin: true,
+          ws: true,
+        },
+      },
     },
   }
 })

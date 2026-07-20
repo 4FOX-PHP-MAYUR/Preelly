@@ -3,10 +3,13 @@ import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import {
   BadgeCheck,
+  Bookmark,
   FilePlus,
+  Heart,
   MessageCircle,
   MoreHorizontal,
   Pencil,
+  Share2,
   Star,
   User,
 } from 'lucide-react'
@@ -19,6 +22,7 @@ import VerificationFlow, { OtpVerificationCard } from '@shared/components/Verifi
 import IdentityVerificationFlow, { IdentityVerificationCard } from '@shared/components/IdentityVerificationFlow'
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
 import ListingVideoPreview from '@shared/components/Video/ListingVideoPreview'
+import ProductCard from '../../components/Listing/ProductCard'
 import ProfileReelsViewer from '@shared/components/Profile/ProfileReelsViewer'
 import { productHasVideo } from '@shared/utils/videoHelpers'
 
@@ -37,7 +41,7 @@ function ProfileProductThumb({ product, onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className="relative group aspect-square overflow-hidden rounded-xl bg-gray-100 text-left"
+      className="relative group aspect-square overflow-hidden rounded-none bg-gray-100 text-left"
     >
       <ListingVideoPreview
         product={product}
@@ -45,6 +49,7 @@ function ProfileProductThumb({ product, onClick }) {
         alt={product.title}
         interactive={false}
         autoPlayOnHover
+        showVideoBadge={false}
       />
       <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/60 to-transparent p-2.5">
         <p className="line-clamp-2 text-[11px] font-medium leading-tight text-white">{product.title}</p>
@@ -58,8 +63,8 @@ function ProfileProductThumb({ product, onClick }) {
   )
 }
 
-function UserProfilePage({ adminMode = false, renderAdminPanel = null }) {
-  const { id } = useParams()
+function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode = false }) {
+  const params = useParams()
   const navigate = useNavigate()
   const location = useLocation()
   const dispatch = useDispatch()
@@ -76,7 +81,13 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null }) {
   const [showIdentityVerification, setShowIdentityVerification] = useState(false)
   const [activeReelsIndex, setActiveReelsIndex] = useState(null)
   const [stats, setStats] = useState({ totalProducts: 0, totalViews: 0, totalLikes: 0 })
+  // Own-profile content tabs: My Listings / Saved / Liked.
+  const [activeTab, setActiveTab] = useState('listings')
+  const [savedItems, setSavedItems] = useState([])
+  const [likedItems, setLikedItems] = useState([])
 
+  // Self mode (/my-profile) has no route param — resolve to the signed-in user's id.
+  const id = selfMode ? (currentUser?._id || '') : params.id
   const profileUserId = id
   const currentUserId = currentUser?._id
   const isOwnProfile = Boolean(
@@ -139,6 +150,39 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null }) {
       setProfileUser(null)
     }
   }, [profileUserId, isAuthenticated, currentUserId, navigate])
+
+  // Saved & liked lists are only meaningful on your own profile.
+  useEffect(() => {
+    if (!isOwnProfile) {
+      setSavedItems([])
+      setLikedItems([])
+      return
+    }
+    let cancelled = false
+    const parseItems = (res) => res?.data?.products || res?.data?.items || res?.data || []
+    Promise.allSettled([userService.getSavedProducts(), userService.getLikedProducts()]).then(
+      ([savedRes, likedRes]) => {
+        if (cancelled) return
+        if (savedRes.status === 'fulfilled') setSavedItems(parseItems(savedRes.value))
+        if (likedRes.status === 'fulfilled') setLikedItems(parseItems(likedRes.value))
+      }
+    )
+    return () => { cancelled = true }
+  }, [isOwnProfile])
+
+  const handleShareProfile = async () => {
+    const url = `${window.location.origin}/user/${id}`
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: displayName, url })
+      } else {
+        await navigator.clipboard.writeText(url)
+        toast.success('Profile link copied')
+      }
+    } catch {
+      /* user cancelled the share sheet — ignore */
+    }
+  }
 
   const handleFollow = async () => {
     if (!isAuthenticated) {
@@ -220,14 +264,21 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null }) {
     [products],
   )
 
-  const videoProducts = useMemo(() => products.filter(productHasVideo), [products])
+  // The list the grid shows: own profile can switch between listings / saved / liked.
+  const tabProducts = useMemo(() => {
+    if (isOwnProfile && activeTab === 'saved') return savedItems
+    if (isOwnProfile && activeTab === 'liked') return likedItems
+    return products
+  }, [isOwnProfile, activeTab, savedItems, likedItems, products])
+
+  const videoProducts = useMemo(() => tabProducts.filter(productHasVideo), [tabProducts])
 
   const displayProducts = useMemo(
     () => [
-      ...products.filter(productHasVideo),
-      ...products.filter((p) => !productHasVideo(p)),
+      ...tabProducts.filter(productHasVideo),
+      ...tabProducts.filter((p) => !productHasVideo(p)),
     ],
-    [products],
+    [tabProducts],
   )
 
   if (loading) {
@@ -238,9 +289,9 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null }) {
           <div className="mx-auto mt-4 h-5 w-40 rounded bg-gray-200" />
           <div className="mx-auto mt-2 h-4 w-28 rounded bg-gray-200" />
         </div>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="aspect-square rounded-xl bg-gray-200" />
+            <div key={i} className="aspect-square rounded-none bg-gray-200" />
           ))}
         </div>
       </div>
@@ -251,7 +302,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null }) {
     }
 
     return (
-      <CategoryBrowseLayout featuredProducts={[]}>
+      <CategoryBrowseLayout featuredProducts={[]} layoutPreset={selfMode ? 'marketplace' : undefined} variant={selfMode ? 'listing' : undefined} showTrending={selfMode ? false : undefined} showMessages={selfMode ? false : undefined}>
         <div className="flex-1 overflow-y-auto p-4 sm:p-5">{skeleton}</div>
       </CategoryBrowseLayout>
     )
@@ -270,7 +321,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null }) {
     }
 
     return (
-      <CategoryBrowseLayout featuredProducts={[]}>
+      <CategoryBrowseLayout featuredProducts={[]} layoutPreset={selfMode ? 'marketplace' : undefined} variant={selfMode ? 'listing' : undefined} showTrending={selfMode ? false : undefined} showMessages={selfMode ? false : undefined}>
         <div className="flex-1 overflow-y-auto p-4 sm:p-5">{notFound}</div>
       </CategoryBrowseLayout>
     )
@@ -278,132 +329,143 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null }) {
 
   const avatarSrc = profileUser.avatar ? getMediaUrl(profileUser.avatar) || profileUser.avatar : null
   const displayName = profileUser.displayName || profileUser.name || 'User'
-  const rating = Number(profileUser.rating || 0).toFixed(1)
-  const hasRating = Number(profileUser.rating || 0) > 0
-  const bio = profileUser.bio || profileUser.description || ''
+  const realRating = Number(profileUser.rating || 0)
+  const realRatingCount = Number(profileUser.ratingCount || profileUser.rating?.count || 0)
+  // Placeholder values from the design, shown on your own profile until real data exists.
+  const rating = realRating > 0 ? realRating.toFixed(1) : selfMode ? '4.5' : '0.0'
+  const ratingCount = realRatingCount > 0 ? realRatingCount : selfMode ? 7 : 0
+  const hasRating = realRating > 0 || selfMode
+  const bio =
+    profileUser.bio ||
+    profileUser.description ||
+    (selfMode ? 'Your Dream Car Starts Here 🚗\nBest Deals | Verified Cars ✔️' : '')
   const verified = isIdentityVerified(profileUser) || profileUser.isVerified
 
   const profileBody = (
     <div className="mx-auto w-full min-w-0 space-y-4">
       {/* Profile card */}
-      <div className="rounded-2xl border border-gray-200 bg-white p-6">
-        <div className="flex flex-col items-center text-center">
-          <div className="relative mb-3">
-            <div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full bg-gray-100 ring-4 ring-primary-100">
+      <div className="px-6 pb-2 pt-4">
+        <div className="flex items-start justify-center gap-5">
+          {/* Avatar (left) */}
+          <div className="relative shrink-0">
+            <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-gray-100 ring-4 ring-primary-100">
               {avatarSrc ? (
                 <img src={avatarSrc} alt={displayName} className="h-full w-full object-cover" />
               ) : (
-                <User className="h-10 w-10 text-gray-400" />
+                <User className="h-9 w-9 text-gray-400" />
               )}
             </div>
             {verified && (
-              <span className="absolute bottom-1 right-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-primary-600">
+              <span className="absolute bottom-0 right-0 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-primary-600">
                 <BadgeCheck className="h-3.5 w-3.5 text-white" />
               </span>
             )}
           </div>
 
-          <div className="mb-1 flex items-center gap-2">
-            <h1 className="text-lg font-bold text-gray-900">{displayName}</h1>
-            {verified && (
-              isIdentityVerified(profileUser) ? (
-                <img src={VERIFIED_BADGE_IMAGES.large} alt="Verified" className="h-5 w-5" title="Identity Verified" />
-              ) : (
-                <BadgeCheck className="h-5 w-5 text-primary-600" />
-              )
+          {/* Info (right of the avatar). The avatar + info group is centered as a whole. */}
+          <div className="min-w-0 pt-0.5">
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-bold text-gray-900">{displayName}</h1>
+              {verified && (
+                isIdentityVerified(profileUser) ? (
+                  <img src={VERIFIED_BADGE_IMAGES.large} alt="Verified" className="h-5 w-5" title="Identity Verified" />
+                ) : (
+                  <BadgeCheck className="h-5 w-5 text-primary-600" />
+                )
+              )}
+            </div>
+
+            {hasRating && (
+              <div className="mt-1 flex items-center gap-1 text-sm text-amber-500">
+                <Star className="h-4 w-4 fill-amber-400 stroke-amber-500" />
+                <span className="font-semibold">{rating}</span>
+                <span className="text-gray-400">| {ratingCount} rating</span>
+              </div>
             )}
-          </div>
 
-          {hasRating && (
-            <div className="mb-3 flex items-center gap-1 text-sm text-amber-500">
-              <Star className="h-4 w-4 fill-amber-400 stroke-amber-500" />
-              <span className="font-semibold">{rating}</span>
-              <span className="text-gray-400">| rating</span>
+            <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
+              <span className="whitespace-nowrap">
+                <span className="font-bold text-gray-900">{formatCompact(stats.totalProducts)}</span>{' '}
+                <span className="text-gray-500">Ads Posted</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => navigate(`/user/${id}/followers`)}
+                className="whitespace-nowrap transition hover:opacity-80"
+              >
+                <span className="font-bold text-gray-900">{formatCompact(followersCount)}</span>{' '}
+                <span className="text-gray-500">Followers</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate(`/user/${id}/following`)}
+                className="whitespace-nowrap transition hover:opacity-80"
+              >
+                <span className="font-bold text-gray-900">{formatCompact(followingCount)}</span>{' '}
+                <span className="text-gray-500">Following</span>
+              </button>
             </div>
-          )}
 
-          <div className="mb-4 flex w-full items-center justify-center divide-x divide-gray-200">
-            <div className="px-5 text-center">
-              <p className="text-lg font-bold text-gray-900">{formatCompact(stats.totalProducts)}</p>
-              <p className="text-xs text-gray-500">ads Posted</p>
-            </div>
-            <button
-              type="button"
-              onClick={() => navigate(`/user/${id}/followers`)}
-              className="px-5 text-center transition hover:opacity-80"
-            >
-              <p className="text-lg font-bold text-gray-900">{formatCompact(followersCount)}</p>
-              <p className="text-xs text-gray-500">Followers</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate(`/user/${id}/following`)}
-              className="px-5 text-center transition hover:opacity-80"
-            >
-              <p className="text-lg font-bold text-gray-900">{formatCompact(followingCount)}</p>
-              <p className="text-xs text-gray-500">Following</p>
-            </button>
-          </div>
+            {bio && (
+              <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-gray-600">{bio}</p>
+            )}
 
-          <div className="mb-4 flex flex-wrap items-center justify-center gap-2">
-            {isOwnProfile ? (
-              <>
-                <Link
-                  to="/dashboard/settings"
-                  className="flex items-center gap-1.5 rounded-full bg-primary-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-primary-700 sm:px-5"
-                >
-                  <Pencil className="h-3.5 w-3.5" />
-                  Edit Profile
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => navigate('/chat')}
-                  className="flex items-center gap-1.5 rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 sm:px-5"
-                >
-                  <MessageCircle className="h-3.5 w-3.5" />
-                  Messages
-                </button>
-              </>
-            ) : (
-              <>
-                {isAuthenticated && (
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              {isOwnProfile ? (
+                <>
+                  <Link
+                    to="/dashboard/settings"
+                    className="flex items-center gap-1.5 rounded-full bg-primary-50 px-5 py-2 text-sm font-semibold text-primary-700 transition hover:bg-primary-100"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit Profile
+                  </Link>
                   <button
                     type="button"
-                    onClick={handleFollow}
-                    className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
-                      followStatus === 'active'
-                        ? 'border border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200'
-                        : followStatus === 'pending'
-                          ? 'border border-yellow-300 bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
-                          : 'bg-primary-600 text-white hover:bg-primary-700'
-                    }`}
+                    onClick={handleShareProfile}
+                    className="flex items-center gap-1.5 rounded-full bg-primary-50 px-5 py-2 text-sm font-semibold text-primary-700 transition hover:bg-primary-100"
                   >
-                    {followStatus === 'active' ? 'Following' : followStatus === 'pending' ? 'Requested' : 'Follow'}
+                    <Share2 className="h-3.5 w-3.5" />
+                    Share Profile
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={handleMessage}
-                  className="flex items-center gap-1.5 rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 sm:px-5"
-                >
-                  <MessageCircle className="h-3.5 w-3.5" />
-                  Message
-                </button>
-              </>
-            )}
-            <button
-              type="button"
-              onClick={() => toast('More options coming soon')}
-              className="flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 text-gray-500 transition hover:bg-gray-50"
-              aria-label="More options"
-            >
-              <MoreHorizontal className="h-4 w-4" />
-            </button>
+                </>
+              ) : (
+                <>
+                  {isAuthenticated && (
+                    <button
+                      type="button"
+                      onClick={handleFollow}
+                      className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
+                        followStatus === 'active'
+                          ? 'border border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          : followStatus === 'pending'
+                            ? 'border border-yellow-300 bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
+                            : 'bg-primary-600 text-white hover:bg-primary-700'
+                      }`}
+                    >
+                      {followStatus === 'active' ? 'Following' : followStatus === 'pending' ? 'Requested' : 'Follow'}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleMessage}
+                    className="flex items-center gap-1.5 rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 sm:px-5"
+                  >
+                    <MessageCircle className="h-3.5 w-3.5" />
+                    Message
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => toast('More options coming soon')}
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-primary-700 transition hover:bg-primary-100"
+                aria-label="More options"
+              >
+                <MoreHorizontal className="h-4 w-4" />
+              </button>
+            </div>
           </div>
-
-          {bio && (
-            <p className="max-w-sm text-center text-sm leading-relaxed text-gray-600">{bio}</p>
-          )}
         </div>
       </div>
 
@@ -413,20 +475,49 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null }) {
           onStatusChange: refreshProfileUser,
         })}
 
+      {/* Content tabs — own profile only: My Listings / Saved / Liked */}
       {isOwnProfile && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <OtpVerificationCard onOpenFlow={() => setShowOtpVerification(true)} />
-          <IdentityVerificationCard onOpenFlow={() => setShowIdentityVerification(true)} />
+        <div className="flex items-center justify-around border-b border-gray-200">
+          {[
+            { id: 'listings', icon: FilePlus, label: 'My Listings' },
+            { id: 'saved', icon: Bookmark, label: 'Saved' },
+            { id: 'liked', icon: Heart, label: 'Liked' },
+          ].map(({ id: tabId, icon: TabIcon, label }) => {
+            const isActive = activeTab === tabId
+            return (
+              <button
+                key={tabId}
+                type="button"
+                onClick={() => setActiveTab(tabId)}
+                aria-label={label}
+                title={label}
+                className={`relative flex flex-1 items-center justify-center py-3 transition ${
+                  isActive ? 'text-primary-600' : 'text-gray-400 hover:text-gray-600'
+                }`}
+              >
+                <TabIcon className="h-6 w-6" fill={isActive && tabId === 'liked' ? 'currentColor' : 'none'} />
+                {isActive && (
+                  <span className="absolute -bottom-px left-1/2 h-0.5 w-10 -translate-x-1/2 rounded-full bg-primary-600" />
+                )}
+              </button>
+            )
+          })}
         </div>
       )}
 
       {/* Listings & videos */}
-      <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white p-4">
+      <div className="overflow-hidden">
         {displayProducts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-gray-400">
             <FilePlus className="mb-3 h-10 w-10 opacity-30" />
-            <p className="text-sm">No posts yet</p>
-            {isOwnProfile && (
+            <p className="text-sm">
+              {isOwnProfile && activeTab === 'saved'
+                ? 'No saved items yet'
+                : isOwnProfile && activeTab === 'liked'
+                  ? 'No liked items yet'
+                  : 'No posts yet'}
+            </p>
+            {isOwnProfile && activeTab === 'listings' && (
               <Link to="/post-ad" className="mt-3 text-sm font-medium text-primary-600 hover:underline">
                 Post your first ad
               </Link>
@@ -434,22 +525,10 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null }) {
           </div>
         ) : (
           <div className="space-y-4">
-            {videoProducts.length > 0 && (
-              <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold text-gray-900">
-                  Videos
-                  <span className="ml-1.5 font-normal text-gray-500">({videoProducts.length})</span>
-                </h2>
-                <p className="text-xs text-gray-500">Tap to open in reels</p>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {displayProducts.map((product, idx) => (
-                <ProfileProductThumb
-                  key={product._id}
-                  product={product}
-                  onClick={() => setActiveReelsIndex(idx)}
-                />
+            {/* Same card layout as the category /products page, kept at 4 per row. */}
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+              {displayProducts.map((product, index) => (
+                <ProductCard key={product._id} product={product} index={index} bordered={false} />
               ))}
             </div>
           </div>
@@ -463,7 +542,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null }) {
       {isAdminUserDetail ? (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">{profileBody}</div>
       ) : (
-        <CategoryBrowseLayout featuredProducts={featuredProducts}>
+        <CategoryBrowseLayout featuredProducts={featuredProducts} layoutPreset={selfMode ? 'marketplace' : undefined} variant={selfMode ? 'listing' : undefined} showTrending={selfMode ? false : undefined} showMessages={selfMode ? false : undefined}>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto p-4 sm:p-5">{profileBody}</div>
           </div>

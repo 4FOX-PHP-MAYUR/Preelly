@@ -18,7 +18,9 @@ const AdminDealersRoutes = lazy(() => import('./pages/dealers'))
 const AdminEmiratesRoutes = lazy(() => import('./pages/emirates'))
 const AdminPackagesRoutes = lazy(() => import('./pages/packages'))
 const AdminStorageFacilitiesRoutes = lazy(() => import('./pages/storage-facilities'))
+const AdminCheckoutServicesRoutes = lazy(() => import('./pages/checkout-services'))
 const AdminCouponsRoutes = lazy(() => import('./pages/coupons'))
+const AdminBuyersCouponsRoutes = lazy(() => import('./pages/buyers-coupons'))
 const AdminRolesRoutes = lazy(() => import('./pages/roles'))
 const AdminIdentityVerificationPage = lazy(() => import('./pages/AdminIdentityVerificationPage'))
 const AdminFieldTypesRoutes = lazy(() => import('./pages/field-types'))
@@ -143,10 +145,26 @@ function App() {
             }
           />
           <Route
+            path="/admin/checkout-services/*"
+            element={
+              <AdminRoute>
+                <AdminCheckoutServicesRoutes />
+              </AdminRoute>
+            }
+          />
+          <Route
             path="/admin/coupons/*"
             element={
               <AdminRoute>
                 <AdminCouponsRoutes />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/admin/buyers-coupons/*"
+            element={
+              <AdminRoute>
+                <AdminBuyersCouponsRoutes />
               </AdminRoute>
             }
           />

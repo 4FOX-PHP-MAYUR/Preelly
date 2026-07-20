@@ -232,7 +232,7 @@ const compressVideo = (req, res, next) => {
       safeUnlink(compressedPath)
       safeUnlink(inputPath)
       return res.status(400).json({
-        message: 'Video is too large. Please upload a video that compresses to <= 20MB.',
+        message: `Video is too large. Please upload a video that compresses to <= ${Math.round(MAX_COMPRESSED_BYTES / (1024 * 1024))}MB.`,
         details: lastError ? lastError.message : undefined,
       })
     }

@@ -21,6 +21,7 @@ const QUICK_REPLIES = [
   'When can I call you?',
   'What is your location?',
   'What is the final price?',
+  'Make an offer',
 ]
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

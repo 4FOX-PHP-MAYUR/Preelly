@@ -87,4 +87,89 @@ async function sendPaymentConfirmation(data, invoicePath) {
   })
 }
 
-module.exports = { sendPaymentConfirmation }
+/**
+ * Product Checkout confirmation email (paymentType 2). Independent from the Ads
+ * `sendPaymentConfirmation` above so the two can evolve separately.
+ * @param {object} data  checkout payment data (buyer/seller/product/services/…)
+ * @param {string|null} invoicePath  absolute path to the PDF, or null to skip it
+ */
+async function sendCheckoutConfirmation(data, invoicePath) {
+  const supportEmail = process.env.SUPPORT_EMAIL || process.env.COMPANY_EMAIL || 'support@preelly.com'
+  const supportPhone = process.env.SUPPORT_PHONE || process.env.COMPANY_PHONE || ''
+  const company = process.env.COMPANY_NAME || 'Preelly'
+  const currency = data.currency || 'AED'
+
+  const services = Array.isArray(data.services) ? data.services : []
+  const serviceRowsHtml = services
+    .map((s) => row(`Checkout Service — ${s.serviceName || 'Service'}`, money(s.amount, currency)))
+    .join('')
+  const serviceLinesText = services
+    .map((s) => `Checkout Service — ${s.serviceName || 'Service'}: ${money(s.amount, currency)}`)
+
+  const html = `
+  <div style="font-family:Arial,Helvetica,sans-serif;max-width:560px;margin:0 auto;background:#ffffff">
+    <div style="background:#1414e6;padding:24px;text-align:center">
+      <h1 style="color:#fff;margin:0;font-size:20px">Order Confirmed</h1>
+    </div>
+    <div style="padding:24px">
+      <p style="color:#0f172a;font-size:14px">Hi ${data.buyerName || 'there'},</p>
+      <p style="color:#475569;font-size:14px;line-height:1.6">
+        Thank you for your purchase. Your payment has been received successfully.
+        ${invoicePath ? 'Your invoice is attached to this email.' : ''}
+      </p>
+      <table style="width:100%;border-collapse:collapse;margin-top:16px">
+        ${row('Transaction ID', data.trackingId || data.orderId)}
+        ${row('Buyer', data.buyerName)}
+        ${row('Seller', data.sellerName)}
+        ${row('Product', data.productTitle)}
+        ${row('Product Price', money(data.productPrice, currency))}
+        ${serviceRowsHtml}
+        ${services.length ? row('Checkout Service Charge', money(data.servicesTotal, currency)) : ''}
+        ${data.couponCode ? row('Applied Coupon', data.couponCode) : ''}
+        ${data.discountAmount ? row('Discount', `- ${money(data.discountAmount, currency)}`) : ''}
+        ${row('Total Paid', money(data.grandTotal, currency))}
+        ${row('Payment Date', data.paymentDate)}
+        ${row('Payment Status', data.paymentStatus)}
+      </table>
+      <p style="color:#475569;font-size:13px;line-height:1.6;margin-top:20px">
+        Need help? Contact us at <a href="mailto:${supportEmail}" style="color:#1414e6">${supportEmail}</a>${supportPhone ? ` or ${supportPhone}` : ''}.
+      </p>
+      <p style="color:#94a3b8;font-size:12px;margin-top:16px">Thank you for choosing ${company}.</p>
+    </div>
+  </div>`
+
+  const text = [
+    `Order Confirmed`,
+    ``,
+    `Hi ${data.buyerName || 'there'}, thank you for your purchase. Your payment has been received.`,
+    ``,
+    `Transaction ID: ${data.trackingId || data.orderId}`,
+    `Buyer: ${data.buyerName || '-'}`,
+    `Seller: ${data.sellerName || '-'}`,
+    `Product: ${data.productTitle || '-'}`,
+    `Product Price: ${money(data.productPrice, currency)}`,
+    ...serviceLinesText,
+    services.length ? `Checkout Service Charge: ${money(data.servicesTotal, currency)}` : null,
+    data.couponCode ? `Applied Coupon: ${data.couponCode}` : null,
+    data.discountAmount ? `Discount: - ${money(data.discountAmount, currency)}` : null,
+    `Total Paid: ${money(data.grandTotal, currency)}`,
+    `Payment Date: ${data.paymentDate || '-'}`,
+    `Payment Status: ${data.paymentStatus || '-'}`,
+    ``,
+    `Support: ${supportEmail}${supportPhone ? ` / ${supportPhone}` : ''}`,
+  ].filter(Boolean).join('\n')
+
+  const attachments = invoicePath
+    ? [{ filename: `${data.invoiceNumber || 'invoice'}.pdf`, path: invoicePath, contentType: 'application/pdf' }]
+    : []
+
+  return sendEmail({
+    to: data.customerEmail,
+    subject: `Order Confirmation — ${data.invoiceNumber || data.orderId}`,
+    text,
+    html,
+    attachments,
+  })
+}
+
+module.exports = { sendPaymentConfirmation, sendCheckoutConfirmation }

@@ -33,6 +33,12 @@ const validateRequest = require('../middleware/validateRequest')
 const { toPaginatedPackagesResponse, toPackageDto } = require('../dto/package.dto')
 const storageFacilityService = require('../core/services/storageFacilityService')
 const storageFacilityValidator = require('../core/validators/storageFacility.validator')
+const checkoutServiceService = require('../core/services/checkoutServiceService')
+const checkoutServiceValidator = require('../core/validators/checkoutService.validator')
+const {
+  toCheckoutServiceDto,
+  toPaginatedCheckoutServicesResponse,
+} = require('../dto/checkoutService.dto')
 const {
   toPaginatedStorageFacilitiesResponse,
   toStorageFacilityDto,
@@ -2608,6 +2614,134 @@ router.delete(
     } catch (error) {
       console.error('Error deleting storage facility:', error)
       res.status(error.statusCode || 500).json({ message: error.message || 'Error deleting storage facility' })
+    }
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Checkout Services (Pay Through Preelly, Pick & Drop Service, …)
+// ---------------------------------------------------------------------------
+
+// GET /api/admin/checkout-services - paginated list with search + status filter
+router.get(
+  '/checkout-services',
+  adminMiddleware,
+  checkoutServiceValidator.listQueryRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const {
+        page = 1,
+        limit = 20,
+        search,
+        status,
+        sortBy = 'displayOrder',
+        sortDir = 'asc',
+      } = req.query
+      const result = await checkoutServiceService.listCheckoutServices({
+        page: Number(page),
+        limit: Number(limit),
+        search,
+        status: status || 'all',
+        sortBy,
+        sortDir,
+      })
+      res.json(toPaginatedCheckoutServicesResponse(result))
+    } catch (error) {
+      console.error('Error fetching checkout services:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching checkout services' })
+    }
+  }
+)
+
+// GET /api/admin/checkout-services/:id
+router.get(
+  '/checkout-services/:id',
+  adminMiddleware,
+  checkoutServiceValidator.mongoIdParamRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const service = await checkoutServiceService.getCheckoutServiceById(req.params.id)
+      res.json({ checkoutService: toCheckoutServiceDto(service) })
+    } catch (error) {
+      console.error('Error fetching checkout service:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching checkout service' })
+    }
+  }
+)
+
+// POST /api/admin/checkout-services - create
+router.post(
+  '/checkout-services',
+  adminMiddleware,
+  checkoutServiceValidator.createCheckoutServiceRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const service = await checkoutServiceService.createCheckoutService(req.body, req.user?._id)
+      res.status(201).json({ checkoutService: toCheckoutServiceDto(service) })
+    } catch (error) {
+      console.error('Error creating checkout service:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error creating checkout service' })
+    }
+  }
+)
+
+// PATCH /api/admin/checkout-services/:id - update
+router.patch(
+  '/checkout-services/:id',
+  adminMiddleware,
+  checkoutServiceValidator.updateCheckoutServiceRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const service = await checkoutServiceService.updateCheckoutService(req.params.id, req.body, req.user?._id)
+      res.json({ checkoutService: toCheckoutServiceDto(service) })
+    } catch (error) {
+      console.error('Error updating checkout service:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error updating checkout service' })
+    }
+  }
+)
+
+// PUT /api/admin/checkout-services/:id/status - activate / deactivate
+router.put(
+  '/checkout-services/:id/status',
+  adminMiddleware,
+  checkoutServiceValidator.statusRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const service = await checkoutServiceService.setCheckoutServiceStatus(
+        req.params.id,
+        req.body.status,
+        req.user?._id
+      )
+      res.json({
+        message: `Checkout service ${service.status ? 'activated' : 'deactivated'}`,
+        checkoutService: toCheckoutServiceDto(service),
+      })
+    } catch (error) {
+      console.error('Error updating checkout service status:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error updating checkout service status' })
+    }
+  }
+)
+
+// DELETE /api/admin/checkout-services/:id - soft delete
+router.delete(
+  '/checkout-services/:id',
+  adminMiddleware,
+  checkoutServiceValidator.mongoIdParamRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      await checkoutServiceService.deleteCheckoutService(req.params.id, req.user?._id)
+      res.json({ message: 'Checkout service deleted successfully' })
+    } catch (error) {
+      console.error('Error deleting checkout service:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error deleting checkout service' })
     }
   }
 )

@@ -7,9 +7,18 @@ export const API_URL =
       ? '/api'
       : envApi || 'http://localhost:8029/api'
 
+// Socket.IO — connect to the same origin the app is served from, so a reverse proxy
+// forwards /socket.io to the backend exactly like it does /api. A VITE_SOCKET_URL
+// pointing at localhost is only honored when the app itself runs on localhost; that
+// way a dev value baked into a build (e.g. http://localhost:8029) doesn't break a
+// remotely-hosted deployment by making every browser dial its OWN localhost.
+const envSocket = import.meta.env.VITE_SOCKET_URL
+const pageOrigin = typeof window !== 'undefined' ? window.location.origin : ''
+const isLocalhost = (u) => /localhost|127\.0\.0\.1/.test(String(u || ''))
 export const SOCKET_URL =
-  import.meta.env.VITE_SOCKET_URL ||
-  (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8029')
+  envSocket && !(isLocalhost(envSocket) && pageOrigin && !isLocalhost(pageOrigin))
+    ? envSocket
+    : pageOrigin || 'http://localhost:8029'
 
 // Absolute API/media origin — always the real backend, never the front's own
 // dev-server origin. Set explicitly by vite.config.js (define) from api/.env's

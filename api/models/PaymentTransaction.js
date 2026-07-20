@@ -7,8 +7,21 @@ const PaymentTransactionSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     productId: { type: Schema.Types.ObjectId, ref: 'Product', required: true, index: true },
-    packageId: { type: Schema.Types.ObjectId, ref: 'Package', required: true, index: true },
+    // Package is required for the Ads flow (paymentType 1) but absent for the
+    // Product Checkout flow (paymentType 2), so it is optional at the schema level.
+    packageId: { type: Schema.Types.ObjectId, ref: 'Package', default: null, index: true },
     storagefacilitiesId: { type: Schema.Types.ObjectId, ref: 'StorageFacility', default: null, index: true },
+
+    // 1 = Ads Payment (existing seller flow), 2 = Product Checkout Payment (buyer).
+    paymentType: { type: Number, default: 1, index: true },
+    // 1 = Web (kept configurable for future platforms like Mobile).
+    paymentFrom: { type: Number, default: 1 },
+    // Populated for checkout payments: the product's seller and the paying buyer.
+    sellerId: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    buyerId: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
+    // Snapshot of everything on the checkout page (selected services, pick & drop
+    // booking, preelly conditions, price breakdown) — the rest of the page data.
+    metadata: { type: Schema.Types.Mixed, default: null },
 
     // Applied coupon (redeemed on success), if any.
     couponId: { type: Schema.Types.ObjectId, ref: 'Coupon', default: null },

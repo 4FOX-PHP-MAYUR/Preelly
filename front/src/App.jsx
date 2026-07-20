@@ -35,6 +35,7 @@ const FollowersFollowingPage = lazy(() => import('./pages/FollowersFollowingPage
 const SearchResultsPage = lazy(() => import('./pages/SearchResultsPage'))
 const CategoryProductsPage = lazy(() => import('./pages/CategoryProductsPage'))
 const ChatInboxPage = lazy(() => import('./pages/ChatInboxPage'))
+const CartCheckoutPage = lazy(() => import('./pages/CartCheckoutPage'))
 const PostAdDynamicFormPage = lazy(() => import('./pages/PostAdDynamicFormPage'))
 const VerifyEmailOtpPage = lazy(() => import('./pages/VerifyEmailOtpPage'))
 const VerifyPhoneOtpPage = lazy(() => import('./pages/VerifyPhoneOtpPage'))
@@ -160,6 +161,30 @@ function App() {
             }
           />
           <Route
+            path="/cart"
+            element={
+              <PrivateRoute>
+                <CartCheckoutPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/cart/payment/success"
+            element={
+              <PrivateRoute>
+                <PaymentResultPage variant="success" />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/cart/payment/failure"
+            element={
+              <PrivateRoute>
+                <PaymentResultPage variant="failure" />
+              </PrivateRoute>
+            }
+          />
+          <Route
             path="/post-ad"
             element={
               <PrivateRoute>
@@ -215,15 +240,32 @@ function App() {
               </PrivateRoute>
             }
           >
-            <Route index element={<DashboardOverviewPage />} />
+            <Route index element={<Navigate to="/my-profile" replace />} />
             <Route path="listings" element={<DashboardListingsPage />} />
             <Route path="orders" element={<DashboardOrdersPage />} />
             <Route path="wishlist" element={<DashboardWishlistPage />} />
             <Route path="messages" element={<DashboardMessagesPage />} />
             <Route path="notifications" element={<DashboardNotificationsPage />} />
             <Route path="notifications/follow-requests" element={<DashboardFollowRequestsPage />} />
-            <Route path="settings" element={<DashboardSettingsPage />} />
           </Route>
+          {/* Settings uses its own home-style shell, so it lives outside DashboardLayout. */}
+          <Route
+            path="/dashboard/settings"
+            element={
+              <PrivateRoute>
+                <DashboardSettingsPage />
+              </PrivateRoute>
+            }
+          />
+          {/* The signed-in user's own profile — same page as /user/:id, self-resolved. */}
+          <Route
+            path="/my-profile"
+            element={
+              <PrivateRoute>
+                <UserProfilePage selfMode />
+              </PrivateRoute>
+            }
+          />
           <Route path="/user/:id/:type" element={<FollowersFollowingPage />} />
           <Route path="/user/:id" element={<UserProfilePage />} />
         </Routes>

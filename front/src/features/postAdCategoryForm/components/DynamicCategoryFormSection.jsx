@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useCategoryDynamicForm } from '../hooks/useCategoryDynamicForm'
 import { FieldRenderer } from './FieldRenderer'
 import { LocationMapPicker } from './LocationMapPicker'
 import { FIELD_KIND, getFieldKind } from '../../../shared/utils/dynamicFormFieldKind'
+import { buildAiSignalMap } from '../../../shared/utils/dynamicFormAiPrefill'
 
 const POST_AD_BLUE = '#2563eb'
 const POST_AD_NAVY = '#1e3a5f'
@@ -21,6 +22,25 @@ const FULL_WIDTH_KINDS = new Set([FIELD_KIND.CHECKBOX, FIELD_KIND.TEXT, FIELD_KI
  * @param {{ categoryId: string, onAdvancePastForm: () => void, setValue: Function, watch: Function, initialValues?: Record<string, unknown> }} props
  */
 export function DynamicCategoryFormSection({ categoryId, onAdvancePastForm, setValue, watch, initialValues }) {
+  // Everything the video transcription already extracted, merged into one lookup map
+  // the dynamic form can auto-fill from. Falsy/absent when there was no transcript.
+  const extractedData = watch('__extractedData')
+  const vehicleSpecs = watch('__vehicleSpecifications')
+  const aiExtraction = watch('__aiListingExtraction')
+  const suggestedFilterData = watch('__suggestedFilterData')
+  const aiSignals = useMemo(
+    () =>
+      buildAiSignalMap([
+        extractedData,
+        vehicleSpecs,
+        aiExtraction?.filter_data,
+        aiExtraction?.display_data,
+        aiExtraction?.vehicleSpecifications,
+        suggestedFilterData,
+      ]),
+    [extractedData, vehicleSpecs, aiExtraction, suggestedFilterData]
+  )
+
   const {
     status,
     errorMessage,
@@ -31,7 +51,7 @@ export function DynamicCategoryFormSection({ categoryId, onAdvancePastForm, setV
     setFieldValue,
     goNext,
     isLastStep,
-  } = useCategoryDynamicForm({ categoryId, initialValues })
+  } = useCategoryDynamicForm({ categoryId, initialValues, aiSignals })
 
   const [stepErrors, setStepErrors] = useState({})
   const [attempted, setAttempted] = useState(false)

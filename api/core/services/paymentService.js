@@ -3,10 +3,15 @@ const mongoose = require('mongoose')
 const AppError = require('../errors/AppError')
 const PaymentTransaction = require('../../models/PaymentTransaction')
 const Product = require('../../models/Product')
+const User = require('../../models/User')
 const Package = require('../../models/Package')
 const StorageFacility = require('../../models/StorageFacility')
 const checkoutService = require('./checkoutService')
 const couponService = require('./couponService')
+const buyerCouponService = require('./buyerCouponService')
+const buyerCouponRepository = require('../repositories/buyerCouponRepository')
+const Cart = require('../../models/Cart')
+const CheckoutService = require('../../models/CheckoutService')
 const invoiceService = require('./invoiceService')
 const paymentEmailService = require('./paymentEmailService')
 const PaymentLog = require('../../models/PaymentLog')
@@ -205,6 +210,169 @@ async function initiatePayment({
   }
 }
 
+// VAT for the product-checkout flow (Ads flow uses the package summary's VAT).
+const CHECKOUT_VAT_PERCENT = Number(process.env.VITE_VAT_PERCENTAGE || process.env.VAT_PERCENTAGE) || 5
+
+/**
+ * Product Checkout payment (paymentType 2) — a BUYER pays for a product plus the
+ * checkout-service add-ons. Reuses the exact same gateway, order-id, redirect,
+ * transaction table, logging, and callback as the Ads flow; only the amount
+ * composition and the success side-effects differ.
+ */
+async function initiateCheckoutPayment({
+  userId,
+  user,
+  productId,
+  services = [],
+  couponCode = null,
+  pickDrop = null,
+  preelly = null,
+  gatewayName = DEFAULT_GATEWAY,
+  baseUrl,
+  frontendUrl,
+  context = {},
+}) {
+  const gateway = gateways[gatewayName]
+  if (!gateway) throw new AppError('Unsupported payment gateway', 400, 'GATEWAY_UNSUPPORTED')
+  if (!productId) throw new AppError('productId is required', 400, 'VALIDATION_ERROR')
+
+  const product = await Product.findById(productId).select('_id seller title').lean()
+  if (!product) throw new AppError('Product not found', 404, 'PRODUCT_NOT_FOUND')
+
+  // Product amount is taken from the buyer's active cart row (authoritative), so
+  // the client can't tamper with the agreed price.
+  const cart = await Cart.findOne({ userId, productId, cartStatus: 'ACTIVE', deletedAt: null }).lean()
+  const productAmount = round2(Number(cart?.unitPrice ?? cart?.totalAmount ?? 0))
+  const sellerId = cart?.sellerId || product.seller || null
+
+  // Validate selected checkout services are active. Client amounts are kept because
+  // the Pick & Drop total includes a delivery cost that isn't a stored unit price.
+  const cleanServices = []
+  for (const s of Array.isArray(services) ? services : []) {
+    const id = String(s.checkoutServiceId ?? s.id ?? '')
+    const amount = round2(Number(s.amount ?? 0))
+    if (!id || !(amount >= 0)) continue
+    const svc = await CheckoutService.findOne({ _id: id, isDeleted: false, status: true })
+      .select('_id serviceName')
+      .lean()
+    if (!svc) throw new AppError('A selected checkout service is not available', 400, 'SERVICE_UNAVAILABLE')
+    cleanServices.push({ checkoutServiceId: id, serviceName: svc.serviceName, amount })
+  }
+  const servicesTotal = round2(cleanServices.reduce((sum, s) => sum + s.amount, 0))
+
+  // Buyer coupon — discounts only checkout-service charges, validated server-side.
+  let couponInfo = null
+  let discountAmount = 0
+  if (couponCode) {
+    const result = await buyerCouponService.validateBuyerCoupon({ couponCode, userId, services: cleanServices })
+    discountAmount = Math.min(round2(result.discountAmount), servicesTotal)
+    couponInfo = result
+  }
+
+  const preVatBase = round2(productAmount + servicesTotal - discountAmount)
+  if (!(preVatBase >= 0)) throw new AppError('Invalid payable amount', 400, 'INVALID_AMOUNT')
+  const vatPercentage = CHECKOUT_VAT_PERCENT
+  const vatValue = round2((preVatBase * vatPercentage) / 100)
+  const amount = round2(preVatBase + vatValue)
+  if (!(amount > 0)) throw new AppError('Payable amount must be greater than 0', 400, 'INVALID_AMOUNT')
+
+  // Unique order id — retry on the rare collision.
+  let orderId = generateOrderId()
+  for (let i = 0; i < 5; i += 1) {
+    if (!(await PaymentTransaction.exists({ orderId }))) break
+    orderId = generateOrderId()
+  }
+
+  const billing = {
+    name: user?.name || 'Customer',
+    email: user?.email || '',
+    mobile: user?.phone || '',
+    address: pickDrop?.addr1 || pickDrop?.address || '',
+    country: 'United Arab Emirates',
+  }
+
+  const redirect = gateway.buildRedirect({
+    orderId,
+    amount,
+    currency: 'AED',
+    redirectUrl: `${baseUrl}/api/payment/${gatewayName.toLowerCase()}/callback`,
+    cancelUrl: `${baseUrl}/api/payment/${gatewayName.toLowerCase()}/callback`,
+    billing,
+    merchantParams: { p1: orderId, p2: String(productId) },
+  })
+
+  // The rest of the checkout-page data, snapshotted onto the transaction.
+  const metadata = {
+    productAmount,
+    services: cleanServices,
+    servicesTotal,
+    vatPercentage,
+    vatValue,
+    discountAmount,
+    pickDrop: pickDrop || null,
+    preelly: preelly || null,
+    buyerCoupon: couponInfo
+      ? {
+          couponId: couponInfo.couponId,
+          couponCode: couponInfo.couponCode,
+          discountAmount,
+          originalAmount: couponInfo.originalAmount,
+          finalAmount: couponInfo.finalAmount,
+          eligibleServiceIds: couponInfo.eligibleServiceIds || [],
+        }
+      : null,
+  }
+
+  const txn = await PaymentTransaction.create({
+    userId, // payer = buyer, so ownership checks resolve to the buyer
+    productId,
+    packageId: null,
+    paymentType: 2,
+    paymentFrom: 1,
+    sellerId,
+    buyerId: userId,
+    // couponId ref is the Ads Coupon model; buyer-coupon details live in metadata.
+    couponId: null,
+    couponCode: couponInfo?.couponCode || null,
+    discountAmount,
+    orderId,
+    merchantId: gateway.getConfig().merchantId,
+    currency: 'AED',
+    amount,
+    orderStatus: 'INITIATED',
+    gatewayName,
+    billingName: billing.name,
+    billingEmail: billing.email,
+    billingMobile: billing.mobile,
+    billingAddress: billing.address,
+    billingCountry: billing.country,
+    encRequest: redirect.encRequest,
+    metadata,
+  })
+
+  logger.info('payment.checkout_initiated', {
+    orderId, buyerId: String(userId), sellerId: sellerId ? String(sellerId) : null,
+    productId: String(productId), amount, couponCode: couponInfo?.couponCode || null,
+  })
+
+  await writePaymentLog({
+    txn,
+    context: { ...context, requestTime: txn.createdAt },
+    activity: 'Payment Initiated',
+    description: 'Buyer initiated product checkout payment through CCAvenue.',
+  })
+
+  return {
+    orderId,
+    amount,
+    currency: 'AED',
+    paymentUrl: redirect.paymentUrl,
+    accessCode: redirect.accessCode,
+    encRequest: redirect.encRequest,
+    frontendUrl,
+  }
+}
+
 // ── Callback ─────────────────────────────────────────────────────────────────
 
 /**
@@ -293,33 +461,48 @@ async function processCallback({ gatewayName = DEFAULT_GATEWAY, encResponse, con
   await runInSession(async (session) => {
     const opts = session ? { session } : {}
 
-    // Activate the package on the listing + link storage facility.
-    await Product.updateOne(
-      { _id: txn.productId },
-      {
-        $set: {
-          isPaymentDone: 1,
-          package: txn.packageId,
-          storageFacility: txn.storagefacilitiesId || null,
-          paymentTransaction: txn._id,
+    if (txn.paymentType === 2) {
+      // Product Checkout: mark the buyer's active cart row purchased and the
+      // product as sold.
+      await Cart.updateOne(
+        { userId: txn.buyerId || txn.userId, productId: txn.productId, cartStatus: 'ACTIVE' },
+        { $set: { cartStatus: 'PURCHASED' } },
+        opts
+      )
+      await Product.updateOne(
+        { _id: txn.productId },
+        { $set: { isSold: true } },
+        opts
+      )
+    } else {
+      // Ads flow: activate the package on the listing + link storage facility.
+      await Product.updateOne(
+        { _id: txn.productId },
+        {
+          $set: {
+            isPaymentDone: 1,
+            package: txn.packageId,
+            storageFacility: txn.storagefacilitiesId || null,
+            paymentTransaction: txn._id,
+          },
         },
-      },
-      opts
-    )
+        opts
+      )
 
-    // Redeem the coupon (records usage; the coupon+product unique index makes this
-    // safe against a duplicate callback slipping through).
-    if (txn.couponId) {
-      try {
-        await couponService.redeemCoupon({
-          couponId: txn.couponId,
-          userId: txn.userId,
-          productId: txn.productId,
-          orderAmount: txn.amount + txn.discountAmount,
-          discountAmount: txn.discountAmount,
-        })
-      } catch (err) {
-        if (err.code !== 'COUPON_ALREADY_APPLIED') throw err
+      // Redeem the coupon (records usage; the coupon+product unique index makes this
+      // safe against a duplicate callback slipping through).
+      if (txn.couponId) {
+        try {
+          await couponService.redeemCoupon({
+            couponId: txn.couponId,
+            userId: txn.userId,
+            productId: txn.productId,
+            orderAmount: txn.amount + txn.discountAmount,
+            discountAmount: txn.discountAmount,
+          })
+        } catch (err) {
+          if (err.code !== 'COUPON_ALREADY_APPLIED') throw err
+        }
       }
     }
 
@@ -327,6 +510,25 @@ async function processCallback({ gatewayName = DEFAULT_GATEWAY, encResponse, con
     txn.isVerified = true
     await txn.save(opts)
   })
+
+  // Product Checkout: record buyer-coupon usage (best effort — never rolls back).
+  if (txn.paymentType === 2 && txn.metadata?.buyerCoupon?.couponId) {
+    try {
+      const bc = txn.metadata.buyerCoupon
+      await buyerCouponRepository.recordUsage({
+        couponId: bc.couponId,
+        userId: txn.buyerId || txn.userId,
+        orderId: txn.orderId,
+        checkoutServiceId: bc.eligibleServiceIds?.[0] || null,
+        couponCode: bc.couponCode,
+        discountAmount: bc.discountAmount,
+        originalAmount: bc.originalAmount,
+        finalAmount: bc.finalAmount,
+      })
+    } catch (err) {
+      logger.error('payment.buyer_coupon_usage_failed', { orderId: txn.orderId, message: err.message })
+    }
+  }
 
   logger.info('payment.success', { orderId, trackingId: txn.trackingId, amount: txn.amount })
 
@@ -402,6 +604,38 @@ async function buildInvoiceData(txn, { baseUrl } = {}) {
     subtotal,
     grandTotal: round2(txn.amount),
     invoiceUrl: txn.invoiceUrl || (baseUrl ? `${baseUrl}/api/payment/invoice/${txn.orderId}` : null),
+  }
+}
+
+/**
+ * Builds the data for the Product Checkout confirmation email (paymentType 2),
+ * sourced from the transaction + its metadata snapshot.
+ */
+async function buildCheckoutEmailData(txn) {
+  const meta = txn.metadata || {}
+  const [product, seller, buyer] = await Promise.all([
+    Product.findById(txn.productId).select('title').lean(),
+    txn.sellerId ? User.findById(txn.sellerId).select('name').lean() : Promise.resolve(null),
+    txn.buyerId ? User.findById(txn.buyerId).select('name').lean() : Promise.resolve(null),
+  ])
+
+  return {
+    invoiceNumber: txn.invoiceNumber,
+    orderId: txn.orderId,
+    trackingId: txn.trackingId,
+    customerEmail: txn.billingEmail,
+    buyerName: buyer?.name || txn.billingName || null,
+    sellerName: seller?.name || null,
+    productTitle: product?.title || null,
+    productPrice: Number(meta.productAmount ?? 0),
+    services: Array.isArray(meta.services) ? meta.services : [],
+    servicesTotal: Number(meta.servicesTotal ?? 0),
+    couponCode: txn.couponCode || meta.buyerCoupon?.couponCode || null,
+    discountAmount: Number(txn.discountAmount ?? meta.discountAmount ?? 0),
+    grandTotal: round2(txn.amount),
+    currency: txn.currency,
+    paymentDate: formatDateTime(txn.paymentDate),
+    paymentStatus: txn.orderStatus,
   }
 }
 
@@ -494,12 +728,19 @@ async function runSuccessSideEffects(txn, context = {}) {
     logger.error('payment.invoice_failed', { orderId: txn.orderId, message: err.message })
   }
 
-  // 2) Confirmation email with invoice attached (once)
+  // 2) Confirmation email with invoice attached (once). Product Checkout and Ads
+  //    use independent templates/functions so they can evolve separately.
   if (!txn.emailSent && txn.billingEmail) {
     try {
-      const data = await buildInvoiceData(txn, context)
       // nodemailer needs the absolute path for the attachment, not the stored filename.
-      await paymentEmailService.sendPaymentConfirmation(data, invoiceAbsPath || invoiceService.resolvePath(txn.invoicePath))
+      const attachmentPath = invoiceAbsPath || invoiceService.resolvePath(txn.invoicePath)
+      if (txn.paymentType === 2) {
+        const data = await buildCheckoutEmailData(txn)
+        await paymentEmailService.sendCheckoutConfirmation(data, attachmentPath)
+      } else {
+        const data = await buildInvoiceData(txn, context)
+        await paymentEmailService.sendPaymentConfirmation(data, attachmentPath)
+      }
       txn.emailSent = true
       txn.emailSentAt = new Date()
       await txn.save()
@@ -531,6 +772,7 @@ async function getTransactionForUser(orderId, userId) {
 module.exports = {
   DEFAULT_GATEWAY,
   initiatePayment,
+  initiateCheckoutPayment,
   processCallback,
   getTransactionForUser,
   getInvoiceForUser,

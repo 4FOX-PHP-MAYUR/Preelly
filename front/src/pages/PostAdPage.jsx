@@ -72,6 +72,7 @@ import {
   resetDynamicForm,
 } from '@shared/store/slices/dynamicFormSlice'
 import { PostAdListingBreadcrumb } from '../components/PostAd/PostAdListingBreadcrumb'
+import DeleteConfirmModal from '../components/PostAd/DeleteConfirmModal'
 import { DynamicCategoryFormSection } from '../features/postAdCategoryForm/components/DynamicCategoryFormSection'
 import { FieldRenderer } from '../features/postAdCategoryForm/components/FieldRenderer'
 import { LocationMapPicker } from '../features/postAdCategoryForm/components/LocationMapPicker'
@@ -469,9 +470,9 @@ function Step3VideoUpload({
                       file.name.toLowerCase().endsWith('.webm')
       
       if (isVideo) {
-        const maxSize = 20 * 1024 * 1024 // 20MB
+        const maxSize = 40 * 1024 * 1024 // 40MB
         if (file.size > maxSize) {
-          toast.error('Video exceeds 20MB limit')
+          toast.error('Video exceeds 40MB limit')
           return
         }
         
@@ -2337,6 +2338,8 @@ function PhotoCropFromVideo({ videoFile, onBack, onCrop }) {
 function Step4TitlePhotosReview({ register, errors, imageFiles, setImageFiles, videoFile, breadcrumbItems = [], onBack, onNext }) {
   const [isAutoCapturing, setIsAutoCapturing] = useState(false)
   const [editingIndex, setEditingIndex] = useState(null)
+  // Index of the thumbnail pending delete confirmation (null = modal closed).
+  const [deleteIndex, setDeleteIndex] = useState(null)
 
   const handleAddPhotos = (e) => {
     const files = Array.from(e.target.files)
@@ -2400,6 +2403,14 @@ function Step4TitlePhotosReview({ register, errors, imageFiles, setImageFiles, v
 
   return (
     <div className="post-ad-step-shell-narrow pb-32 sm:pb-36">
+      <DeleteConfirmModal
+        open={deleteIndex !== null}
+        onConfirm={() => {
+          removeImage(deleteIndex)
+          setDeleteIndex(null)
+        }}
+        onCancel={() => setDeleteIndex(null)}
+      />
       {onBack && (
         <button
           type="button"
@@ -2496,7 +2507,7 @@ function Step4TitlePhotosReview({ register, errors, imageFiles, setImageFiles, v
                     </button>
                     <button
                       type="button"
-                      onClick={() => removeImage(index)}
+                      onClick={() => setDeleteIndex(index)}
                       className="absolute top-2 right-2 bg-gray-900/70 text-white p-1.5 rounded-full hover:bg-red-600"
                     >
                       <X className="h-3 w-3" />

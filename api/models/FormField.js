@@ -87,6 +87,14 @@ const FormFieldSchema = new Schema(
       default: '',
       trim: true,
     },
+    // The dependency field(s) whose value(s) `functionName` is called with — e.g. the
+    // Make & Model field carries functionName "getTrimByID" and functionForField
+    // "trimid". Declared here so Mongoose strict mode doesn't strip it on save/update.
+    functionForField: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     isActive: {
       type: Boolean,
       default: true,

@@ -52,10 +52,10 @@ export function SidebarCategoryBadge({ category }) {
   return <Icon className={`${CATEGORY_ICON_SIZE_CLASS} shrink-0 text-slate-600`} strokeWidth={1.75} />
 }
 
-function SidebarCategoryList({ categories = [], activeId = '', onSelect, collapsed = false, max = 7 }) {
+function SidebarCategoryList({ categories = [], activeId = '', onSelect, collapsed = false }) {
   return (
     <div className="space-y-1">
-      {categories.slice(0, max).map((category) => {
+      {categories.map((category) => {
         const isActive = String(category._id) === String(activeId)
         return (
           <button

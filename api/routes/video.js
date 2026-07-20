@@ -56,8 +56,32 @@ const upload = multer({
   }
 })
 
+// OpenAI Whisper caps uploads at 25MB. Videos are larger than that, so we send only
+// the extracted audio track — which is a fraction of the size.
+const WHISPER_MAX_BYTES = 25 * 1024 * 1024
+
+/** Extracts a small mono 16kHz mp3 audio track from a video, for transcription. */
+function extractAudioForTranscription(videoPath) {
+  return new Promise((resolve, reject) => {
+    const tempDir = path.join(__dirname, '../uploads/videos/temp')
+    if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true })
+    const audioPath = path.join(tempDir, `audio-${Date.now()}-${Math.round(Math.random() * 1e6)}.mp3`)
+    ffmpeg(videoPath)
+      .noVideo()
+      .audioChannels(1)
+      .audioFrequency(16000)
+      .audioBitrate('64k')
+      .format('mp3')
+      .on('end', () => resolve(audioPath))
+      .on('error', (err) => reject(err))
+      .save(audioPath)
+  })
+}
+
 // Helper function to transcribe video using OpenAI Whisper API
 async function transcribeVideo(videoPath) {
+  let tempAudioPath = null
+  const safeUnlink = (p) => { try { if (p && fs.existsSync(p)) fs.unlinkSync(p) } catch { /* best effort */ } }
   try {
     const apiKey = process.env.OPENAI_API_KEY
     if (!apiKey) {
@@ -71,12 +95,36 @@ async function transcribeVideo(videoPath) {
       console.log('Video file size:', stats.size, 'bytes')
     }
 
-    // Read the video file
-    const videoFile = fs.createReadStream(videoPath)
-    
+    // Whisper only needs the audio — extract it so large videos don't hit the 25MB cap.
+    let fileToSend = videoPath
+    let sendFilename = 'audio.mp3'
+    let sendContentType = 'audio/mpeg'
+    if (ffmpegAvailable) {
+      try {
+        tempAudioPath = await extractAudioForTranscription(videoPath)
+        fileToSend = tempAudioPath
+        console.log('Extracted audio for transcription:', fs.statSync(tempAudioPath).size, 'bytes')
+      } catch (audioErr) {
+        console.warn('Audio extraction failed, falling back to the raw video:', audioErr.message)
+        sendFilename = path.basename(videoPath)
+        sendContentType = 'video/mp4'
+      }
+    } else {
+      sendFilename = path.basename(videoPath)
+      sendContentType = 'video/mp4'
+    }
+
+    // Guard against Whisper's hard 25MB limit before we spend a network round-trip.
+    const sendStat = fs.statSync(fileToSend)
+    if (sendStat.size > WHISPER_MAX_BYTES) {
+      throw new Error('Audio is too large to transcribe (over 25MB). Please upload a shorter video.')
+    }
+
+    const fileStream = fs.createReadStream(fileToSend)
+
     // Create form data for OpenAI API
     const formData = new FormData()
-    formData.append('file', videoFile)
+    formData.append('file', fileStream, { filename: sendFilename, contentType: sendContentType })
     formData.append('model', 'whisper-1')
     formData.append('language', 'en') // Optional: specify language
 
@@ -103,7 +151,7 @@ async function transcribeVideo(videoPath) {
     if (!transcript || transcript.trim() === '') {
       console.warn('Warning: Transcript is empty')
     }
-    
+
     return transcript || ''
   } catch (error) {
     console.error('Error transcribing video:', error)
@@ -115,6 +163,9 @@ async function transcribeVideo(videoPath) {
       throw new Error('Request timeout - video file may be too large')
     }
     throw error
+  } finally {
+    // Remove the temporary extracted audio regardless of outcome.
+    safeUnlink(tempAudioPath)
   }
 }
 

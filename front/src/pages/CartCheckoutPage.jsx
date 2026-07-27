@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { GoogleMap, MarkerF, useJsApiLoader } from '@react-google-maps/api'
-import { Calendar, Check, Clock, Gauge, X } from 'lucide-react'
+import { Calendar, Check, Gauge, X } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { cartService, buyerCouponService, checkoutServicePublicService, paymentService } from '@shared/services/api'
 import { getMediaUrl } from '@shared/utils/helpers'
+import { PreellyPayModal, derivePreellyConditions } from '@shared/components/PreellyPayModal'
 import MarketplaceTopBar from '../components/Layout/MarketplaceTopBar'
 import MarketplaceLogoBlock from '../components/Layout/MarketplaceLogoBlock'
 import { MARKETPLACE_LOGO_CELL } from '../components/Layout/marketplaceLayoutStyles'
@@ -20,31 +21,11 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
 const MAP_LIBRARIES = ['places']
 // Dubai, UAE — default map center when geolocation isn't available.
 const DEFAULT_CENTER = { lat: 25.2048, lng: 55.2708 }
-const TIME_SLOTS = [
-  '09:00 AM - 11:00 AM',
-  '11:00 AM - 01:00 PM',
-  '01:00 PM - 03:00 PM',
-  '03:00 PM - 05:00 PM',
-  '05:00 PM - 07:00 PM',
-]
 // VAT % is sourced from api/.env (VITE_VAT_PERCENTAGE); falls back to 5.
 const VAT_PERCENT = Number(import.meta.env.VITE_VAT_PERCENTAGE) || 5
 // Charge shown in the Preelly Pay conditions popup (api/.env → VITE_PREELLY_PAY_CHARGE).
 const PREELLY_PAY_CHARGE = Number(import.meta.env.VITE_PREELLY_PAY_CHARGE) || 7
-const MAX_PREELLY_CONDITIONS = 5
 const CURRENCY = 'AED'
-
-// Dummy list of selectable Preelly Pay conditions.
-const PREELLY_CONDITIONS = [
-  'Odometer reading 1,05,000 KM',
-  'Alarm / Anti-Theft System',
-  'Sunroof',
-  'Make & Model must match the add description',
-  'No accident and flooded',
-  'Daytime Running Lights (DRL)',
-  'GCC Specification',
-  'Exterior Colour White',
-]
 
 const PAY_PREELLY_FEATURES = [
   'Pick up form your place',
@@ -145,113 +126,6 @@ function LearnMore({ svc }) {
     </button>
   )
 }
-
-// ── "Opt For Preelly Pay" conditions popup ────────────────────────────────────
-function PreellyPayModal({ open, initialSelected, initialComment, onClose, onConfirm }) {
-  const [selected, setSelected] = useState(initialSelected || [])
-  const [comment, setComment] = useState(initialComment || '')
-
-  // Re-seed the modal each time it's (re)opened for editing.
-  useEffect(() => {
-    if (open) {
-      setSelected(initialSelected || [])
-      setComment(initialComment || '')
-    }
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  if (!open) return null
-
-  const toggle = (condition) => {
-    setSelected((prev) => {
-      if (prev.includes(condition)) return prev.filter((c) => c !== condition)
-      if (prev.length >= MAX_PREELLY_CONDITIONS) {
-        toast.error(`You can select up to ${MAX_PREELLY_CONDITIONS} options`)
-        return prev
-      }
-      return [...prev, condition]
-    })
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl bg-white shadow-xl">
-        {/* Header */}
-        <div className="relative flex items-center justify-center border-b border-slate-100 px-6 py-5">
-          <h2 className="text-xl font-bold text-slate-900">Opt For Preelly Pay</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-            aria-label="Close"
-          >
-            <X className="h-6 w-6" />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5">
-          <div className="flex items-center justify-between gap-4">
-            <h3 className="text-lg font-bold text-slate-900">Preelly Pay Conditions</h3>
-            <p className="text-sm font-semibold text-[#1e3a8a]">
-              Charges <span className="text-base font-bold">{CURRENCY} {money(PREELLY_PAY_CHARGE)}</span>
-            </p>
-          </div>
-
-          <p className="mt-4 text-sm text-[#1e3a8a]">
-            Select Preelly Pay conditions you can select up to {MAX_PREELLY_CONDITIONS} options
-          </p>
-
-          <div className="mt-5 flex flex-wrap gap-3">
-            {PREELLY_CONDITIONS.map((condition) => {
-              const active = selected.includes(condition)
-              return (
-                <button
-                  key={condition}
-                  type="button"
-                  onClick={() => toggle(condition)}
-                  className={`inline-flex items-center gap-2 rounded-full border px-4 py-2.5 text-sm transition ${
-                    active
-                      ? 'border-[#c7d2fe] bg-[#e8ecfb] text-slate-900'
-                      : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300'
-                  }`}
-                >
-                  <span>{condition}</span>
-                  <span
-                    className={`flex h-5 w-5 items-center justify-center rounded-full ${
-                      active ? 'bg-green-500 text-white' : 'bg-slate-300 text-white'
-                    }`}
-                  >
-                    <Check className="h-3 w-3" strokeWidth={3} />
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-
-          <textarea
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            placeholder="Enter comments here"
-            rows={5}
-            className="mt-6 w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2563eb]/25"
-          />
-        </div>
-
-        {/* Footer */}
-        <div className="border-t border-slate-100 px-6 py-4">
-          <button
-            type="button"
-            onClick={() => onConfirm(selected, comment)}
-            className="w-full rounded-full bg-[#1414e6] px-6 py-4 text-base font-bold text-white transition hover:bg-[#1010c4]"
-          >
-            Confirm
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 // ── Draggable-pin Google Map for the drop location ────────────────────────────
 function PickDropMap({ position, onChange }) {
   const { isLoaded, loadError } = useJsApiLoader({
@@ -346,11 +220,11 @@ function PickDropMap({ position, onChange }) {
   )
 }
 
-// ── "Pick & Drop Service" popup (date/time, drop location, cost breakdown) ─────
+// ── "Pick & Drop Service" popup (drop location, cost breakdown) ───────────────
 function PickDropModal({ open, initial, fixCost = PICK_DROP_FEE, onClose, onConfirm }) {
-  const todayIso = new Date().toISOString().slice(0, 10)
-  const [date, setDate] = useState(initial?.date || todayIso)
-  const [timeSlot, setTimeSlot] = useState(initial?.timeSlot || '')
+  // Pick & Drop can only be booked from tomorrow onwards — today isn't selectable.
+  const tomorrowIso = new Date(Date.now() + 86400000).toISOString().slice(0, 10)
+  const [date, setDate] = useState(initial?.date || tomorrowIso)
   const [addr1, setAddr1] = useState(initial?.addr1 || '')
   const [addr2, setAddr2] = useState(initial?.addr2 || '')
   const [position, setPosition] = useState(initial?.location || DEFAULT_CENTER)
@@ -358,8 +232,7 @@ function PickDropModal({ open, initial, fixCost = PICK_DROP_FEE, onClose, onConf
 
   useEffect(() => {
     if (open) {
-      setDate(initial?.date || todayIso)
-      setTimeSlot(initial?.timeSlot || '')
+      setDate(initial?.date || tomorrowIso)
       setAddr1(initial?.addr1 || '')
       setAddr2(initial?.addr2 || '')
       setPosition(initial?.location || DEFAULT_CENTER)
@@ -384,8 +257,8 @@ function PickDropModal({ open, initial, fixCost = PICK_DROP_FEE, onClose, onConf
 
   const handleConfirm = () => {
     if (!date) { toast.error('Please select a date'); return }
-    if (!timeSlot) { toast.error('Please select a time slot'); return }
-    onConfirm({ date, timeSlot, addr1, addr2, location: position, address, total })
+    if (date < tomorrowIso) { toast.error('Please select a date from tomorrow onwards'); return }
+    onConfirm({ date, addr1, addr2, location: position, address, total })
   }
 
   return (
@@ -417,37 +290,17 @@ function PickDropModal({ open, initial, fixCost = PICK_DROP_FEE, onClose, onConf
 
           {/* Confirm Time */}
           <h4 className="text-lg font-bold text-slate-900">Confirm Time</h4>
-          <div className="mt-3 grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="text-sm font-medium text-[#1e3a8a]">Select Date*</label>
-              <div className="relative mt-1.5">
-                <input
-                  type="date"
-                  value={date}
-                  min={todayIso}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2563eb]/25"
-                />
-                <Calendar className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-              </div>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-[#1e3a8a]">Select Time*</label>
-              <div className="relative mt-1.5">
-                <select
-                  value={timeSlot}
-                  onChange={(e) => setTimeSlot(e.target.value)}
-                  className={`w-full appearance-none rounded-xl border border-slate-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#2563eb]/25 ${
-                    timeSlot ? 'text-slate-900' : 'text-slate-400'
-                  }`}
-                >
-                  <option value="">Select time slot</option>
-                  {TIME_SLOTS.map((slot) => (
-                    <option key={slot} value={slot} className="text-slate-900">{slot}</option>
-                  ))}
-                </select>
-                <Clock className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
-              </div>
+          <div className="mt-3">
+            <label className="text-sm font-medium text-[#1e3a8a]">Select Date*</label>
+            <div className="relative mt-1.5">
+              <input
+                type="date"
+                value={date}
+                min={tomorrowIso}
+                onChange={(e) => setDate(e.target.value)}
+                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2563eb]/25"
+              />
+              <Calendar className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
             </div>
           </div>
 
@@ -528,6 +381,7 @@ function CartCheckoutPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const productId = searchParams.get('productId') || ''
+  const location = useLocation()
 
   const [item, setItem] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -540,6 +394,16 @@ function CartCheckoutPage() {
   const [preellyModalOpen, setPreellyModalOpen] = useState(false)
   const [preellyConditions, setPreellyConditions] = useState([])
   const [preellyComment, setPreellyComment] = useState('')
+
+  // Arrived from chat after the seller approved the buyer's Preelly conditions:
+  // pre-select "Pay Through Preelly" and show the approved conditions.
+  useEffect(() => {
+    const st = location.state
+    if (!st?.preellyApproved) return
+    setPayPreelly(true)
+    setPreellyConditions(Array.isArray(st.preellyConditions) ? st.preellyConditions : [])
+    setPreellyComment(typeof st.preellyComment === 'string' ? st.preellyComment : '')
+  }, [location.state])
 
   // Ticking "Pay Through Preelly" opens the conditions popup; unticking clears it.
   const handleTogglePayPreelly = (checked) => {
@@ -652,6 +516,25 @@ function CartCheckoutPage() {
 
   const payPreellyFeeAmount = Number(preellyService?.price ?? PAY_VIA_PREELLY_FEE)
   const pickDropFixCost = Number(pickDropService?.price ?? PICK_DROP_FEE)
+
+  // Preelly Pay charge shown in the popup — from the checkout service (DB).
+  const preellyPayCharge = Number(preellyService?.price ?? PREELLY_PAY_CHARGE)
+
+  // Preelly Pay conditions = the product's multi-selection ("features") captured
+  // when the ad was posted. Flatten every feature group's values into one list.
+  const preellyProductConditions = useMemo(() => derivePreellyConditions(product), [product])
+
+  // Persisted seller-approved inspection conditions (saved on the cart in chat):
+  // pre-select "Pay Through Preelly" and show them, regardless of how the buyer
+  // reached this page. Runs once the cart item loads.
+  useEffect(() => {
+    const insp = item?.preellyInspection
+    if (insp?.approved && Array.isArray(insp.conditions) && insp.conditions.length) {
+      setPayPreelly(true)
+      setPreellyConditions(insp.conditions)
+      setPreellyComment(insp.comment || '')
+    }
+  }, [item])
 
   // Is a service currently selected?
   const isServiceSelected = (svc) => {
@@ -789,14 +672,15 @@ function CartCheckoutPage() {
     </div>
   )
 
-  const cardHeader = (svc, checked, onToggle, price) => (
-    <label className="flex cursor-pointer items-center justify-between gap-4">
+  const cardHeader = (svc, checked, onToggle, price, disabled = false) => (
+    <label className={`flex items-center justify-between gap-4 ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
       <span className="flex items-center gap-3">
         <input
           type="checkbox"
           checked={checked}
-          onChange={(e) => onToggle(e.target.checked)}
-          className="h-5 w-5 rounded border-2 border-[#2563eb] text-[#2563eb] focus:ring-[#2563eb]"
+          disabled={disabled}
+          onChange={(e) => { if (!disabled) onToggle(e.target.checked) }}
+          className={`h-5 w-5 rounded border-2 border-[#2563eb] text-[#2563eb] focus:ring-[#2563eb] ${disabled ? 'cursor-not-allowed' : ''}`}
         />
         <span className="text-lg font-bold text-slate-900">{svc.serviceName}</span>
       </span>
@@ -820,7 +704,7 @@ function CartCheckoutPage() {
   const renderPreellyCard = (svc) =>
     cardShell(
       svc,
-      cardHeader(svc, payPreelly, handleTogglePayPreelly, <span className="font-bold">{CURRENCY} {money(payPreellyFeeAmount)}</span>),
+      cardHeader(svc, payPreelly, handleTogglePayPreelly, <span className="font-bold">{CURRENCY} {money(payPreellyFeeAmount)}</span>, true),
       payPreelly && preellyConditions.length > 0 ? (
         <>
           <div className="flex flex-wrap gap-3">
@@ -842,7 +726,7 @@ function CartCheckoutPage() {
               onClick={() => setPreellyModalOpen(true)}
               className="text-xs font-bold uppercase tracking-wide text-[#2563eb] hover:underline"
             >
-              Edit
+              {/* Edit */}
             </button>
           </div>
         </>
@@ -866,20 +750,11 @@ function CartCheckoutPage() {
       ),
       pickDrop && pickDropInfo ? (
         <>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <p className="text-sm font-medium text-[#1e3a8a]">Select Date*</p>
-              <div className="mt-1.5 flex items-center justify-between gap-2 rounded-xl bg-[#e8e8ea] px-4 py-3">
-                <span className="text-sm text-slate-900">{formatDate(pickDropInfo.date)}</span>
-                <Calendar className="h-5 w-5 text-slate-700" />
-              </div>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-[#1e3a8a]">Select Time*</p>
-              <div className="mt-1.5 flex items-center justify-between gap-2 rounded-xl bg-[#e8e8ea] px-4 py-3">
-                <span className="text-sm text-slate-900">{pickDropInfo.timeSlot}</span>
-                <Clock className="h-5 w-5 text-slate-700" />
-              </div>
+          <div>
+            <p className="text-sm font-medium text-[#1e3a8a]">Select Date*</p>
+            <div className="mt-1.5 flex items-center justify-between gap-2 rounded-xl bg-[#e8e8ea] px-4 py-3">
+              <span className="text-sm text-slate-900">{formatDate(pickDropInfo.date)}</span>
+              <Calendar className="h-5 w-5 text-slate-700" />
             </div>
           </div>
           <div className="mt-4">
@@ -1119,6 +994,8 @@ function CartCheckoutPage() {
 
       <PreellyPayModal
         open={preellyModalOpen}
+        conditions={preellyProductConditions}
+        charge={preellyPayCharge}
         initialSelected={preellyConditions}
         initialComment={preellyComment}
         onClose={() => setPreellyModalOpen(false)}

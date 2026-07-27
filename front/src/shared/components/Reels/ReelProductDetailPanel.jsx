@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { ChevronDown, ChevronUp, MapPin, MessageCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { selectIsAuthenticated, selectUser } from '@shared/store/slices/authSlice'
+import { selectIsAuthenticated, selectIsGuest, selectUser } from '@shared/store/slices/authSlice'
 import { useChat } from '@shared/components/Chat/ChatContext'
 import { getMediaUrl } from '@shared/utils/helpers'
 import ListingHeaderCard from '@shared/components/ProductDetail/ListingHeaderCard'
@@ -127,6 +127,7 @@ function EmptyPanel() {
 function ReelProductDetailPanel({ product }) {
   const navigate = useNavigate()
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const isGuest = useSelector(selectIsGuest)
   const user = useSelector(selectUser)
   const { createOrGetThread } = useChat()
   const [startingChat, setStartingChat] = useState(false)
@@ -138,7 +139,7 @@ function ReelProductDetailPanel({ product }) {
   const handleChatWithSeller = async () => {
     if (!isAuthenticated) {
       toast.error('Please login to chat with sellers')
-      navigate('/login')
+      if (!isGuest) navigate('/login')
       return
     }
     const sellerId = product.seller?._id || product.seller?.id || product.seller

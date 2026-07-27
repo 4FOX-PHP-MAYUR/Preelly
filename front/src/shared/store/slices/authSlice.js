@@ -82,12 +82,16 @@ export const verifyOtp = createAsyncThunk(
         mode,
         channel,
       })
-      localStorage.setItem('token', response.data.token)
-      localStorage.setItem('user', JSON.stringify(response.data.user))
-      if (response.data.user?.permissions) {
-        localStorage.setItem('permissions', JSON.stringify(response.data.user.permissions))
-      } else {
-        localStorage.removeItem('permissions')
+      // A completion response (e.g. phone login for an email-less user) carries no
+      // token — only persist the session when one is actually issued.
+      if (response.data?.token) {
+        localStorage.setItem('token', response.data.token)
+        localStorage.setItem('user', JSON.stringify(response.data.user))
+        if (response.data.user?.permissions) {
+          localStorage.setItem('permissions', JSON.stringify(response.data.user.permissions))
+        } else {
+          localStorage.removeItem('permissions')
+        }
       }
       return response.data
     } catch (error) {
@@ -96,6 +100,85 @@ export const verifyOtp = createAsyncThunk(
         code: error.response?.data?.code || null,
         status: error.response?.status || null,
       })
+    }
+  }
+)
+
+// Email-tab entry: returns { exists, mode, email } to pick login vs. new signup.
+export const emailStart = createAsyncThunk(
+  'auth/emailStart',
+  async ({ email }, { rejectWithValue }) => {
+    try {
+      const response = await authService.emailStart({ email })
+      return response.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to send sign-in code')
+    }
+  }
+)
+
+// Completion-flow OTP verifiers. They only return a token once BOTH email and
+// mobile are verified; otherwise they carry a `nextStep` for the caller to route.
+const persistAuthPayload = (data) => {
+  localStorage.removeItem('permissions')
+  if (data?.token) {
+    localStorage.setItem('token', data.token)
+    localStorage.setItem('user', JSON.stringify(data.user))
+    if (data.user?.permissions) {
+      localStorage.setItem('permissions', JSON.stringify(data.user.permissions))
+    }
+  } else {
+    localStorage.removeItem('token')
+    localStorage.removeItem('user')
+  }
+}
+
+export const completeVerifyEmail = createAsyncThunk(
+  'auth/completeVerifyEmail',
+  async ({ email, otp }, { rejectWithValue }) => {
+    try {
+      const response = await authService.completeVerifyEmail({ email, otp })
+      persistAuthPayload(response.data)
+      return response.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to verify OTP')
+    }
+  }
+)
+
+export const completeVerifyPhone = createAsyncThunk(
+  'auth/completeVerifyPhone',
+  async ({ phone, otp, phoneCountryCode, phoneCountryIso }, { rejectWithValue }) => {
+    try {
+      const response = await authService.completeVerifyPhone({ phone, otp, phoneCountryCode, phoneCountryIso })
+      persistAuthPayload(response.data)
+      return response.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to verify OTP')
+    }
+  }
+)
+
+export const mobileAttach = createAsyncThunk(
+  'auth/mobileAttach',
+  async ({ email, phone, phoneCountryCode, phoneCountryIso }, { rejectWithValue }) => {
+    try {
+      const response = await authService.mobileAttach({ email, phone, phoneCountryCode, phoneCountryIso })
+      return response.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to send OTP')
+    }
+  }
+)
+
+export const emailAttach = createAsyncThunk(
+  'auth/emailAttach',
+  async ({ phone, email, phoneCountryCode, phoneCountryIso }, { rejectWithValue }) => {
+    try {
+      const response = await authService.emailAttach({ phone, email, phoneCountryCode, phoneCountryIso })
+      return response.data
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to send OTP')
     }
   }
 )
@@ -243,6 +326,8 @@ const initialState = {
   token: localStorage.getItem('token') || null,
   // Keep user on protected routes while cookie/session is re-validated.
   isAuthenticated: !!storedUser,
+  // Visitor who chose "Continue as Guest" — can browse/search but not act (like/save/comment/share).
+  isGuest: localStorage.getItem('guestMode') === 'true',
   hydrating: true,
   permissions: storedPermissions,
   loading: false,
@@ -275,6 +360,14 @@ const authSlice = createSlice({
     },
     clearError: (state) => {
       state.error = null
+    },
+    enterGuestMode: (state) => {
+      state.isGuest = true
+      try { localStorage.setItem('guestMode', 'true') } catch { /* storage unavailable */ }
+    },
+    exitGuestMode: (state) => {
+      state.isGuest = false
+      try { localStorage.removeItem('guestMode') } catch { /* storage unavailable */ }
     },
     setPermissions: (state, action) => {
       state.permissions = action.payload
@@ -359,6 +452,8 @@ const authSlice = createSlice({
         state.token = null
         state.isAuthenticated = false
         state.permissions = null
+        state.isGuest = false
+        try { localStorage.removeItem('guestMode') } catch { /* storage unavailable */ }
       })
       .addCase(refreshUser.fulfilled, (state, action) => {
         state.user = action.payload
@@ -422,15 +517,47 @@ const authSlice = createSlice({
         state.loading = false
         state.error = action.payload
       })
+      .addCase(completeVerifyEmail.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(completeVerifyEmail.fulfilled, (state, action) => {
+        state.loading = false
+        state.user = action.payload.user || state.user
+        state.token = action.payload.token || null
+        state.isAuthenticated = !!action.payload.token
+        state.permissions = action.payload.user?.permissions || null
+      })
+      .addCase(completeVerifyEmail.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.payload
+      })
+      .addCase(completeVerifyPhone.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(completeVerifyPhone.fulfilled, (state, action) => {
+        state.loading = false
+        state.user = action.payload.user || state.user
+        state.token = action.payload.token || null
+        state.isAuthenticated = !!action.payload.token
+        state.permissions = action.payload.user?.permissions || null
+      })
+      .addCase(completeVerifyPhone.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.payload
+      })
   },
 })
 
-export const { clearSession, clearError, setPermissions, rehydrateSessionFromStorage } = authSlice.actions
+export const { clearSession, clearError, setPermissions, rehydrateSessionFromStorage, enterGuestMode, exitGuestMode } = authSlice.actions
 
 export const selectHasSession = (state) =>
   Boolean(state.auth.user) || Boolean(state.auth.isAuthenticated)
 
 export const selectIsAuthenticated = (state) => state.auth.isAuthenticated
+// Guest only counts while not authenticated (a signed-in user is never a "guest").
+export const selectIsGuest = (state) => !state.auth.isAuthenticated && Boolean(state.auth.isGuest)
 export const selectUser = (state) => state.auth.user
 export const selectIsAdmin = (state) => state.auth.user?.role === 'admin'
 export const selectPermissions = (state) => state.auth.permissions

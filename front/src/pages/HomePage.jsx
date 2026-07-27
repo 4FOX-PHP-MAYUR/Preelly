@@ -11,6 +11,7 @@ import ReelsFeed from '@shared/components/Reels/ReelsFeed'
 import ReelsSkeleton from '@shared/components/Reels/ReelsSkeleton'
 import ReelProductDetailPanel from '@shared/components/Reels/ReelProductDetailPanel'
 import ReelCommentsModal from '@shared/components/Reels/ReelCommentsModal'
+import ReelShareModal from '@shared/components/Reels/ReelShareModal'
 import { fetchRootCategories } from '@shared/store/slices/categorySlice'
 import {
   selectAuthHydrating,
@@ -43,6 +44,8 @@ function HomePage() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [commentsProduct, setCommentsProduct] = useState(null)
   const [commentsSlideIn, setCommentsSlideIn] = useState(false)
+  const [shareProduct, setShareProduct] = useState(null)
+  const [shareSlideIn, setShareSlideIn] = useState(false)
   const commentAddedHandlerRef = useRef(null)
   const wasOnHomeRef = useRef(false)
   const hasReadSavedIndexRef = useRef(false)
@@ -178,11 +181,31 @@ function HomePage() {
 
   const openCommentsPanel = useCallback((product, handlers = {}) => {
     if (!product?._id) return
+    // Only one aside panel at a time — drop the share panel if it's open.
+    setShareProduct(null)
+    setShareSlideIn(false)
     commentAddedHandlerRef.current = handlers.onCommentAdded || null
     setCommentsProduct(product)
     setCommentsSlideIn(false)
     requestAnimationFrame(() => {
       requestAnimationFrame(() => setCommentsSlideIn(true))
+    })
+  }, [])
+
+  const closeSharePanel = useCallback(() => {
+    setShareSlideIn(false)
+    window.setTimeout(() => setShareProduct(null), COMMENTS_SLIDE_MS)
+  }, [])
+
+  const openSharePanel = useCallback((product) => {
+    if (!product?._id) return
+    // Only one aside panel at a time — drop the comments panel if it's open.
+    setCommentsProduct(null)
+    setCommentsSlideIn(false)
+    setShareProduct(product)
+    setShareSlideIn(false)
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => setShareSlideIn(true))
     })
   }, [])
 
@@ -192,6 +215,13 @@ function HomePage() {
       closeCommentsPanel()
     }
   }, [commentsProduct, currentReel?._id, closeCommentsPanel])
+
+  useEffect(() => {
+    if (!shareProduct || !currentReel?._id) return
+    if (String(shareProduct._id) !== String(currentReel._id)) {
+      closeSharePanel()
+    }
+  }, [shareProduct, currentReel?._id, closeSharePanel])
 
   const quickLinks = [
     {
@@ -512,6 +542,7 @@ function HomePage() {
                   heightOverride="100%"
                   embedded
                   onOpenComments={openCommentsPanel}
+                  onOpenShare={openSharePanel}
                   onVisibleIndexChange={(index) => {
                     setVisibleReelIndex(index)
                     saveReelIndex(reelsStorageKey, index, isAuthenticated, userService.saveReelsProgress)
@@ -542,6 +573,23 @@ function HomePage() {
                 product={commentsProduct}
                 onClose={closeCommentsPanel}
                 onCommentAdded={() => commentAddedHandlerRef.current?.()}
+              />
+            </div>
+          )}
+          {shareProduct && (
+            <div
+              className="absolute inset-0 z-10 flex flex-col bg-white shadow-[-8px_0_24px_rgba(15,23,42,0.06)] transition-transform ease-out"
+              style={{
+                transitionDuration: `${COMMENTS_SLIDE_MS}ms`,
+                transform: shareSlideIn ? 'translateX(0)' : 'translateX(100%)',
+              }}
+            >
+              <ReelShareModal
+                asPanel
+                isOpen
+                product={shareProduct}
+                userId={user?._id}
+                onClose={closeSharePanel}
               />
             </div>
           )}

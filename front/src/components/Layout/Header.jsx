@@ -101,7 +101,6 @@ function Header() {
   const isCartPage = location.pathname === '/cart'
   const isPostAdFlow =
     location.pathname === '/post-ad' ||
-    location.pathname === '/post-ad-dynamic' ||
     location.pathname === '/post-ad/select-package' ||
     location.pathname === '/post-ad/storage' ||
     location.pathname.startsWith('/post-ad/payment')
@@ -159,12 +158,38 @@ function Header() {
                   {profileOpen && (
                     <div className="absolute right-0 top-full pt-1 z-[9999]" onMouseEnter={profileEnter} onMouseLeave={profileLeave}>
                       <div className="w-56 rounded-2xl border border-slate-200 bg-white shadow-2xl overflow-hidden">
+                        {/* User header */}
+                        <div className="flex items-center gap-3 px-4 py-3 bg-slate-50 border-b border-slate-100">
+                          {avatarSrc ? (
+                            <img src={avatarSrc} alt={displayName} className="h-9 w-9 rounded-full object-cover ring-2 ring-primary-100 flex-shrink-0" />
+                          ) : (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-100 text-primary-700 flex-shrink-0">
+                              <User className="h-4 w-4" />
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-900 truncate">{displayName}</p>
+                            <p className="text-xs text-slate-500 truncate">{user?.email || userSubcopy}</p>
+                          </div>
+                        </div>
                         <nav className="py-1">
-                          <Link to="/dashboard" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-primary-50">Profile</Link>
-                          <Link to="/dashboard/settings" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-primary-50">Settings</Link>
+                          <Link to="/dashboard" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
+                            <LayoutDashboard className="h-4 w-4 text-slate-400" />
+                            Profile Overview
+                          </Link>
+                          <Link to="/dashboard/settings" onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-slate-700 hover:bg-primary-50 hover:text-primary-700 transition-colors">
+                            <Settings className="h-4 w-4 text-slate-400" />
+                            Settings
+                          </Link>
+                          {isAdmin && (
+                            <a href={ADMIN_PANEL_URL} className="flex items-center gap-3 px-4 py-2.5 text-sm text-purple-600 hover:bg-purple-50 transition-colors">
+                              <Shield className="h-4 w-4" />
+                              Admin Panel
+                            </a>
+                          )}
                         </nav>
                         <div className="border-t border-slate-100">
-                          <button type="button" onClick={handleLogout} className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-red-50">
+                          <button type="button" onClick={handleLogout} className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors">
                             <LogOut className="h-4 w-4" /> Logout
                           </button>
                         </div>

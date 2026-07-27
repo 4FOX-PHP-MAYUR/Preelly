@@ -155,7 +155,21 @@ export const authService = {
   sendPhoneOtp: ({ phone }) => api.post('/auth/send-phone-otp', { phone }),
   verifyEmailOtp: ({ email, otp }) => api.post('/auth/verify-email-otp', { email, otp }),
   verifyPhoneOtp: ({ phone, otp }) => api.post('/auth/verify-phone-otp', { phone, otp }),
-  logout: () => api.post('/auth/logout'),
+  // Email-tab entry: decides login (existing) vs. new U-XXXXXXXX signup.
+  emailStart: ({ email }) => api.post('/auth/email/start', { email }),
+  // Completion-flow OTP verifiers (require BOTH email + mobile before login).
+  completeVerifyEmail: ({ email, otp }) => api.post('/auth/complete/verify-email', { email, otp }),
+  completeVerifyPhone: ({ phone, otp, phoneCountryCode, phoneCountryIso }) =>
+    api.post('/auth/complete/verify-phone', { phone, otp, phoneCountryCode, phoneCountryIso }),
+  // Link the missing identifier to an existing user + send its OTP.
+  mobileAttach: ({ email, phone, phoneCountryCode, phoneCountryIso }) =>
+    api.post('/auth/mobile/attach', { email, phone, phoneCountryCode, phoneCountryIso }),
+  emailAttach: ({ phone, email, phoneCountryCode, phoneCountryIso }) =>
+    api.post('/auth/email/attach', { phone, email, phoneCountryCode, phoneCountryIso }),
+  // persistAcrossRoutes: the logout button navigates immediately after dispatching,
+  // which rotates the route abort scope; without this the request is cancelled before
+  // it reaches the server and the auth cookie is never cleared (user gets re-logged-in).
+  logout: () => api.post('/auth/logout', {}, { persistAcrossRoutes: true }),
 }
 
 // Category service
@@ -393,6 +407,7 @@ export const userService = {
     }),
   getFollowers: (userId) => api.get(`/user/${userId}/followers`),
   getFollowing: (userId) => api.get(`/user/${userId}/following`),
+  searchUsers: (q, limit = 20) => api.get('/user/search', { params: { q, limit } }),
   getFollowRequests: () => api.get('/user/follow-requests'),
   getSuggestedUsers: (limit = 10) => api.get('/user/suggested', { params: { limit } }),
   getReelsProgress: () => asAuthOptional(() => api.get('/user/reels-progress'), { reelsProgress: {} }),
@@ -469,6 +484,8 @@ export const chatService = {
   createOrGetChat: (productId, sellerId, options = {}) =>
     api.post('/chats', { productId, sellerId, ...options }),
   createSupportChat: () => api.post('/chats', { type: 'support' }),
+  createGroup: ({ memberIds, name, productId, text } = {}) =>
+    api.post('/chats/group', { memberIds, name, productId, text }),
   sendMessage: (chatId, text, files) => {
     const fileList = !files ? [] : Array.isArray(files) ? files : [files]
     if (fileList.length > 0) {
@@ -489,6 +506,9 @@ export const cartService = {
   getCart: () => api.get('/cart'),
   // Add the product of a chat to the buyer's cart when an offer is accepted.
   addFromOffer: (chatId, amount) => api.post('/cart/from-offer', { chatId, amount }),
+  // Persist seller-approved Preelly inspection conditions onto the buyer's cart.
+  savePreellyConditions: (chatId, conditions, comment) =>
+    api.post('/cart/preelly-conditions', { chatId, conditions, comment }),
 }
 
 /**

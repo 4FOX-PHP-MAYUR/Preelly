@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import { adminService } from '@shared/services/api'
+import { adminService } from '@/services/api'
 import toast from 'react-hot-toast'
 import { getMediaUrl } from '@shared/utils/helpers'
 import {

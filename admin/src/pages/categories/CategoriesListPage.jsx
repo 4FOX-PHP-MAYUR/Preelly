@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { adminService } from '@shared/services/api'
+import { adminService } from '@/services/api'
 import PageHeader from '../../components/AdminUI/PageHeader'
 import AdminPage from '../../components/AdminUI/AdminPage'
 import DataTable from '../../components/AdminUI/DataTable'

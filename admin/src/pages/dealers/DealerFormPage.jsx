@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { adminService } from '@shared/services/api'
+import { adminService } from '@/services/api'
 import AdminFormShell from '../../components/AdminUI/AdminFormShell'
 import Input from '../../components/AdminUI/Input'
 import Textarea from '../../components/AdminUI/Textarea'

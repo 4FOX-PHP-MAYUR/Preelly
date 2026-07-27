@@ -25,7 +25,7 @@ function Footer() {
     location.pathname === '/verify-email-otp' ||
     location.pathname === '/verify-phone-otp'
   const isPostAdFlow =
-    location.pathname === '/post-ad' || location.pathname === '/post-ad-dynamic'
+    location.pathname === '/post-ad'
 
   const hideFooter =
     isHomePage || isReelsPage || isCategoryBrowsePage || isUserProfilePage || isAuthRoute || isDashboardRoute || isPostAdFlow

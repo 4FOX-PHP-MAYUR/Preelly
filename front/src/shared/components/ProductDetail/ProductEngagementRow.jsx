@@ -4,7 +4,7 @@ import { useSelector } from 'react-redux'
 import { Heart, MessageCircle, Send, Bookmark, Eye } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { interactionService } from '../../services/api'
-import { selectIsAuthenticated } from '../../store/slices/authSlice'
+import { selectIsAuthenticated, selectIsGuest } from '../../store/slices/authSlice'
 import { formatCompactCount } from './detailHelpers'
 
 function ActionPill({ icon: Icon, count, onClick, label, iconClassName = 'text-slate-500' }) {
@@ -24,6 +24,7 @@ function ActionPill({ icon: Icon, count, onClick, label, iconClassName = 'text-s
 function ProductEngagementRow({ product, viewCount: viewCountProp, embedded = false }) {
   const navigate = useNavigate()
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const isGuest = useSelector(selectIsGuest)
   const [isLiked, setIsLiked] = useState(false)
   const [isSaved, setIsSaved] = useState(Boolean(product.saved))
   const [likeCount, setLikeCount] = useState(product.likes?.length || 0)
@@ -49,7 +50,7 @@ function ProductEngagementRow({ product, viewCount: viewCountProp, embedded = fa
 
   const requireAuth = (message) => {
     toast.error(message)
-    navigate('/login')
+    if (!isGuest) navigate('/login')
   }
 
   const handleLike = async () => {

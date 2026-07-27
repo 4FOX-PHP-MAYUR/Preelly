@@ -5,6 +5,7 @@ import {
   Bell,
   ChevronDown,
   LayoutDashboard,
+  LogIn,
   LogOut,
   Menu,
   Search as SearchIcon,
@@ -18,8 +19,10 @@ import SearchBar from '../Search/SearchBar'
 import { MARKETPLACE_TOPBAR_DESKTOP } from './marketplaceLayoutStyles'
 import {
   logout,
+  exitGuestMode,
   selectIsAdmin,
   selectIsAuthenticated,
+  selectIsGuest,
   selectUser,
 } from '@shared/store/slices/authSlice'
 import { getMediaUrl, isUserVerified } from '@shared/utils/helpers'
@@ -56,6 +59,7 @@ function MarketplaceTopBar({ className = '', onToggleMobileMenu, topBarColSpan =
     ? new URLSearchParams(location.search).get('q') || ''
     : ''
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const isGuest = useSelector(selectIsGuest)
   const isAdmin = useSelector(selectIsAdmin)
   const user = useSelector(selectUser)
   const unreadChatCount = useSelector((state) => (isAuthenticated ? state.feed?.unreadCount || 0 : 0))
@@ -235,12 +239,61 @@ function MarketplaceTopBar({ className = '', onToggleMobileMenu, topBarColSpan =
               </div>
             )}
           </div>
+        ) : isGuest ? (
+          <div
+            className="relative flex-shrink-0"
+            onMouseEnter={profileEnter}
+            onMouseLeave={profileLeave}
+          >
+            <button
+              type="button"
+              onClick={() => setProfileOpen((o) => !o)}
+              title="Guest"
+              className="flex items-center gap-2 rounded-xl border border-transparent px-2 py-1.5 transition-all hover:border-slate-200 hover:bg-slate-50"
+            >
+              <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+                <User className="h-5 w-5" />
+              </span>
+              <span className="hidden text-sm font-medium text-slate-700 lg:block">Guest</span>
+              <ChevronDown className={`hidden h-4 w-4 flex-shrink-0 text-slate-400 transition-transform duration-200 lg:block ${profileOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {profileOpen && (
+              <div
+                className="absolute right-0 top-full z-[9999] pt-1"
+                onMouseEnter={profileEnter}
+                onMouseLeave={profileLeave}
+              >
+                <div className="w-56 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                  <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50 px-4 py-3">
+                    <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500">
+                      <User className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-slate-900">Guest</p>
+                      <p className="truncate text-xs text-slate-500">Browsing as guest</p>
+                    </div>
+                  </div>
+                  <div className="p-1">
+                    <Link
+                      to="/login"
+                      onClick={() => { dispatch(exitGuestMode()); setProfileOpen(false) }}
+                      className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-brand transition-colors hover:bg-brand-50"
+                    >
+                      <LogIn className="h-4 w-4" />
+                      Login / Sign Up
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
         ) : (
           <div className="hidden items-center gap-3 md:flex">
             <Link to="/login" className="text-sm font-medium text-slate-600 transition hover:text-brand">
               Login
             </Link>
-            <Link to="/signup" className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700">
+            <Link to="/login" className="rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700">
               Sign Up
             </Link>
           </div>

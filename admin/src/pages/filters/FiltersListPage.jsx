@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { adminService } from '@shared/services/api'
+import { adminService } from '@/services/api'
 import toast from 'react-hot-toast'
 import { getMediaUrl } from '@shared/utils/helpers'
 import AdminPage from '../../components/AdminUI/AdminPage'

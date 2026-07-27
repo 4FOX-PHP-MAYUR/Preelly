@@ -328,29 +328,29 @@ router.post('/user/:id/follow', authMiddleware, validateObjectId('id'), async (r
       return res.status(403).json({ message: 'You cannot follow this user' })
     }
 
-    // create pending follow request
+    // follow immediately — no approval required
     await Follow.create({
       follower: followerId,
       following: followingId,
-      status: 'pending',
-      requestedAt: new Date(),
+      status: 'active',
+      followedAt: new Date(),
     })
 
-    // notify the target user about the follow request
+    // notify the target user about the new follower
     const requester = await User.findById(followerId).select('name').lean()
     await Notification.create({
       user: followingId,
       actor: followerId,
-      type: 'follow_request',
+      type: 'follow',
       tab: 'general',
-      title: 'New follow request',
-      body: `${requester.name} wants to follow you`,
+      title: 'New follower',
+      body: `${requester.name} started following you`,
       data: { followerId: followerId.toString() },
     })
 
     const followerCount = await Follow.countDocuments({ following: followingId, status: 'active' })
     const followingCount = await Follow.countDocuments({ follower: followerId, status: 'active' })
-    res.json({ status: 'pending', following: false, pending: true, followerCount, followingCount })
+    res.json({ status: 'active', following: true, pending: false, followerCount, followingCount })
   } catch (error) {
     console.error('Error sending follow request:', error)
     if (error.name === 'CastError') {

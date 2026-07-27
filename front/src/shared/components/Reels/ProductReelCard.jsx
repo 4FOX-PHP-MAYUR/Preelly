@@ -18,7 +18,6 @@ import {
   Play,
   Pause,
   UserPlus,
-  Plus,
 } from 'lucide-react'
 import { buildSpecsLine, formatListingPrice, getProductListingPrice } from '@shared/components/categoryBrowseShared'
 import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
@@ -26,10 +25,9 @@ import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
 import toast from 'react-hot-toast'
 import { useSelector, useDispatch } from 'react-redux'
 import { interactionService, userService } from '@shared/services/api'
-import { refreshUser, selectIsAuthenticated, selectUser } from '@shared/store/slices/authSlice'
+import { refreshUser, selectIsAuthenticated, selectIsGuest, selectUser } from '@shared/store/slices/authSlice'
 import { selectIsMuted, toggleMute } from '@shared/store/slices/uiSlice'
 import { getMediaUrl, isIdentityVerified, isValidObjectId } from '@shared/utils/helpers'
-import { buildReelShareUrl } from '@shared/utils/reelShare'
 import { navigateToUser } from '@shared/utils/safeNavigate'
 import SafeUserLink from '../Navigation/SafeUserLink'
 import ReelCommentsModal from './ReelCommentsModal'
@@ -38,10 +36,11 @@ import QuickViewModal from './QuickViewModal'
 import ReelStreamPlayer from './ReelStreamPlayer'
 import useProductVideoViewTracking from '@shared/hooks/useProductVideoViewTracking'
 
-function ProductReelCard({ product, isVisible, embedded = false, onOpenComments = null }) {
+function ProductReelCard({ product, isVisible, embedded = false, onOpenComments = null, onOpenShare = null }) {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const isGuest = useSelector(selectIsGuest)
   const user = useSelector(selectUser)
   const isMuted = useSelector(selectIsMuted) // Global mute state
   const videoRef = useRef(null)
@@ -177,7 +176,7 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
     if (e) e.stopPropagation()
     if (!isAuthenticated) {
       toast.error('Please login to like products')
-      navigate('/login')
+      if (!isGuest) navigate('/login')
       return
     }
 
@@ -218,17 +217,17 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
   const handleShare = (e) => {
     e.stopPropagation()
     if (!isAuthenticated) {
-      if (navigator.share) {
-        navigator.share({
-          title: product.title,
-          text: `Check out ${product.title} - ${formatListingPrice(product)}`,
-          url: buildReelShareUrl(product._id),
-        }).catch(() => {
-          copyToClipboard()
-        })
-      } else {
-        copyToClipboard()
-      }
+      toast.error('Please login to share products')
+      if (!isGuest) navigate('/login')
+      return
+    }
+    const preferPanel =
+      embedded &&
+      onOpenShare &&
+      typeof window !== 'undefined' &&
+      window.matchMedia('(min-width: 1024px)').matches
+    if (preferPanel) {
+      onOpenShare(product)
       return
     }
     setShowShareModal(true)
@@ -248,7 +247,7 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
     if (e) e.stopPropagation()
     if (!isAuthenticated) {
       toast.error('Please login to follow users')
-      navigate('/login')
+      if (!isGuest) navigate('/login')
       return
     }
     const sellerId = product?.seller?._id ? String(product.seller._id) : String(product.seller || '')
@@ -272,11 +271,6 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
     }
   }
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(buildReelShareUrl(product._id))
-    toast.success('Reel link copied!')
-  }
-
   const handleTogglePlay = (e) => {
     if (e) e.stopPropagation()
     setUserPaused((prev) => {
@@ -290,7 +284,7 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
     e.stopPropagation()
     if (!isAuthenticated) {
       toast.error('Please login to save products')
-      navigate('/login')
+      if (!isGuest) navigate('/login')
       return
     }
 
@@ -314,7 +308,7 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
     
     if (!isAuthenticated) {
       toast.error('Please login to report products')
-      navigate('/login')
+      if (!isGuest) navigate('/login')
       return
     }
 
@@ -640,10 +634,6 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation()
-                  if (embedded && !isFollowing) {
-                    handleFollow(e)
-                    return
-                  }
                   const sellerId = product.seller?._id || product.seller
                   navigateToUser(navigate, sellerId)
                 }}
@@ -652,7 +642,7 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
                     ? 'h-9 w-9 rounded-full border border-slate-300 ring-1 ring-white/80'
                     : 'w-9 h-9 sm:w-10 sm:h-10 rounded-full border-2 border-white ring-2 ring-transparent hover:ring-white/30'
                 }`}
-                aria-label={embedded && !isFollowing ? 'Follow seller' : 'Seller profile'}
+                aria-label="Seller profile"
               >
                 {product.seller.avatar ? (
                   <img src={getMediaUrl(product.seller.avatar) || product.seller.avatar} alt={product.seller.name} className="h-full w-full object-cover" />
@@ -661,11 +651,6 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
                     <User className="h-4 w-4 text-white" />
                   </div>
                 )}
-                {embedded && !isFollowing ? (
-                  <span className="absolute -bottom-0.5 left-1/2 flex h-4 w-4 -translate-x-1/2 items-center justify-center rounded-full bg-red-500 ring-2 ring-white">
-                    <Plus className="h-2.5 w-2.5 text-white" strokeWidth={3} />
-                  </span>
-                ) : null}
               </button>
             ) : null}
           </div>

@@ -33,6 +33,16 @@ const CartSchema = new Schema(
     notes: { type: String, default: null },
     expiresAt: { type: Date, default: null },
 
+    // Preelly Pay inspection conditions the buyer proposed in chat and the seller
+    // approved. Persisted here so the cart/checkout page shows them regardless of
+    // how the buyer navigates in.
+    preellyInspection: {
+      conditions: { type: [String], default: [] },
+      comment: { type: String, default: '' },
+      approved: { type: Boolean, default: false },
+      approvedAt: { type: Date, default: null },
+    },
+
     // Soft delete
     deletedAt: { type: Date, default: null, index: true },
   },

@@ -4,9 +4,35 @@ const chatSchema = new mongoose.Schema(
   {
     type: {
       type: String,
-      enum: ['product', 'support'],
+      enum: ['product', 'support', 'group'],
       default: 'product',
       index: true,
+    },
+    // Group chats: an arbitrary set of members sharing one thread.
+    name: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    groupAvatar: {
+      type: String,
+      default: '',
+    },
+    participants: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    // Per-member unread counters for group chats: { [userId]: count }
+    unreadFor: {
+      type: Object,
+      default: () => ({}),
     },
     product: {
       type: mongoose.Schema.Types.ObjectId,
@@ -56,6 +82,8 @@ chatSchema.index({ type: 1, user: 1 }, { unique: true, partialFilterExpression: 
 
 chatSchema.index({ buyer: 1, updatedAt: -1 })
 chatSchema.index({ seller: 1, updatedAt: -1 })
+// Group chats: fetch by membership
+chatSchema.index({ type: 1, participants: 1, updatedAt: -1 })
 // Shortcut for “support chat by user”.
 chatSchema.index({ user: 1 })
 chatSchema.index({ lastMessageAt: -1 })

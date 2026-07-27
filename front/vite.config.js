@@ -3,14 +3,13 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, path.resolve(__dirname, '../api'), '')
-  const backendUrl = env.BACKEND_URL || 'http://localhost:8029'
+  // Front app reads env from front/.env only (not api/.env)
+  const envDir = path.resolve(__dirname)
+  const env = loadEnv(mode, envDir, '')
+  const backendUrl = env.VITE_BACKEND_URL || 'http://localhost:8029'
 
   return {
-    envDir: path.resolve(__dirname, '../api'),
-    define: {
-      'import.meta.env.VITE_BACKEND_URL': JSON.stringify(backendUrl),
-    },
+    envDir,
     plugins: [react()],
     resolve: {
       alias: {
@@ -48,23 +47,6 @@ export default defineConfig(({ mode }) => {
       host: '0.0.0.0',
       port: 8030,
       strictPort: true,
-      // Same proxy as dev, so a production `vite preview` on :8030 forwards API and
-      // the Socket.IO connection (with WebSocket upgrade) to the backend :8029.
-      proxy: {
-        '/api': {
-          target: backendUrl,
-          changeOrigin: true,
-        },
-        '/uploads': {
-          target: backendUrl,
-          changeOrigin: true,
-        },
-        '/socket.io': {
-          target: backendUrl,
-          changeOrigin: true,
-          ws: true,
-        },
-      },
     },
   }
 })

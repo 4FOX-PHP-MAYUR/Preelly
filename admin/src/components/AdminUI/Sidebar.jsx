@@ -36,10 +36,10 @@ function Sidebar({ mobileOpen = false, onMobileClose }) {
 
       if (item.to?.includes('?tab=')) {
         const tab = new URLSearchParams(item.to.split('?')[1]).get('tab')
-        return pathname === '/admin' && currentTab === tab
+        return pathname === '/' && currentTab === tab
       }
-      if (item.to === '/admin') {
-        return pathname === '/admin' && (!currentTab || currentTab === 'dashboard')
+      if (item.to === '/') {
+        return pathname === '/' && (!currentTab || currentTab === 'dashboard')
       }
       if (item.to) {
         return pathname === item.to || (item.to !== '/' && pathname.startsWith(item.to))
@@ -86,7 +86,7 @@ function Sidebar({ mobileOpen = false, onMobileClose }) {
           <div className={`flex items-center h-16 px-4 border-b border-slate-800/80 ${collapsed ? 'justify-center' : 'justify-between'}`}>
             {!collapsed ? (
               <>
-                <Link to="/admin" className="overflow-hidden" onClick={handleNavClick}>
+                <Link to="/" className="overflow-hidden" onClick={handleNavClick}>
                   <BrandLogo variant="dark" className="h-9 w-auto" />
                 </Link>
                 <button

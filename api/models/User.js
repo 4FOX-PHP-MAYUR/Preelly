@@ -31,8 +31,11 @@ const userSchema = new mongoose.Schema(
     },
     email: {
       type: String,
-      required: [true, 'Email is required'],
+      // Optional so a phone-first signup can create a record before an email is
+      // linked. `sparse` keeps the unique index from colliding on missing emails.
+      required: false,
       unique: true,
+      sparse: true,
       lowercase: true,
       trim: true,
       match: [/^\S+@\S+\.\S+$/, 'Please enter a valid email'],

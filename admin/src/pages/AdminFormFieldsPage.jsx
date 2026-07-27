@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { adminService } from '@shared/services/api'
+import { adminService } from '@/services/api'
 import PageHeader from '../components/AdminUI/PageHeader'
 import toast from 'react-hot-toast'
 import {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { adminService } from '@shared/services/api'
+import { adminService } from '@/services/api'
 import toast from 'react-hot-toast'
 import { ArrowLeft, Save, Shield } from 'lucide-react'
 

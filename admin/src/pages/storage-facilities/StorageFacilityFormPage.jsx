@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { adminService } from '@shared/services/api'
+import { adminService } from '@/services/api'
 import { getMediaUrl } from '@shared/utils/helpers'
 import AdminFormShell from '../../components/AdminUI/AdminFormShell'
 import FormSection from '../../components/AdminUI/FormSection'

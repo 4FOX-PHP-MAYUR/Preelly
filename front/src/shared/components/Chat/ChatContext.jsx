@@ -9,14 +9,47 @@ import { getSocket, disconnectSocket, setSocketUserId } from '../../services/soc
 const ChatContext = createContext(undefined)
 
 // Transform backend chat format to frontend format
-const transformChat = (chat, messages = []) => {
+const transformChat = (chat, messages = [], meId = null) => {
   const isSupport = chat.type === 'support'
+  const isGroup = chat.type === 'group'
 
   let productImage = ''
   if (!isSupport && chat.product) {
     if (chat.product.video) productImage = getMediaUrl(chat.product.video) || ''
     else if (chat.product.images?.length) productImage = getMediaUrl(chat.product.images[0]) || ''
     else if (typeof chat.product.image === 'string' && chat.product.image.startsWith('http')) productImage = chat.product.image
+  }
+
+  if (isGroup) {
+    const participants = (chat.participants || []).map((p) => ({
+      id: (typeof p === 'object' ? p._id : p) || null,
+      name: p?.name || p?.username || 'User',
+      avatar: p?.avatar ? getMediaUrl(p.avatar) || p.avatar : null,
+    }))
+    const meKey = meId ? String(meId) : null
+    const unread = meKey ? Number(chat.unreadFor?.[meKey] || 0) : 0
+    const groupName = chat.name || 'Group'
+    return {
+      id: chat._id || chat.id,
+      type: 'group',
+      isGroup: true,
+      groupName,
+      groupAvatar: chat.groupAvatar || '',
+      participants,
+      productId: chat.product && typeof chat.product === 'object' ? chat.product._id : chat.product,
+      productTitle: chat.product?.title || '',
+      productImage,
+      productSold: Boolean(chat.product?.isSold) || chat.product?.status === 'sold',
+      // Keep buyer/seller shape as no-ops so existing 1:1 helpers stay null-safe.
+      buyer: { id: null, name: groupName },
+      seller: { id: null, name: groupName },
+      messages: (messages || []).map(transformMessage),
+      updatedAt: chat.lastMessageAt || chat.updatedAt || new Date().toISOString(),
+      lastMessage: chat.lastMessage || '',
+      unreadForBuyer: 0,
+      unreadForSeller: 0,
+      unreadForMe: unread,
+    }
   }
 
   let transformedMessages = (messages || []).map(transformMessage)
@@ -44,6 +77,7 @@ const transformChat = (chat, messages = []) => {
       seller: { id: 'support', name: 'Support' },
       messages: transformedMessages,
       updatedAt: chat.lastMessageAt || chat.updatedAt || new Date().toISOString(),
+      lastMessage: chat.lastMessage || '',
       unreadForBuyer: chat.unreadForUser || 0,
       unreadForSeller: chat.unreadForAdmin || 0,
     }
@@ -58,6 +92,8 @@ const transformChat = (chat, messages = []) => {
     productId: productRef,
     productTitle: chat.product?.title || '',
     productImage,
+    // Sold products can no longer be chatted about / offered on.
+    productSold: Boolean(chat.product?.isSold) || chat.product?.status === 'sold',
     buyer: {
       id: buyerRef || null,
       name: chat.buyer?.name || chat.buyer?.username || 'Buyer',
@@ -68,6 +104,7 @@ const transformChat = (chat, messages = []) => {
     },
     messages: transformedMessages,
     updatedAt: chat.lastMessageAt || chat.updatedAt || new Date().toISOString(),
+    lastMessage: chat.lastMessage || '',
     unreadForBuyer: chat.unreadForBuyer || 0,
     unreadForSeller: chat.unreadForSeller || 0,
   }
@@ -75,10 +112,13 @@ const transformChat = (chat, messages = []) => {
 
 // Transform backend message format to frontend format
 const transformMessage = (message) => {
-  const senderId = typeof message.sender === 'object' ? message.sender._id : message.sender
+  const senderObj = typeof message.sender === 'object' ? message.sender : null
+  const senderId = senderObj ? senderObj._id : message.sender
   return {
     id: message._id || message.id,
     senderId: senderId,
+    senderName: senderObj?.name || senderObj?.username || null,
+    senderAvatar: senderObj?.avatar ? getMediaUrl(senderObj.avatar) || senderObj.avatar : null,
     senderRole: message.senderRole || null,
     type: message.type || 'text',
     callMeta: message.callMeta || null,
@@ -127,9 +167,12 @@ export function ChatProvider({ children }) {
           ? message.sender.id
           : message.sender
 
+        const senderObj = typeof message.sender === 'object' ? message.sender : null
         const transformedMessage = {
           id: message._id || message.id,
           senderId: senderId,
+          senderName: senderObj?.name || senderObj?.username || null,
+          senderAvatar: senderObj?.avatar ? getMediaUrl(senderObj.avatar) || senderObj.avatar : null,
           senderRole: null,
           type: message.type || 'text',
           callMeta: message.callMeta || null,
@@ -151,12 +194,14 @@ export function ChatProvider({ children }) {
             chatService.getChatById(chatId)
               .then((response) => {
                 const { chat, messages } = response.data
-                const transformedChat = transformChat(chat, messages || [])
-                transformedChat.messages = transformedChat.messages.map(msg => ({
-                  ...msg,
-                  senderRole: msg.senderId === transformedChat.buyer.id ? 'buyer' : 'seller',
-                }))
-                
+                const transformedChat = transformChat(chat, messages || [], user?._id)
+                if (!transformedChat.isGroup) {
+                  transformedChat.messages = transformedChat.messages.map(msg => ({
+                    ...msg,
+                    senderRole: msg.senderId === transformedChat.buyer.id ? 'buyer' : 'seller',
+                  }))
+                }
+
                 setThreads((current) => {
                   const exists = current.find(t => t.id === chatId)
                   if (exists) return current
@@ -175,6 +220,19 @@ export function ChatProvider({ children }) {
           // Check if message already exists (avoid duplicates)
           const messageExists = thread.messages.some((m) => m.id === transformedMessage.id)
           if (messageExists) return prev
+
+          if (thread.isGroup) {
+            const updated = [...prev]
+            updated[threadIndex] = {
+              ...thread,
+              messages: [...thread.messages, transformedMessage],
+              updatedAt: transformedMessage.createdAt,
+              lastMessage: message.text,
+              unreadForMe: !isOwnMessage ? (thread.unreadForMe || 0) + 1 : thread.unreadForMe,
+            }
+            const [updatedThread] = updated.splice(threadIndex, 1)
+            return [updatedThread, ...updated]
+          }
 
           // Determine sender role
           transformedMessage.senderRole =
@@ -256,9 +314,21 @@ export function ChatProvider({ children }) {
       const res = await chatService.getChats()
       const chats = res?.data?.chats || res?.data || []
       
-      // Transform chats - we don't load all messages for inbox, just the thread info
-      const transformedChats = (Array.isArray(chats) ? chats : []).map(chat => transformChat(chat, []))
-      setThreads(transformedChats)
+      // Transform chats - we don't load all messages for inbox, just the thread info.
+      // Preserve any messages already loaded for a thread so re-running loadChats (e.g.
+      // on navigation) doesn't wipe the open conversation back to an empty inbox row.
+      const transformedChats = (Array.isArray(chats) ? chats : []).map(chat => transformChat(chat, [], user?._id))
+      setThreads((prev) => {
+        const realCount = (msgs) =>
+          (msgs || []).filter(m => m.id !== 'last-message' && !String(m.id).startsWith('temp-')).length
+        return transformedChats.map((nt) => {
+          const existing = prev.find(p => p.id === nt.id)
+          if (existing && realCount(existing.messages) > realCount(nt.messages)) {
+            return { ...nt, messages: existing.messages }
+          }
+          return nt
+        })
+      })
     } catch (err) {
       console.error('Error loading chats:', err)
       setError(err.response?.data?.message || 'Failed to load chats')
@@ -266,7 +336,7 @@ export function ChatProvider({ children }) {
     } finally {
       setLoading(false)
     }
-  }, [isAuthenticated, location?.pathname])
+  }, [isAuthenticated, location?.pathname, user?._id])
 
   // Load chats on mount and when authentication changes
   useEffect(() => {
@@ -283,13 +353,15 @@ export function ChatProvider({ children }) {
       const response = await chatService.createOrGetChat(productId, sellerId)
       const { chat, messages } = response.data
 
-      const transformedChat = transformChat(chat, messages)
-      
+      const transformedChat = transformChat(chat, messages, user?._id)
+
       // Determine senderRole for messages by comparing with buyer/seller
-      transformedChat.messages = transformedChat.messages.map(msg => ({
-        ...msg,
-        senderRole: msg.senderId === transformedChat.buyer.id ? 'buyer' : 'seller',
-      }))
+      if (!transformedChat.isGroup) {
+        transformedChat.messages = transformedChat.messages.map(msg => ({
+          ...msg,
+          senderRole: msg.senderId === transformedChat.buyer.id ? 'buyer' : 'seller',
+        }))
+      }
 
       // Update threads list
       setThreads((prev) => {
@@ -382,6 +454,10 @@ export function ChatProvider({ children }) {
       setThreads((prev) =>
         prev.map((thread) => {
           if (thread.id !== threadId) return thread
+          if (thread.isGroup || viewerRole === 'group') {
+            if (!thread.unreadForMe) return thread
+            return { ...thread, unreadForMe: 0 }
+          }
           if (viewerRole === 'buyer' && thread.unreadForBuyer === 0) return thread
           if (viewerRole === 'seller' && thread.unreadForSeller === 0) return thread
           return {
@@ -456,13 +532,15 @@ export function ChatProvider({ children }) {
         const response = await chatService.getChatById(threadId)
         const { chat, messages } = response.data
 
-        const transformedChat = transformChat(chat, messages || [])
-        
+        const transformedChat = transformChat(chat, messages || [], user?._id)
+
         // Determine senderRole for messages
-        transformedChat.messages = transformedChat.messages.map(msg => ({
-          ...msg,
-          senderRole: msg.senderId === transformedChat.buyer.id ? 'buyer' : 'seller',
-        }))
+        if (!transformedChat.isGroup) {
+          transformedChat.messages = transformedChat.messages.map(msg => ({
+            ...msg,
+            senderRole: msg.senderId === transformedChat.buyer.id ? 'buyer' : 'seller',
+          }))
+        }
 
         // Update threads list - use functional update to avoid stale closure
         setThreads((prev) => {
@@ -496,6 +574,9 @@ export function ChatProvider({ children }) {
       const uid = String(userId)
       return threads
         .filter((thread) => {
+          if (thread.isGroup) {
+            return (thread.participants || []).some((p) => String(p.id) === uid)
+          }
           const buyerId = thread.buyer?.id != null ? String(thread.buyer.id) : null
           const sellerId = thread.seller?.id != null ? String(thread.seller.id) : null
           return buyerId === uid || sellerId === uid

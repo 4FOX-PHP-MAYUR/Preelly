@@ -1,13 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, MessageCircle, Send, ShieldCheck, Clock, Sparkles, Tags, ImageIcon, Info, Trash2, XCircle, Check, CheckCheck } from 'lucide-react'
+import { ArrowLeft, MessageCircle, Send, ShieldCheck, Clock, Sparkles, Tags, ImageIcon, Info, Trash2, XCircle, Check, CheckCheck, Paperclip, Play, X, FileText } from 'lucide-react'
 import { Link, useNavigate, useParams, useLocation } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { selectIsAuthenticated, selectUser } from '@shared/store/slices/authSlice'
 import { useChat } from '@shared/components/Chat/ChatContext'
 import ChatMessageRichContent from '@shared/components/Chat/ChatMessageRichContent'
-import { getMediaUrl } from '@shared/utils/helpers'
+import ChatAttachments from '@shared/components/Chat/ChatAttachments'
 import { getSocket } from '@shared/services/socket'
 import { chatService } from '@shared/services/api'
+
+const VIDEO_EXT_RE = /\.(mp4|mov|webm|mkv|avi|m4v|ogg)(\?|$)/i
+const IMAGE_EXT_RE = /\.(png|jpe?g|gif|webp|bmp|heic|heif|avif)(\?|$)/i
+
+// Classify a chat attachment (real or optimistic) so we can render it WhatsApp-style.
+function attachmentKind(att) {
+  const mime = att?.mimeType || att?.type || ''
+  const ref = att?.previewUrl || att?.url || att?.name || ''
+  if (mime.startsWith('video/') || VIDEO_EXT_RE.test(ref)) return 'video'
+  if (mime.startsWith('image/') || IMAGE_EXT_RE.test(ref)) return 'image'
+  return 'file'
+}
+
+const MAX_ATTACHMENT_MB = 25 // must match backend chatUpload fileSize limit
 
 function ChatThreadPage() {
   const { threadId } = useParams()
@@ -21,6 +35,9 @@ function ChatThreadPage() {
   const [condition, setCondition] = useState('good')
   const [category, setCategory] = useState('electronics')
   const [suggestion, setSuggestion] = useState({ min: 900, max: 1100, midpoint: 1000 })
+  const [pendingFiles, setPendingFiles] = useState([])
+  const [sending, setSending] = useState(false)
+  const fileInputRef = useRef(null)
   const bottomRef = useRef(null)
 
   const [thread, setThread] = useState(null)
@@ -243,20 +260,60 @@ function ChatThreadPage() {
     ? (typeof thread.seller === 'object' ? thread.seller : { id: thread.seller })
     : (typeof thread.buyer === 'object' ? thread.buyer : { id: thread.buyer })
 
+  const handleFilesSelected = (e) => {
+    const picked = Array.from(e.target.files || [])
+    e.target.value = '' // allow re-selecting the same file
+    if (picked.length === 0) return
+    const tooBig = picked.find((f) => f.size > MAX_ATTACHMENT_MB * 1024 * 1024)
+    if (tooBig) {
+      alert(`"${tooBig.name}" is larger than ${MAX_ATTACHMENT_MB}MB.`)
+      return
+    }
+    // Build preview URLs once, at selection time, to avoid leaking blobs on re-render.
+    const items = picked.map((file) => {
+      const kind = attachmentKind({ mimeType: file.type, name: file.name })
+      return { file, kind, previewUrl: kind === 'file' ? null : URL.createObjectURL(file) }
+    })
+    setPendingFiles((prev) => [...prev, ...items].slice(0, 10))
+  }
+
+  const removePendingFile = (idx) => {
+    setPendingFiles((prev) => {
+      const target = prev[idx]
+      if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl)
+      return prev.filter((_, i) => i !== idx)
+    })
+  }
+
   const handleSend = async () => {
-    if (!message.trim() || !thread) return
     const msg = message.trim()
+    const items = pendingFiles
+    const files = items.map((it) => it.file)
+    if ((!msg && files.length === 0) || !thread || sending) return
+
+    setSending(true)
     setMessage('') // Clear input immediately for better UX
-    
-    // Optimistically add message to UI
+    setPendingFiles([])
+
+    // Reuse the already-created preview URLs for the optimistic bubble.
+    const optimisticAttachments = items.map((it) => ({
+      previewUrl: it.previewUrl,
+      mimeType: it.file.type,
+      name: it.file.name,
+      size: it.file.size,
+    }))
+
+    const tempId = `temp-${Date.now()}`
     const tempMessage = {
-      id: `temp-${Date.now()}`,
+      id: tempId,
       senderId: user._id,
       senderRole: viewerRole,
+      type: files.length > 0 ? 'file' : 'text',
       text: msg,
+      attachments: optimisticAttachments,
       createdAt: new Date().toISOString(),
     }
-    
+
     // Update local thread immediately
     setThread((prev) => {
       if (!prev) return prev
@@ -266,25 +323,30 @@ function ChatThreadPage() {
         updatedAt: tempMessage.createdAt,
       }
     })
-    
+
     // Send to backend and update
     try {
       await sendMessage(thread.id, {
         senderId: user._id,
         senderRole: viewerRole,
         text: msg,
+        files: files.length > 0 ? files : undefined,
       })
-      // Thread will be synced from context via the useEffect above
+      // Thread syncs from context via the useEffect above; the real backend
+      // URL then replaces these previews. Object URLs are reclaimed on page unload.
     } catch (err) {
-      // On error, remove temp message and restore input
+      // On error, restore the input + files so the user can retry.
       setMessage(msg)
+      setPendingFiles(items)
       setThread((prev) => {
         if (!prev) return prev
         return {
           ...prev,
-          messages: prev.messages.filter(m => m.id !== tempMessage.id),
+          messages: prev.messages.filter(m => m.id !== tempId),
         }
       })
+    } finally {
+      setSending(false)
     }
   }
 
@@ -443,7 +505,17 @@ function ChatThreadPage() {
                         : 'bg-white border-gray-200 text-gray-900 rounded-bl-none'
                     }`}
                   >
-                    <ChatMessageRichContent text={msg.text} bubbleVariant={isSelf ? 'primary' : 'neutral'} />
+                    {Array.isArray(msg.attachments) && msg.attachments.length > 0 && (
+                      <div className={msg.text ? 'mb-2' : ''}>
+                        <ChatAttachments
+                          attachments={msg.attachments}
+                          isTemp={String(msg.id).startsWith('temp-')}
+                        />
+                      </div>
+                    )}
+                    {msg.text ? (
+                      <ChatMessageRichContent text={msg.text} bubbleVariant={isSelf ? 'primary' : 'neutral'} />
+                    ) : null}
                     <span className={`block text-[11px] mt-1 flex items-center justify-end gap-1 ${isSelf ? (msg.readAt ? 'text-white/90' : 'text-white/80') : 'text-gray-400'}`}>
                       <span>{time}</span>
                       {isSelf && (
@@ -478,7 +550,60 @@ function ChatThreadPage() {
         </div>
 
         <div className="border-t border-gray-200 px-4 sm:px-6 py-4 bg-white rounded-b-2xl mt-auto">
+          {pendingFiles.length > 0 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {pendingFiles.map((item, i) => {
+                const { kind, previewUrl, file } = item
+                return (
+                  <div key={i} className="relative h-20 w-20 overflow-hidden rounded-lg border border-gray-200 bg-gray-100">
+                    {kind === 'image' && (
+                      <img src={previewUrl} alt={file.name} className="h-full w-full object-cover" />
+                    )}
+                    {kind === 'video' && (
+                      <>
+                        <video src={previewUrl} className="h-full w-full bg-black object-cover" muted playsInline preload="metadata" />
+                        <span className="absolute inset-0 flex items-center justify-center">
+                          <Play className="h-6 w-6 text-white drop-shadow" fill="currentColor" />
+                        </span>
+                      </>
+                    )}
+                    {kind === 'file' && (
+                      <div className="flex h-full w-full flex-col items-center justify-center p-1 text-center">
+                        <FileText className="h-6 w-6 text-gray-400" />
+                        <span className="mt-1 w-full truncate px-1 text-[9px] text-gray-500">{file.name}</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removePendingFile(i)}
+                      className="absolute right-0.5 top-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-black/60 text-white hover:bg-black/80"
+                      aria-label="Remove attachment"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
           <div className="flex items-end space-x-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              className="hidden"
+              onChange={handleFilesSelected}
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-gray-300 text-gray-500 hover:bg-gray-50 hover:text-primary-600"
+              title="Attach photo or video"
+              aria-label="Attach photo or video"
+            >
+              <Paperclip className="h-5 w-5" />
+            </button>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -489,7 +614,7 @@ function ChatThreadPage() {
             />
             <button
               onClick={handleSend}
-              disabled={!message.trim()}
+              disabled={(!message.trim() && pendingFiles.length === 0) || sending}
               className="btn-primary inline-flex items-center justify-center h-11 px-4 disabled:opacity-60 disabled:cursor-not-allowed"
             >
               <Send className="h-4 w-4 mr-2" />

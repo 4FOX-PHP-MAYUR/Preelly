@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import {
   ArrowLeft, Bookmark, Briefcase, Building2, Car, Check, CheckCheck,
-  FileText, Image as ImageIcon, LayoutGrid, MessageCircle, Mic, Paperclip, Phone, Plus,
+  FileText, Image as ImageIcon, LayoutGrid, MessageCircle, Mic, Paperclip, Phone, Play, Plus,
   Search, Send, Settings, Shirt, Smartphone, Sofa, Square, Video, X,
 } from 'lucide-react'
 import { selectUser, selectIsAuthenticated } from '@shared/store/slices/authSlice'
@@ -12,9 +12,12 @@ import BrandLogo from '@shared/components/BrandLogo'
 import MarketplaceTopBar from '../components/Layout/MarketplaceTopBar'
 import MarketplaceLogoBlock from '../components/Layout/MarketplaceLogoBlock'
 import { MARKETPLACE_LOGO_CELL } from '../components/Layout/marketplaceLayoutStyles'
-import { cartService } from '@shared/services/api'
+import SidebarCategoryList from '../components/Layout/SidebarCategoryList'
+import { cartService, productService, checkoutServicePublicService } from '@shared/services/api'
+import { PreellyPayModal, derivePreellyConditions, PREELLY_PAY_CHARGE } from '@shared/components/PreellyPayModal'
 import { useChat } from '@shared/components/Chat/ChatContext'
 import { useCall } from '@shared/components/Call/CallContext'
+import ChatAttachments, { isVideoAttachment } from '@shared/components/Chat/ChatAttachments'
 import { getMediaUrl } from '@shared/utils/helpers'
 import toast from 'react-hot-toast'
 
@@ -139,7 +142,168 @@ export function parseOfferAmount(text) {
   return m ? m[1] : null
 }
 
-function OfferBubble({ amount, isSelf, senderName, senderAvatar, onAccept, onReject, onCounter }) {
+const ACCEPT_RE = /^✅\s*Offer accepted/
+export function isAcceptMessage(text) {
+  return ACCEPT_RE.test(String(text || '').trim())
+}
+
+const REJECT_RE = /^❌\s*Offer rejected/
+export function isRejectMessage(text) {
+  return REJECT_RE.test(String(text || '').trim())
+}
+
+// An offer is a "response action" if it accepts, rejects, or counters (a new offer).
+function isOfferAction(text) {
+  return Boolean(parseOfferAmount(text)) || isAcceptMessage(text) || isRejectMessage(text)
+}
+
+// ── Preelly Pay inspection-conditions handshake (encoded as chat messages) ──────
+// A buyer sends their chosen inspection conditions to the seller for approval;
+// the seller replies with approve/reject. All three are plain-text messages so
+// they flow through the normal chat pipeline (no schema/socket changes needed).
+const PREELLY_REQ_RE = /^🔍\s*Preelly Inspection Conditions/
+const PREELLY_APPROVE_RE = /^✅\s*Preelly Inspection Approved/
+const PREELLY_REJECT_RE = /^❌\s*Preelly Inspection Rejected/
+
+function isPreellyRequest(text) {
+  return PREELLY_REQ_RE.test(String(text || '').trim())
+}
+function isPreellyApprove(text) {
+  return PREELLY_APPROVE_RE.test(String(text || '').trim())
+}
+function isPreellyReject(text) {
+  return PREELLY_REJECT_RE.test(String(text || '').trim())
+}
+function isPreellyResponse(text) {
+  return isPreellyApprove(text) || isPreellyReject(text)
+}
+
+const PREELLY_REQ_HEADER = '🔍 Preelly Inspection Conditions'
+const PREELLY_APPROVE_MSG = '✅ Preelly Inspection Approved'
+const PREELLY_REJECT_MSG = '❌ Preelly Inspection Rejected'
+
+// Encode the buyer's selection into a message body (bullet list + optional note).
+function buildPreellyRequestText(conditions, comment) {
+  let text = PREELLY_REQ_HEADER
+  for (const c of conditions) text += `\n• ${c}`
+  if (comment && comment.trim()) text += `\nComment: ${comment.trim()}`
+  return text
+}
+
+// Parse a request message body back into { conditions, comment }.
+function parsePreellyRequest(text) {
+  const lines = String(text || '').split('\n')
+  const conditions = lines
+    .filter((l) => l.trim().startsWith('•'))
+    .map((l) => l.replace(/^\s*•\s*/, '').trim())
+    .filter(Boolean)
+  const commentLine = lines.find((l) => /^\s*comment:/i.test(l))
+  const comment = commentLine ? commentLine.replace(/^\s*comment:\s*/i, '').trim() : ''
+  return { conditions, comment }
+}
+
+// Card shown for a Preelly inspection-conditions request. The seller (not self)
+// gets Approve/Reject buttons while pending; the buyer (self) sees the waiting
+// notice, then the approved/rejected outcome (with a Proceed to cart CTA once
+// approved and locked).
+function PreellyRequestBubble({ conditions, comment, isSelf, status, onApprove, onReject, onProceed, onNewCondition, onProceedPlain }) {
+  const chips = (
+    <div className="flex flex-wrap gap-2">
+      {conditions.map((c) => (
+        <span
+          key={c}
+          className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs text-slate-700"
+        >
+          {c}
+          <span className="flex h-4 w-4 items-center justify-center rounded-full bg-green-500 text-white">
+            <Check className="h-2.5 w-2.5" strokeWidth={3} />
+          </span>
+        </span>
+      ))}
+    </div>
+  )
+
+  return (
+    <div className={`w-[320px] max-w-full rounded-2xl border border-indigo-100 bg-white shadow-sm overflow-hidden ${isSelf ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
+      <div className="border-b border-slate-100 bg-indigo-50/60 px-4 py-3">
+        <p className="text-sm font-bold text-slate-900">Preelly Inspection Conditions</p>
+      </div>
+      <div className="px-4 py-3">
+        {chips}
+        {comment && (
+          <p className="mt-3 text-xs text-slate-500">
+            <span className="font-semibold text-slate-600">Comment:</span> {comment}
+          </p>
+        )}
+
+        {isSelf ? (
+          status === 'approved' ? (
+            <div className="mt-3">
+              <p className="text-sm font-medium text-green-600">
+                Approved — these conditions are locked for the Preelly inspection.
+              </p>
+              <button
+                type="button"
+                onClick={onProceed}
+                className="mt-2.5 w-full rounded-lg bg-[#1414e6] py-2 text-sm font-semibold text-white hover:bg-[#1010c4]"
+              >
+                Proceed to cart
+              </button>
+            </div>
+          ) : status === 'rejected' ? (
+            <div className="mt-3">
+              <p className="text-sm font-medium text-red-500">Seller rejected these conditions.</p>
+              <div className="mt-2.5 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onNewCondition}
+                  className="flex-1 rounded-lg border border-[#1414e6] py-2 text-sm font-semibold text-[#1414e6] hover:bg-indigo-50"
+                >
+                  New Condition
+                </button>
+                <button
+                  type="button"
+                  onClick={onProceedPlain}
+                  className="flex-1 rounded-lg bg-[#1414e6] py-2 text-sm font-semibold text-white hover:bg-[#1010c4]"
+                >
+                  Proceed to cart
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-amber-600">
+              Your selected inspection conditions are awaiting seller approval. Once approved, they
+              will be locked for the Preelly inspection.
+            </p>
+          )
+        ) : status === 'approved' ? (
+          <p className="mt-3 text-sm font-medium text-green-600">You approved these conditions</p>
+        ) : status === 'rejected' ? (
+          <p className="mt-3 text-sm font-medium text-red-500">You rejected these conditions</p>
+        ) : (
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onApprove}
+              className="flex-1 rounded-full bg-green-600 py-2.5 text-sm font-medium text-white hover:bg-green-700"
+            >
+              Approve
+            </button>
+            <button
+              type="button"
+              onClick={onReject}
+              className="flex-1 rounded-full bg-violet-100 py-2.5 text-sm font-medium text-violet-700 hover:bg-violet-200"
+            >
+              Reject
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function OfferBubble({ amount, isSelf, senderName, senderAvatar, locked = false, onAccept, onReject, onCounter }) {
   const [counter, setCounter] = useState('')
   const [done, setDone] = useState(null) // 'accepted' | 'rejected' | 'countered'
 
@@ -161,20 +325,21 @@ function OfferBubble({ amount, isSelf, senderName, senderAvatar, onAccept, onRej
   }
 
   return (
-    <div className="w-[300px] max-w-full rounded-2xl rounded-bl-sm border border-gray-200 bg-white shadow-sm overflow-hidden">
-      <div className="px-4 pt-3 pb-2 border-b border-gray-100">
-        <p className="text-xs font-semibold text-gray-500">Offer For Your Ad</p>
-        <div className="flex items-center gap-2 mt-2">
-          <Ava src={senderAvatar} name={senderName} size={28} />
-          <span className="text-sm font-medium text-gray-800">{senderName || 'Buyer'}</span>
+    <div className={`w-[300px] max-w-full rounded-2xl rounded-bl-sm border border-gray-200 bg-white shadow-sm overflow-hidden ${locked ? 'opacity-60' : ''}`}>
+      <div className="px-4 pt-4 pb-4 border-b border-gray-100 text-center">
+        <p className="text-base font-bold text-gray-900">Offer For Your Ad</p>
+        <div className="mt-4 flex flex-col items-center gap-2">
+          <Ava src={senderAvatar} name={senderName} size={56} />
+          <span className="text-sm font-semibold text-gray-900">{senderName || 'Buyer'}</span>
         </div>
+        <p className="mt-4 text-sm text-gray-700">
+          You have got an offer of{' '}
+          <span className="text-blue-400 font-medium">AED</span>{' '}
+          <span className="text-lg font-bold text-blue-600">{amount}</span>
+        </p>
       </div>
 
       <div className="px-4 py-3">
-        <p className="text-sm text-gray-700">
-          You have got an offer of{' '}
-          <span className="font-bold text-blue-600">AED {amount}</span>
-        </p>
 
         {done === 'accepted' ? (
           <p className="mt-3 text-sm font-medium text-green-600">You accepted this offer</p>
@@ -182,6 +347,8 @@ function OfferBubble({ amount, isSelf, senderName, senderAvatar, onAccept, onRej
           <p className="mt-3 text-sm font-medium text-red-500">You rejected this offer</p>
         ) : done === 'countered' ? (
           <p className="mt-3 text-sm font-medium text-violet-600">Counter offer sent</p>
+        ) : locked ? (
+          <p className="mt-3 text-sm font-medium text-gray-500">This offer is closed</p>
         ) : (
           <>
             <input
@@ -195,7 +362,7 @@ function OfferBubble({ amount, isSelf, senderName, senderAvatar, onAccept, onRej
             <button
               type="button"
               onClick={() => { onAccept(); setDone('accepted') }}
-              className="mt-3 w-full rounded-lg bg-green-600 py-2 text-sm font-medium text-white hover:bg-green-700"
+              className="mt-3 w-full rounded-full bg-green-600 py-2.5 text-sm font-medium text-white hover:bg-green-700"
             >
               Accept
             </button>
@@ -203,14 +370,14 @@ function OfferBubble({ amount, isSelf, senderName, senderAvatar, onAccept, onRej
               <button
                 type="button"
                 onClick={() => { onReject(); setDone('rejected') }}
-                className="flex-1 rounded-lg bg-violet-100 py-2 text-sm font-medium text-violet-700 hover:bg-violet-200"
+                className="flex-[0.85] rounded-full bg-violet-100 py-2.5 text-sm font-medium text-violet-700 hover:bg-violet-200"
               >
                 Reject
               </button>
               <button
                 type="button"
                 onClick={submitCounter}
-                className="flex-1 rounded-lg bg-blue-600 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                className="flex-[1.15] rounded-full bg-blue-600 py-2.5 text-sm font-medium text-white hover:bg-blue-700"
               >
                 Send Counter offer
               </button>
@@ -251,94 +418,15 @@ function Ava({ src, name = '?', size = 40, online = false }) {
   )
 }
 
-// ── Attachment grid (WhatsApp-style) ─────────────────────────────────────────
-async function openWithApp(fileUrl, name) {
-  try {
-    const res = await fetch(fileUrl)
-    const blob = await res.blob()
-    const blobUrl = URL.createObjectURL(blob)
-    const el = document.createElement('a')
-    el.href = blobUrl
-    el.download = name || 'file'
-    document.body.appendChild(el)
-    el.click()
-    document.body.removeChild(el)
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 2000)
-  } catch {
-    // fallback: let browser decide
-    const el = document.createElement('a')
-    el.href = fileUrl
-    el.download = name || 'file'
-    el.click()
-  }
-}
-
-function AttachGrid({ attachments, isTemp }) {
-  const imgs = attachments.filter(a => a.mimeType?.startsWith('image/'))
-  const auds = attachments.filter(a => a.mimeType?.startsWith('audio/'))
-  const docs = attachments.filter(a => !a.mimeType?.startsWith('image/') && !a.mimeType?.startsWith('audio/'))
-  const MAX = 4
-  const extra = Math.max(0, imgs.length - MAX)
-  const shown = imgs.slice(0, MAX)
-  const url = (a) => a._local ? a.url : getMediaUrl(a.url)
-
-  const handleClick = (a) => {
-    if (a._local) return // temp preview — not yet uploaded
-    openWithApp(url(a), a.name)
-  }
-
-  const gridStyle = {
-    display: 'grid',
-    gap: 2,
-    width: 244,
-    gridTemplateColumns: shown.length === 1 ? '1fr' : '1fr 1fr',
-  }
-  const cellH = shown.length === 1 ? 220 : 120
-
-  return (
-    <div className={isTemp ? 'opacity-60' : ''}>
-      {shown.length > 0 && (
-        <div style={gridStyle} className="overflow-hidden rounded-2xl">
-          {shown.map((a, i) => {
-            const isLast = i === shown.length - 1 && extra > 0
-            const spanRow = shown.length === 3 && i === 0
-            return (
-              <div key={i} style={{ gridRow: spanRow ? 'span 2' : undefined, position: 'relative' }}>
-                <button onClick={() => handleClick(a)} className="block w-full focus:outline-none" style={{ cursor: a._local ? 'default' : 'pointer' }}>
-                  <img src={url(a)} alt={a.name}
-                    style={{ width: '100%', height: spanRow ? 242 : cellH, objectFit: 'cover', display: 'block' }} />
-                </button>
-                {isLast && (
-                  <div onClick={() => handleClick(a)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.52)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-                    <span style={{ color: '#fff', fontSize: 22, fontWeight: 700 }}>+{extra}</span>
-                  </div>
-                )}
-              </div>
-            )
-          })}
-        </div>
-      )}
-      {auds.map((a, i) => (
-        <div key={i} className="px-3 py-2.5 bg-white">
-          <audio controls src={url(a)} className="max-w-[240px] h-10" style={{ colorScheme: 'light' }} />
-        </div>
-      ))}
-      {docs.map((a, i) => (
-        <button key={i} onClick={() => handleClick(a)}
-          className="flex w-full items-center gap-2 px-4 py-3 bg-white hover:bg-gray-50 transition-colors">
-          <FileText className="h-5 w-5 text-purple-500 shrink-0" />
-          <span className="text-sm text-gray-700 truncate max-w-[160px]">{a.name}</span>
-        </button>
-      ))}
-    </div>
-  )
-}
-
 // ── Chat-list row ─────────────────────────────────────────────────────────────
 function ChatRow({ thread, userId, isActive, onClick }) {
+  const isGroup = thread.isGroup
   const isBuyer = thread.buyer?.id && String(thread.buyer.id) === String(userId)
-  const other   = isBuyer ? thread.seller : thread.buyer
-  const unread  = isBuyer ? (thread.unreadForBuyer || 0) : (thread.unreadForSeller || 0)
+  const other   = isGroup
+    ? { name: thread.groupName, avatar: thread.groupAvatar || null }
+    : (isBuyer ? thread.seller : thread.buyer)
+  const unread  = isGroup ? (thread.unreadForMe || 0) : (isBuyer ? (thread.unreadForBuyer || 0) : (thread.unreadForSeller || 0))
+  const groupSubtitle = isGroup ? `${(thread.participants || []).length} members` : null
 
   const lastMsg = useMemo(() => {
     const real = (thread.messages || []).filter(m => m.id !== 'last-message')
@@ -356,7 +444,9 @@ function ChatRow({ thread, userId, isActive, onClick }) {
 
   const title = thread.type === 'support'
     ? 'Support'
-    : thread.productTitle || other?.name || 'Chat'
+    : isGroup
+      ? thread.groupName
+      : thread.productTitle || other?.name || 'Chat'
 
   return (
     <button
@@ -376,7 +466,7 @@ function ChatRow({ thread, userId, isActive, onClick }) {
         </div>
 
         <div className="flex items-center gap-1.5 mt-0.5">
-          <span className="text-xs text-gray-500 truncate">{other?.name || 'User'}</span>
+          <span className="text-xs text-gray-500 truncate">{groupSubtitle || other?.name || 'User'}</span>
           {unread > 0 && <span className="h-1.5 w-1.5 rounded-full bg-purple-600 shrink-0" />}
         </div>
 
@@ -400,6 +490,7 @@ function ChatRow({ thread, userId, isActive, onClick }) {
 // ── Sidebar — matches HomePage sidebar design ────────────────────────────────
 function ChatSidebar({ chatUnread }) {
   const dispatch        = useDispatch()
+  const navigate        = useNavigate()
   const { pathname }    = useLocation()
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const { rootCategories } = useSelector((state) => state.categories)
@@ -419,41 +510,26 @@ function ChatSidebar({ chatUnread }) {
 
       {/* Post Your Ad */}
       <Link
-        to={isAuthenticated ? '/post-ad-dynamic' : '/login'}
+        to={isAuthenticated ? '/post-ad' : '/login'}
         className="mb-6 flex items-center justify-center gap-2 w-full rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white hover:bg-primary-700 transition-colors"
       >
         <Plus className="h-4 w-4" />
         Post Your Ad
       </Link>
 
-      {/* Categories */}
+      {/* Categories — same component as the search listing sidebar */}
       {rootCategories.length > 0 && (
-        <div className="mb-5">
+        <div className="mb-8">
           <Link
             to="/categories"
-            className="inline-block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 mb-2 transition hover:text-primary-700"
+            className="mb-3 inline-block text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400 transition hover:text-primary-700"
           >
             Categories
           </Link>
-          <div className="space-y-0.5">
-            {rootCategories.map((cat) => {
-              const Icon  = getCategoryIcon(cat.name)
-              const count = cat.productCount ?? cat.count ?? 0
-              return (
-                <Link
-                  key={cat._id || cat.id}
-                  to={`/categories/${cat._id || cat.id}/products`}
-                  className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-100"
-                >
-                  <Icon className="h-4 w-4 shrink-0 text-slate-500" />
-                  <span className="flex-1 truncate">{cat.name}</span>
-                  {count > 0 && (
-                    <span className="text-xs text-slate-400">{fmtCompactCount(count)}</span>
-                  )}
-                </Link>
-              )
-            })}
-          </div>
+          <SidebarCategoryList
+            categories={rootCategories}
+            onSelect={(cat) => navigate(`/categories/${cat._id || cat.id}/products`)}
+          />
         </div>
       )}
 
@@ -532,6 +608,11 @@ export default function ChatInboxPage() {
   const [activeThread, setActiveThread] = useState(null)
   const [loadingThread, setLoadingThread] = useState(false)
   const [cartCount, setCartCount] = useState(0)
+  // Preelly Pay inspection-conditions popup (buyer gates "Proceed to cart" behind
+  // choosing conditions + seller approval). Conditions/charge come from the DB.
+  const [preellyModalOpen, setPreellyModalOpen] = useState(false)
+  const [preellyConditionsList, setPreellyConditionsList] = useState([])
+  const [preellyCharge, setPreellyCharge] = useState(PREELLY_PAY_CHARGE)
   const [search,  setSearch]  = useState('')
   const [tab,     setTab]     = useState('All')
   const [text,    setText]    = useState('')
@@ -542,6 +623,7 @@ export default function ChatInboxPage() {
   const [attachFiles, setAttachFiles] = useState([])
   const [offerOpen, setOfferOpen] = useState(false)
   const [offerAmount, setOfferAmount] = useState('')
+  const [soldModalOpen, setSoldModalOpen] = useState(false)
   const [isRecording, setIsRecording] = useState(false)
   const [recordingTime, setRecordingTime] = useState(0)
 
@@ -610,6 +692,7 @@ export default function ChatInboxPage() {
 
   // total unread for sidebar badge
   const chatUnread = useMemo(() => threads.reduce((sum, t) => {
+    if (t.isGroup) return sum + (t.unreadForMe || 0)
     const isBuyer = t.buyer?.id && String(t.buyer.id) === String(currentUser?._id)
     return sum + (isBuyer ? (t.unreadForBuyer || 0) : (t.unreadForSeller || 0))
   }, 0), [threads, currentUser?._id])
@@ -628,25 +711,55 @@ export default function ChatInboxPage() {
       .then(t => {
         if (dead || !t) return
         setActiveThread(t)
-        const isBuyer = t.buyer?.id && String(t.buyer.id) === String(currentUser?._id)
-        markThreadRead(t.id, isBuyer ? 'buyer' : 'seller')
+        if (t.isGroup) {
+          markThreadRead(t.id, 'group')
+        } else {
+          const isBuyer = t.buyer?.id && String(t.buyer.id) === String(currentUser?._id)
+          markThreadRead(t.id, isBuyer ? 'buyer' : 'seller')
+        }
       })
       .finally(() => { if (!dead) setLoadingThread(false) })
     return () => { dead = true }
   }, [activeId]) // eslint-disable-line
 
   // sync socket updates
+  const realCount = (msgs) =>
+    (msgs || []).filter(m => m.id !== 'last-message' && !String(m.id).startsWith('temp-')).length
   useEffect(() => {
     if (!activeId) return
     const ctx = threads.find(t => t.id === activeId)
     if (!ctx) return
     setActiveThread(prev => {
-      if (!prev) return ctx
+      // No active thread yet, or a different thread is selected → adopt the list row
+      // (the full thread with messages lands right after via getThreadById).
+      if (!prev || prev.id !== activeId) return ctx
+      // Never downgrade a fully-loaded thread to the lightweight inbox row, which
+      // carries no messages. Only adopt ctx when it actually has new messages.
       const prevIds = new Set((prev.messages || []).map(m => m.id).filter(id => !id.startsWith('temp-')))
       const hasNew  = (ctx.messages || []).some(m => m.id !== 'last-message' && !prevIds.has(m.id))
-      return hasNew ? ctx : prev
+      if (!hasNew) return prev
+      if (realCount(ctx.messages) < realCount(prev.messages)) return prev
+      return ctx
     })
   }, [threads, activeId])
+
+  // Self-heal: if the open thread resolved with no messages but its inbox row shows
+  // there IS a conversation (a last message exists), refetch it once. Guards against
+  // any race where the lightweight inbox row replaced the fully-loaded thread.
+  const healedThreadRef = useRef(null)
+  useEffect(() => {
+    if (!activeThread || loadingThread) return
+    if (realCount(activeThread.messages) > 0) { healedThreadRef.current = null; return }
+    const row = threads.find(t => t.id === activeThread.id)
+    const rowHasConversation = Boolean(
+      (row?.lastMessage && String(row.lastMessage).trim()) ||
+      (row?.messages || []).some(m => m.id !== 'last-message')
+    )
+    if (rowHasConversation && healedThreadRef.current !== activeThread.id) {
+      healedThreadRef.current = activeThread.id
+      getThreadById(activeThread.id).then(t => { if (t && realCount(t.messages) > 0) setActiveThread(t) })
+    }
+  }, [activeThread, threads, loadingThread]) // eslint-disable-line
 
   // auto scroll
   useEffect(() => {
@@ -661,11 +774,13 @@ export default function ChatInboxPage() {
   const doSend = async (msg = text.trim(), files = attachFiles) => {
     if (!msg && files.length === 0) return
     if (!activeId || !activeThread || sending) return
+    // A sold product can no longer be chatted about or offered on (1:1 threads only).
+    if (!activeThread.isGroup && activeThread.productSold) { setSoldModalOpen(true); return }
     setText('')
     setAttachFiles([])
     setSending(true)
     const isBuyer = activeThread.buyer?.id && String(activeThread.buyer.id) === String(currentUser?._id)
-    const senderRole = isBuyer ? 'buyer' : 'seller'
+    const senderRole = activeThread.isGroup ? null : (isBuyer ? 'buyer' : 'seller')
     try {
       await sendMessage(activeId, { senderId: currentUser._id, senderRole, text: msg, files: files.length > 0 ? files : null })
     } catch (err) {
@@ -679,6 +794,7 @@ export default function ChatInboxPage() {
 
   // A quick-reply chip either sends its text, or — for "Make an offer" — opens the offer modal.
   const handleQuickReply = qr => {
+    if (!activeThread?.isGroup && activeThread?.productSold) { setSoldModalOpen(true); return }
     if (qr === 'Make an offer') { setOfferAmount(''); setOfferOpen(true) }
     else doSend(qr)
   }
@@ -707,18 +823,22 @@ export default function ChatInboxPage() {
 
   // filtered list
   const filtered = useMemo(() => threads.filter(t => {
+    const isGroup = t.isGroup
     const isBuyer = t.buyer?.id && String(t.buyer.id) === String(currentUser?._id)
-    const other   = isBuyer ? t.seller : t.buyer
-    const unread  = isBuyer ? (t.unreadForBuyer || 0) : (t.unreadForSeller || 0)
+    const other   = isGroup ? { name: t.groupName } : (isBuyer ? t.seller : t.buyer)
+    const unread  = isGroup ? (t.unreadForMe || 0) : (isBuyer ? (t.unreadForBuyer || 0) : (t.unreadForSeller || 0))
     if (search) {
       const q = search.toLowerCase()
       const last = (t.messages || []).filter(m => m.id !== 'last-message').slice(-1)[0]?.text || ''
+      const memberNames = isGroup ? (t.participants || []).map(p => p.name).join(' ') : ''
       if (!(other?.name || '').toLowerCase().includes(q) &&
           !(t.productTitle || '').toLowerCase().includes(q) &&
+          !memberNames.toLowerCase().includes(q) &&
           !last.toLowerCase().includes(q)) return false
     }
-    if (tab === 'Buying'  && !isBuyer)   return false
-    if (tab === 'Selling' && isBuyer)    return false
+    // Groups aren't buying/selling threads — only show under All/Unread.
+    if (tab === 'Buying'  && (isGroup || !isBuyer)) return false
+    if (tab === 'Selling' && (isGroup || isBuyer))  return false
     if (tab === 'Unread'  && unread === 0) return false
     return true
   }), [threads, search, tab, currentUser?._id])
@@ -726,6 +846,14 @@ export default function ChatInboxPage() {
   const otherParty = useMemo(() => {
     if (!activeThread || !currentUser) return null
     if (activeThread.type === 'support') return { name: 'Support', avatar: null }
+    if (activeThread.isGroup) {
+      return {
+        name: activeThread.groupName,
+        avatar: activeThread.groupAvatar || null,
+        isGroup: true,
+        memberCount: (activeThread.participants || []).length,
+      }
+    }
     const isBuyer = activeThread.buyer?.id && String(activeThread.buyer.id) === String(currentUser._id)
     return isBuyer ? activeThread.seller : activeThread.buyer
   }, [activeThread, currentUser])
@@ -754,6 +882,115 @@ export default function ChatInboxPage() {
   }, [isBuyer, activeThread?.productId])
 
   useEffect(() => { refreshCartCount() }, [refreshCartCount])
+
+  // An offer card is locked (grayed, no further action) only once a RESPONSE
+  // action — accept, reject, or a counter offer — follows it in the thread. The
+  // latest, still-unanswered offer stays actionable, and this survives refresh
+  // because it's derived purely from message order.
+  const lockedOfferIds = useMemo(() => {
+    const msgs = (activeThread?.messages || []).filter(m => m.id !== 'last-message')
+    const set = new Set()
+    msgs.forEach((m, i) => {
+      if (!parseOfferAmount(m.text)) return
+      if (msgs.slice(i + 1).some(mm => isOfferAction(mm.text))) set.add(m.id)
+    })
+    return set
+  }, [activeThread])
+
+  const goToCart = useCallback(() => {
+    navigate(`/cart${activeThread?.productId ? `?productId=${activeThread.productId}` : ''}`)
+  }, [navigate, activeThread?.productId])
+
+  // Proceed to cart carrying the seller-approved Preelly conditions, so the cart
+  // page pre-selects "Pay Through Preelly" and shows the locked conditions.
+  const goToCartWithPreelly = useCallback((conditions, comment) => {
+    navigate(`/cart${activeThread?.productId ? `?productId=${activeThread.productId}` : ''}`, {
+      state: { preellyApproved: true, preellyConditions: conditions, preellyComment: comment },
+    })
+  }, [navigate, activeThread?.productId])
+
+  // Load this product's inspection conditions + the Preelly Pay charge so the
+  // popup mirrors the cart page exactly. The cart endpoint already resolves the
+  // product's multi-select features to labels, so we read from there first (the
+  // product is in the buyer's cart after the offer is accepted); if it isn't in
+  // the cart yet we fall back to the product detail API. Buyer-only.
+  useEffect(() => {
+    const pid = activeThread?.productId
+    if (!isBuyer || !pid) {
+      setPreellyConditionsList([])
+      setPreellyCharge(PREELLY_PAY_CHARGE)
+      return
+    }
+    let cancelled = false
+    ;(async () => {
+      try {
+        const [cartRes, sRes] = await Promise.all([
+          cartService.getCart().catch(() => null),
+          checkoutServicePublicService.listActiveCheckoutServices().catch(() => null),
+        ])
+        if (cancelled) return
+
+        const items = cartRes?.data?.data || []
+        const match = items.find(
+          (it) => String(it.productId?._id || it.productId) === String(pid),
+        )
+        let product = match?.productId
+        if (!product || typeof product !== 'object') {
+          const pRes = await productService.getProductById(pid).catch(() => null)
+          if (cancelled) return
+          product = pRes?.data || null
+        }
+        setPreellyConditionsList(derivePreellyConditions(product))
+
+        const svcs = sRes?.data?.data || []
+        const svc = svcs.find((s) => s.serviceName?.toLowerCase().includes('preelly'))
+        setPreellyCharge(Number(svc?.price ?? PREELLY_PAY_CHARGE))
+      } catch {
+        if (!cancelled) setPreellyConditionsList([])
+      }
+    })()
+    return () => { cancelled = true }
+  }, [isBuyer, activeThread?.productId])
+
+  // Approve/reject status for each Preelly request message, derived from the
+  // first response that follows it — so it survives refresh like offer locking.
+  const preellyStatusById = useMemo(() => {
+    const msgs = (activeThread?.messages || []).filter(m => m.id !== 'last-message')
+    const map = new Map()
+    msgs.forEach((m, i) => {
+      if (!isPreellyRequest(m.text)) return
+      const resp = msgs.slice(i + 1).find(mm => isPreellyResponse(mm.text))
+      if (resp) map.set(m.id, isPreellyApprove(resp.text) ? 'approved' : 'rejected')
+    })
+    return map
+  }, [activeThread])
+
+  // "Proceed to cart" → always gate on the Preelly Pay popup first. Conditions
+  // load asynchronously and stream into the open modal as they arrive.
+  const handleProceedClick = () => {
+    setPreellyModalOpen(true)
+  }
+
+  // Seller approved the conditions → notify the chat AND persist them onto the
+  // buyer's cart row so the cart/checkout page shows them regardless of nav.
+  const handleApprovePreelly = async (conditions, comment) => {
+    doSend(PREELLY_APPROVE_MSG)
+    try {
+      await cartService.savePreellyConditions(activeId, conditions, comment)
+    } catch {
+      /* non-fatal: the approval message is already in the thread */
+    }
+  }
+
+  // Buyer confirmed the popup → send the conditions to the seller for approval.
+  const handleConfirmPreellyChat = (selected, comment) => {
+    if (!selected || selected.length === 0) {
+      toast.error('Select at least one condition')
+      return
+    }
+    setPreellyModalOpen(false)
+    doSend(buildPreellyRequestText(selected, comment))
+  }
 
   const grouped = useMemo(() => {
     if (!activeThread) return []
@@ -918,10 +1155,16 @@ export default function ChatInboxPage() {
                   <p className="text-base font-bold text-gray-900 leading-tight truncate">
                     {otherParty?.name || 'User'}
                   </p>
-                  <p className="flex items-center gap-1.5 text-xs font-medium text-green-500 mt-0.5">
-                    <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />
-                    Active Now
-                  </p>
+                  {otherParty?.isGroup ? (
+                    <p className="text-xs font-medium text-gray-500 mt-0.5 truncate">
+                      {(activeThread?.participants || []).map(p => p.name).join(', ')}
+                    </p>
+                  ) : (
+                    <p className="flex items-center gap-1.5 text-xs font-medium text-green-500 mt-0.5">
+                      <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />
+                      Active Now
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -939,28 +1182,6 @@ export default function ChatInboxPage() {
                       )}
                     </button>
                   )}
-                  <button
-                    title="Voice call"
-                    onClick={() => otherParty?.id && startCall(
-                      { id: otherParty.id, name: otherParty.name },
-                      'audio',
-                      activeId,
-                    )}
-                    className="text-gray-400 hover:text-purple-600 transition-colors"
-                  >
-                    <Phone className="h-5 w-5" />
-                  </button>
-                  <button
-                    title="Video call"
-                    onClick={() => otherParty?.id && startCall(
-                      { id: otherParty.id, name: otherParty.name },
-                      'video',
-                      activeId,
-                    )}
-                    className="text-gray-400 hover:text-purple-600 transition-colors"
-                  >
-                    <Video className="h-5 w-5" />
-                  </button>
                 </div>
               </div>
 
@@ -1002,11 +1223,14 @@ export default function ChatInboxPage() {
                                 className={`flex items-end gap-2 ${isSelf ? 'justify-end' : 'justify-start'}`}>
 
                                 {!isSelf && (
-                                  <Ava src={otherParty?.avatar || otherParty?.image}
-                                    name={otherParty?.name} size={32} />
+                                  <Ava src={activeThread?.isGroup ? m.senderAvatar : (otherParty?.avatar || otherParty?.image)}
+                                    name={activeThread?.isGroup ? m.senderName : otherParty?.name} size={32} />
                                 )}
 
                                 <div className={`flex flex-col max-w-[60%] ${isSelf ? 'items-end' : 'items-start'}`}>
+                                  {!isSelf && activeThread?.isGroup && m.senderName && (
+                                    <span className="mb-0.5 ml-1 text-[11px] font-semibold text-purple-600">{m.senderName}</span>
+                                  )}
                                   {m.type === 'call' ? (
                                     <CallBubble message={m} isSelf={isSelf} />
                                   ) : offerAmount ? (
@@ -1015,15 +1239,48 @@ export default function ChatInboxPage() {
                                       isSelf={isSelf}
                                       senderName={otherParty?.name}
                                       senderAvatar={otherParty?.avatar || otherParty?.image}
+                                      locked={lockedOfferIds.has(m.id)}
                                       onAccept={() => acceptOffer(offerAmount)}
                                       onReject={() => doSend('❌ Offer rejected')}
                                       onCounter={amt => doSend(`💰 Offer: AED ${amt.toLocaleString()}`)}
                                     />
+                                  ) : isAcceptMessage(m.text) ? (
+                                    <div className={`rounded-2xl px-4 py-3 border border-green-200 bg-green-50 shadow-sm ${isSelf ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
+                                      <p className="text-sm font-medium text-green-700 whitespace-pre-wrap break-words">{m.text}</p>
+                                      {isBuyer && (
+                                        <button
+                                          type="button"
+                                          onClick={handleProceedClick}
+                                          className="mt-2.5 w-full rounded-lg bg-[#1414e6] py-2 text-sm font-semibold text-white hover:bg-[#1010c4]"
+                                        >
+                                          Proceed to cart
+                                        </button>
+                                      )}
+                                    </div>
+                                  ) : isPreellyRequest(m.text) ? (() => {
+                                    const { conditions, comment } = parsePreellyRequest(m.text)
+                                    return (
+                                      <PreellyRequestBubble
+                                        conditions={conditions}
+                                        comment={comment}
+                                        isSelf={isSelf}
+                                        status={preellyStatusById.get(m.id) || null}
+                                        onApprove={() => handleApprovePreelly(conditions, comment)}
+                                        onReject={() => doSend(PREELLY_REJECT_MSG)}
+                                        onProceed={() => goToCartWithPreelly(conditions, comment)}
+                                        onNewCondition={() => setPreellyModalOpen(true)}
+                                        onProceedPlain={goToCart}
+                                      />
+                                    )
+                                  })() : isPreellyResponse(m.text) ? (
+                                    <div className={`rounded-2xl px-4 py-2.5 border shadow-sm ${isPreellyApprove(m.text) ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'} ${isSelf ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
+                                      <p className={`text-sm font-medium whitespace-pre-wrap break-words ${isPreellyApprove(m.text) ? 'text-green-700' : 'text-red-600'}`}>{m.text}</p>
+                                    </div>
                                   ) : (m.attachments?.length > 0 || m.attachment) ? (() => {
                                     const atts = m.attachments?.length > 0 ? m.attachments : (m.attachment ? [m.attachment] : [])
                                     return (
                                       <div className={`rounded-2xl overflow-hidden border border-gray-200 shadow-sm ${isSelf ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
-                                        <AttachGrid attachments={atts} isTemp={isTemp} />
+                                        <ChatAttachments attachments={atts} isTemp={isTemp} />
                                         {m.text ? <p className="px-4 py-2 text-sm text-gray-800 whitespace-pre-wrap break-words border-t border-gray-100 bg-white">{m.text}</p> : null}
                                       </div>
                                     )
@@ -1125,6 +1382,43 @@ export default function ChatInboxPage() {
                 </div>
               )}
 
+              {/* Product-sold modal — blocks chat/offer on a sold product */}
+              {soldModalOpen && (
+                <div
+                  className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4"
+                  onClick={() => setSoldModalOpen(false)}
+                >
+                  <div
+                    className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl text-center"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
+                      <X className="h-6 w-6 text-red-500" />
+                    </div>
+                    <h2 className="mt-4 text-lg font-bold text-gray-900">Product no longer available</h2>
+                    <p className="mt-2 text-sm text-gray-600">
+                      The product "<span className="font-semibold">{activeThread?.productTitle || 'you are looking for'}</span>" you looking is no more available.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setSoldModalOpen(false)}
+                      className="mt-6 w-full rounded-full bg-[#1414e6] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#1010c4]"
+                    >
+                      Okay
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Preelly Pay conditions popup — gates "Proceed to cart" for the buyer */}
+              <PreellyPayModal
+                open={preellyModalOpen}
+                conditions={preellyConditionsList}
+                charge={preellyCharge}
+                onClose={() => setPreellyModalOpen(false)}
+                onConfirm={handleConfirmPreellyChat}
+              />
+
               {/* input */}
               <div className="px-5 py-3 bg-white border-t border-gray-200 shrink-0">
                 <input ref={fileRef} type="file" multiple className="hidden"
@@ -1136,6 +1430,13 @@ export default function ChatInboxPage() {
                       <div key={idx} className="relative group shrink-0">
                         {f.type.startsWith('image/') ? (
                           <img src={URL.createObjectURL(f)} alt="" className="h-16 w-16 rounded-xl object-cover" />
+                        ) : isVideoAttachment({ mimeType: f.type, name: f.name }) ? (
+                          <div className="relative h-16 w-16 overflow-hidden rounded-xl bg-black">
+                            <video src={URL.createObjectURL(f)} className="h-full w-full object-cover" muted playsInline preload="metadata" />
+                            <span className="absolute inset-0 flex items-center justify-center">
+                              <Play className="h-6 w-6 text-white drop-shadow" fill="currentColor" />
+                            </span>
+                          </div>
                         ) : f.type.startsWith('audio/') ? (
                           <div className="h-16 w-16 rounded-xl bg-purple-50 border border-purple-200 flex flex-col items-center justify-center gap-1">
                             <Mic className="h-6 w-6 text-purple-500" />

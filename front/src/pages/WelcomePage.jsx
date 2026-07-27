@@ -14,7 +14,7 @@ const WelcomePage = () => {
       return
     }
     if (!user?.isProfileComplete) {
-      navigate('/profile-setup', { replace: true })
+      navigate('/dashboard/settings', { replace: true })
     }
   }, [isAuthenticated, user, navigate])
 

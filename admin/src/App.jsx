@@ -34,8 +34,8 @@ function AdminRoute({ children }) {
   const isAdmin = useSelector(selectIsAdmin)
   const hydrating = useSelector(selectAuthHydrating)
   if (hydrating) return null
-  if (!isAuthenticated) return <Navigate to="/admin/login" />
-  if (!isAdmin) return <Navigate to="/admin/login" />
+  if (!isAuthenticated) return <Navigate to="/login" />
+  if (!isAdmin) return <Navigate to="/login" />
   return children
 }
 
@@ -62,10 +62,10 @@ function App() {
     <AdminLayout>
       <Suspense fallback={null}>
         <Routes>
-          <Route path="/" element={<Navigate to="/admin" replace />} />
-          <Route path="/admin/login" element={<AdminLoginPage />} />
+          <Route path="/" element={<Navigate to="/" replace />} />
+          <Route path="/login" element={<AdminLoginPage />} />
           <Route
-            path="/admin/products/:id"
+            path="/products/:id"
             element={
               <AdminRoute>
                 <ProductDetailPage />
@@ -73,7 +73,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/chat/:threadId"
+            path="/chat/:threadId"
             element={
               <AdminRoute>
                 <ChatThreadPage />
@@ -81,7 +81,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/users/:id"
+            path="/users/:id"
             element={
               <AdminRoute>
                 <AdminUserProfilePage />
@@ -89,7 +89,7 @@ function App() {
             }
           />
           <Route
-            path="/admin"
+            path="/"
             element={
               <AdminRoute>
                 <AdminDashboardPage />
@@ -97,7 +97,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/categories/*"
+            path="/categories/*"
             element={
               <AdminRoute>
                 <AdminCategoriesRoutes />
@@ -105,7 +105,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/filters/*"
+            path="/filters/*"
             element={
               <AdminRoute>
                 <AdminFiltersRoutes />
@@ -113,7 +113,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/dealers/*"
+            path="/dealers/*"
             element={
               <AdminRoute>
                 <AdminDealersRoutes />
@@ -121,7 +121,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/emirates/*"
+            path="/emirates/*"
             element={
               <AdminRoute>
                 <AdminEmiratesRoutes />
@@ -129,7 +129,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/packages/*"
+            path="/packages/*"
             element={
               <AdminRoute>
                 <AdminPackagesRoutes />
@@ -137,7 +137,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/storage-facilities/*"
+            path="/storage-facilities/*"
             element={
               <AdminRoute>
                 <AdminStorageFacilitiesRoutes />
@@ -145,7 +145,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/checkout-services/*"
+            path="/checkout-services/*"
             element={
               <AdminRoute>
                 <AdminCheckoutServicesRoutes />
@@ -153,7 +153,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/coupons/*"
+            path="/coupons/*"
             element={
               <AdminRoute>
                 <AdminCouponsRoutes />
@@ -161,7 +161,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/buyers-coupons/*"
+            path="/buyers-coupons/*"
             element={
               <AdminRoute>
                 <AdminBuyersCouponsRoutes />
@@ -169,7 +169,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/roles/*"
+            path="/roles/*"
             element={
               <AdminRoute>
                 <AdminRolesRoutes />
@@ -177,7 +177,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/identity-verification"
+            path="/identity-verification"
             element={
               <AdminRoute>
                 <AdminIdentityVerificationPage />
@@ -185,7 +185,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/field-types/*"
+            path="/field-types/*"
             element={
               <AdminRoute>
                 <AdminFieldTypesRoutes />
@@ -193,7 +193,7 @@ function App() {
             }
           />
           <Route
-            path="/admin/form-fields/*"
+            path="/form-fields/*"
             element={
               <AdminRoute>
                 <AdminFormFieldsRoutes />

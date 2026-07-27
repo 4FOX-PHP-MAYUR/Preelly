@@ -18,10 +18,9 @@ import {
 } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { selectIsAuthenticated, selectUser } from '@shared/store/slices/authSlice'
+import { selectIsAuthenticated, selectIsGuest, selectUser } from '@shared/store/slices/authSlice'
 import { interactionService } from '@shared/services/api'
 import { getMediaUrl } from '@shared/utils/helpers'
-import { buildReelShareUrl } from '@shared/utils/reelShare'
 import toast from 'react-hot-toast'
 import ReelCommentsModal from './ReelCommentsModal'
 import ReelShareModal from './ReelShareModal'
@@ -29,6 +28,7 @@ import ReelShareModal from './ReelShareModal'
 function QuickViewModal({ product, onClose, onOpenChat }) {
   const navigate = useNavigate()
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const isGuest = useSelector(selectIsGuest)
   const currentUser = useSelector(selectUser)
 
   // ── local interaction state (mirrors ProductReelCard pattern) ──
@@ -82,7 +82,7 @@ function QuickViewModal({ product, onClose, onOpenChat }) {
     e.stopPropagation()
     if (!isAuthenticated) {
       toast.error('Please login to like products')
-      navigate('/login')
+      if (!isGuest) navigate('/login')
       return
     }
     const prev = isLiked
@@ -104,7 +104,7 @@ function QuickViewModal({ product, onClose, onOpenChat }) {
     e.stopPropagation()
     if (!isAuthenticated) {
       toast.error('Please login to save products')
-      navigate('/login')
+      if (!isGuest) navigate('/login')
       return
     }
     const prev = isSaved
@@ -130,14 +130,8 @@ function QuickViewModal({ product, onClose, onOpenChat }) {
   const handleShare = (e) => {
     e.stopPropagation()
     if (!isAuthenticated) {
-      // unauthenticated: native share / clipboard fallback
-      const url = buildReelShareUrl(product._id)
-      if (navigator.share) {
-        navigator.share({ title: product.title, url }).catch(() => {})
-      } else {
-        navigator.clipboard.writeText(url)
-        toast.success('Link copied!')
-      }
+      toast.error('Please login to share products')
+      if (!isGuest) navigate('/login')
       return
     }
     setShowShare(true)
@@ -171,7 +165,7 @@ function QuickViewModal({ product, onClose, onOpenChat }) {
     e.stopPropagation()
     if (!isAuthenticated) {
       toast.error('Please login to chat')
-      navigate('/login')
+      if (!isGuest) navigate('/login')
       return
     }
     handleClose()

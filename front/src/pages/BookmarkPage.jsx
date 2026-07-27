@@ -108,7 +108,7 @@ function LeftSidebar({ rootCategories, quickLinks }) {
 
       {/* Post Your Ad */}
       <Link
-        to="/post-ad-dynamic"
+        to="/post-ad"
         className="flex items-center justify-center gap-2 rounded-2xl bg-primary-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-primary-700 mb-7"
       >
         <Plus className="h-4 w-4" />

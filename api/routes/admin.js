@@ -1344,7 +1344,7 @@ router.post(
   ]),
   async (req, res) => {
   try {
-    const { name, slug, parentId, sortOrder = 0, isActive = true, colorCode, xOrder } = req.body
+    const { name, slug, parentId, sortOrder = 0, isActive = true, colorCode, xOrder, isChild } = req.body
     if (!name) return res.status(400).json({ message: 'name is required' })
     if (parentId) {
       if (!Types.ObjectId.isValid(parentId)) return res.status(400).json({ message: 'Invalid parentId' })
@@ -1363,6 +1363,8 @@ router.post(
       ...(categoryImage ? { categoryImage } : {}),
       ...(colorCode !== undefined && String(colorCode).trim() !== '' ? { colorCode: String(colorCode).trim() } : {}),
       ...(xOrder !== undefined && String(xOrder).trim() !== '' ? { xOrder: Number(xOrder) } : {}),
+      // Defaults to 0 when not provided.
+      isChild: Number(isChild) || 0,
     })
     await category.save()
     res.status(201).json(category)
@@ -1431,7 +1433,7 @@ router.patch(
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
     const category = await Category.findById(id)
     if (!category) return res.status(404).json({ message: 'Category not found' })
-    const { name, slug, parentId, sortOrder, isActive, clear_image, clear_categoryImage, colorCode, xOrder } = req.body
+    const { name, slug, parentId, sortOrder, isActive, clear_image, clear_categoryImage, colorCode, xOrder, isChild } = req.body
     if (parentId !== undefined) {
       if (parentId) {
         if (!Types.ObjectId.isValid(parentId)) return res.status(400).json({ message: 'Invalid parentId' })
@@ -1472,6 +1474,10 @@ router.patch(
     }
     if (xOrder !== undefined) {
       category.xOrder = String(xOrder).trim() !== '' ? Number(xOrder) : 0
+    }
+    // Defaults to 0 when provided empty/invalid.
+    if (isChild !== undefined) {
+      category.isChild = Number(isChild) || 0
     }
     await category.save()
     res.json(category)

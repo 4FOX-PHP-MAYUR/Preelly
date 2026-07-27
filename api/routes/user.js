@@ -733,6 +733,36 @@ router.get('/suggested', authMiddleware, async (req, res) => {
   }
 })
 
+// @route   GET /api/user/search
+// @desc    Search active users by name (used by the share panel). Requires at
+//          least 3 characters; returns an empty list otherwise.
+// @access  Private
+router.get('/search', authMiddleware, async (req, res) => {
+  try {
+    const q = String(req.query.q || '').trim()
+    if (q.length < 3) return res.json({ users: [] })
+
+    const limit = Math.min(30, Number(req.query.limit || 20))
+    // Escape regex metacharacters so a raw query can't break the pattern.
+    const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+    const users = await User.find({
+      _id: { $ne: req.user._id },
+      status: 'active',
+      name: { $regex: safe, $options: 'i' },
+    })
+      .select('name avatar isVerified')
+      .sort({ name: 1 })
+      .limit(limit)
+      .lean()
+
+    res.json({ users })
+  } catch (error) {
+    console.error('Error searching users:', error)
+    res.status(500).json({ message: 'Error searching users' })
+  }
+})
+
 // ─── Saved Locations ────────────────────────────────────────────────────────
 
 // @route   GET /api/user/locations

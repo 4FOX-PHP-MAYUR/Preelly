@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { adminService } from '@shared/services/api'
+import { adminService } from '@/services/api'
 import {
   AdminPage,
   PageHeader,

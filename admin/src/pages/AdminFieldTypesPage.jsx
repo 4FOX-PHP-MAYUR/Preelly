@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { adminService } from '@shared/services/api'
+import { adminService } from '@/services/api'
 import PageHeader from '../components/AdminUI/PageHeader'
 import toast from 'react-hot-toast'
 import { Edit2, Trash2, Plus, X, Search, ChevronUp, ChevronDown, Tag } from 'lucide-react'

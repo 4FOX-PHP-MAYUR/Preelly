@@ -7,6 +7,21 @@ const MAP_LIBRARIES = ['places']
 // Dubai, UAE — reasonable default center for this marketplace when geolocation isn't available.
 const DEFAULT_CENTER = { lat: 25.2048, lng: 55.2708 }
 
+// Build a "Building & Street Name" line from Google's structured address components.
+function streetLineFromGoogleComponents(components = []) {
+  const pick = (type) => components.find((c) => c.types?.includes(type))?.long_name
+  const building = pick('premise') || pick('subpremise')
+  const streetLine = [pick('street_number'), pick('route')].filter(Boolean).join(' ')
+  return [building, streetLine].filter(Boolean).join(', ') || null
+}
+
+// Same, from OpenStreetMap Nominatim's `address` object (fallback provider).
+function streetLineFromNominatim(addr = {}) {
+  const building = addr.building || addr.house_name
+  const streetLine = [addr.house_number, addr.road || addr.pedestrian || addr.footway].filter(Boolean).join(' ')
+  return [building, streetLine].filter(Boolean).join(', ') || null
+}
+
 /**
  * Draggable-pin location picker for the "Additional Details" step. Self-contained:
  * stores the picked coordinates + reverse-geocoded address into its own RHF fields
@@ -16,7 +31,7 @@ const DEFAULT_CENTER = { lat: 25.2048, lng: 55.2708 }
  * `readOnly` renders a smaller, non-draggable preview sourced from the already-saved
  * latitude/longitude (used by the review screen) instead of prompting for a fresh pick.
  */
-export function LocationMapPicker({ setValue, watch, readOnly = false }) {
+export function LocationMapPicker({ setValue, watch, onAddressChange, readOnly = false }) {
   const { isLoaded, loadError } = useJsApiLoader({
     id: 'preelly-google-maps',
     googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -41,22 +56,63 @@ export function LocationMapPicker({ setValue, watch, readOnly = false }) {
     )
   }, [readOnly])
 
+  // Reverse geocode via Google; if that fails (e.g. the Geocoding API isn't
+  // enabled on the key), fall back to OpenStreetMap's free Nominatim service.
+  const geocodeGoogle = useCallback(
+    (next) =>
+      new Promise((resolve) => {
+        if (!geocoderRef.current) return resolve(null)
+        geocoderRef.current.geocode({ location: next }, (results, status) => {
+          if (status === 'OK' && results?.[0]) {
+            resolve({
+              formatted: results[0].formatted_address,
+              street: streetLineFromGoogleComponents(results[0].address_components),
+            })
+          } else {
+            resolve(null)
+          }
+        })
+      }),
+    [],
+  )
+
   const applyPosition = useCallback(
-    (next) => {
+    async (next) => {
       setPosition(next)
       setValue('latitude', next.lat, { shouldDirty: true })
       setValue('longitude', next.lng, { shouldDirty: true })
 
-      if (!geocoderRef.current) return
-      geocoderRef.current.geocode({ location: next }, (results, status) => {
-        if (status === 'OK' && results?.[0]) {
-          const formatted = results[0].formatted_address
-          setAddress(formatted)
-          setValue('locationAddress', formatted, { shouldDirty: true })
+      let formatted = null
+      let street = null
+      const g = await geocodeGoogle(next)
+      if (g?.formatted) {
+        formatted = g.formatted
+        street = g.street
+      }
+      if (!formatted) {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&accept-language=en&lat=${next.lat}&lon=${next.lng}`,
+            { headers: { Accept: 'application/json' } },
+          )
+          const data = await res.json()
+          if (data?.display_name) {
+            formatted = data.display_name
+            street = streetLineFromNominatim(data.address)
+          }
+        } catch {
+          /* ignore — leave address unset */
         }
-      })
+      }
+
+      if (formatted) {
+        setAddress(formatted)
+        setValue('locationAddress', formatted, { shouldDirty: true })
+        // Fill the visible location textboxes (dynamic form fields) from the pin.
+        onAddressChange?.({ formatted, street })
+      }
     },
-    [setValue],
+    [setValue, geocodeGoogle, onAddressChange],
   )
 
   const onMapLoad = useCallback(() => {

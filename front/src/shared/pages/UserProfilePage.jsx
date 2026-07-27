@@ -198,7 +198,9 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
       if (typeof res.data.followerCount === 'number') {
         setFollowersCount(res.data.followerCount)
       }
-      if (newStatus === 'pending') {
+      if (newStatus === 'active') {
+        toast.success(`You are now following ${profileUser?.displayName || profileUser?.name || 'user'}`)
+      } else if (newStatus === 'pending') {
         toast.success(`Follow request sent to ${profileUser?.displayName || profileUser?.name || 'user'}`)
       } else if (newStatus === 'none') {
         toast.success(
@@ -302,7 +304,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
     }
 
     return (
-      <CategoryBrowseLayout featuredProducts={[]} layoutPreset={selfMode ? 'marketplace' : undefined} variant={selfMode ? 'listing' : undefined} showTrending={selfMode ? false : undefined} showMessages={selfMode ? false : undefined}>
+      <CategoryBrowseLayout featuredProducts={[]} layoutPreset="marketplace" variant="listing" showTrending={false} showMessages={false}>
         <div className="flex-1 overflow-y-auto p-4 sm:p-5">{skeleton}</div>
       </CategoryBrowseLayout>
     )
@@ -321,7 +323,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
     }
 
     return (
-      <CategoryBrowseLayout featuredProducts={[]} layoutPreset={selfMode ? 'marketplace' : undefined} variant={selfMode ? 'listing' : undefined} showTrending={selfMode ? false : undefined} showMessages={selfMode ? false : undefined}>
+      <CategoryBrowseLayout featuredProducts={[]} layoutPreset="marketplace" variant="listing" showTrending={false} showMessages={false}>
         <div className="flex-1 overflow-y-auto p-4 sm:p-5">{notFound}</div>
       </CategoryBrowseLayout>
     )
@@ -331,14 +333,14 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
   const displayName = profileUser.displayName || profileUser.name || 'User'
   const realRating = Number(profileUser.rating || 0)
   const realRatingCount = Number(profileUser.ratingCount || profileUser.rating?.count || 0)
-  // Placeholder values from the design, shown on your own profile until real data exists.
-  const rating = realRating > 0 ? realRating.toFixed(1) : selfMode ? '4.5' : '0.0'
-  const ratingCount = realRatingCount > 0 ? realRatingCount : selfMode ? 7 : 0
-  const hasRating = realRating > 0 || selfMode
+  // Placeholder values from the design, shown until real data exists.
+  const rating = realRating > 0 ? realRating.toFixed(1) : '4.5'
+  const ratingCount = realRatingCount > 0 ? realRatingCount : 7
+  const hasRating = true
   const bio =
     profileUser.bio ||
     profileUser.description ||
-    (selfMode ? 'Your Dream Car Starts Here 🚗\nBest Deals | Verified Cars ✔️' : '')
+    'Your Dream Car Starts Here 🚗\nBest Deals | Verified Cars ✔️'
   const verified = isIdentityVerified(profileUser) || profileUser.isVerified
 
   const profileBody = (
@@ -542,7 +544,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
       {isAdminUserDetail ? (
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">{profileBody}</div>
       ) : (
-        <CategoryBrowseLayout featuredProducts={featuredProducts} layoutPreset={selfMode ? 'marketplace' : undefined} variant={selfMode ? 'listing' : undefined} showTrending={selfMode ? false : undefined} showMessages={selfMode ? false : undefined}>
+        <CategoryBrowseLayout featuredProducts={featuredProducts} layoutPreset="marketplace" variant="listing" showTrending={false} showMessages={false}>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto p-4 sm:p-5">{profileBody}</div>
           </div>

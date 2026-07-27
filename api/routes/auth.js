@@ -315,6 +315,19 @@ const deriveNameFromEmail = (email) => {
   return cleaned ? cleaned.charAt(0).toUpperCase() + cleaned.slice(1) : 'User'
 }
 
+// Default username for auto-created accounts: "U-" + 8 random digits, unique on
+// the users.name field (e.g. U-83748393).
+const generateUsername = async () => {
+  for (let i = 0; i < 10; i += 1) {
+    const digits = String(Math.floor(10000000 + Math.random() * 90000000))
+    const candidate = `U-${digits}`
+    // eslint-disable-next-line no-await-in-loop
+    const exists = await User.exists({ name: candidate })
+    if (!exists) return candidate
+  }
+  return `U-${String(Date.now()).slice(-8)}`
+}
+
 const sendRegistrationPhoneOtp = async (phone) => {
   const code = generateOtpCode()
   const otpHash = hashOtp(code)
@@ -696,12 +709,12 @@ router.post(
           return res.status(400).json({ message: 'Please enter a valid phone number' })
         }
 
+        // Phone-first signup: an unknown number is allowed — the account is created
+        // after the OTP is verified, then chained through email completion.
         const user = await findUserByPhone(phoneKey)
-        if (!user) {
-          return res.status(404).json({ message: 'No account found with this mobile number' })
+        if (user) {
+          await maybeUpgradeUserPhone(user, parsedPhone)
         }
-
-        await maybeUpgradeUserPhone(user, parsedPhone)
         await sendLoginPhoneOtp(phoneKey)
 
         return res.status(200).json({
@@ -802,16 +815,43 @@ router.post(
           return res.status(otpResult.status).json({ message: otpResult.message })
         }
 
-        const user = await findUserByPhone(phoneKey)
-        if (!user) {
-          return res.status(404).json({ message: 'User not found' })
-        }
+        let user = await findUserByPhone(phoneKey)
 
-        if (user.status === 'inactive') {
+        if (user && user.status === 'inactive') {
           return res.status(403).json({ message: 'Your account has been deactivated' })
         }
 
-        await maybeUpgradeUserPhone(user, parsedPhone)
+        if (!user) {
+          // Phone-first signup: create a phone-only account (name = U-XXXXXXXX),
+          // no email yet. The email-completion chain below makes it mandatory.
+          user = new User({
+            name: await generateUsername(),
+            isEmailVerified: false,
+            isPhoneVerified: true,
+            isVerified: false,
+            isProfileComplete: false,
+          })
+          applyPhoneFieldsToUser(user, parsedPhone)
+          user.isPhoneVerified = true
+          await user.save()
+        } else {
+          await maybeUpgradeUserPhone(user, parsedPhone)
+          // Mobile is now confirmed — persist the raw phone-verified flag so a later
+          // email completion (below) can finalize the account. isVerified is
+          // recomputed by the User pre-save hook from the two raw flags.
+          user.isPhoneVerified = true
+          await user.save()
+        }
+
+        // Phone login requires a linked, verified email before granting access.
+        // If none is linked yet, route the user through email completion instead.
+        if (!user.email) {
+          return res.status(200).json({
+            verificationRequired: true,
+            nextStep: 'email',
+            phone: phoneKey,
+          })
+        }
 
         return sendAuthSuccessWithPermissions(res, user, 'Login successful')
       }
@@ -885,6 +925,319 @@ router.post(
         return res.status(400).json({ message: 'Email already exists' })
       }
       return res.status(500).json({ message: 'Server error while verifying sign-in code' })
+    }
+  }
+)
+
+// @route   POST /api/auth/email/start
+// @desc    Email-tab entry: send login OTP to an existing user, or create a new
+//          U-XXXXXXXX record + send a registration OTP for a new user.
+// @access  Public
+router.post(
+  '/email/start',
+  [body('email').isEmail().withMessage('Please enter a valid email')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req)
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg })
+      }
+
+      const email = normalizeEmail(req.body.email)
+      if (!isEmailLike(email)) {
+        return res.status(400).json({ message: 'Please enter a valid email' })
+      }
+
+      const existing = await User.findOne({ email })
+      if (existing) {
+        if (existing.status === 'inactive') {
+          return res.status(403).json({ message: 'Your account has been deactivated' })
+        }
+        await sendLoginOtp(email)
+        return res.status(200).json({
+          exists: true,
+          mode: 'login',
+          email,
+          message: 'Sign-in code sent to your email',
+        })
+      }
+
+      // New user — create the record now (name = U-XXXXXXXX), then send a
+      // registration OTP. Both verification flags start false; mobile is enforced
+      // by the email-completion chain after the email OTP is verified.
+      const user = new User({
+        name: await generateUsername(),
+        email,
+        isEmailVerified: false,
+        isPhoneVerified: false,
+        isVerified: false,
+        isProfileComplete: false,
+      })
+      await user.save()
+      await sendRegistrationOtp(email)
+
+      return res.status(201).json({
+        exists: false,
+        mode: 'signup',
+        email,
+        message: 'Verification code sent to your email',
+      })
+    } catch (error) {
+      console.error('email/start error:', error)
+      if (error.code === 11000) {
+        // Race: another request created this email between the check and save.
+        try {
+          const email = normalizeEmail(req.body.email)
+          await sendLoginOtp(email)
+          return res.status(200).json({ exists: true, mode: 'login', email })
+        } catch {
+          /* fall through */
+        }
+      }
+      if (String(error.message || '').includes('GOOGLE_SMTP_USER')) {
+        return res
+          .status(500)
+          .json({ message: 'Email service is not configured (Google SMTP env vars missing)' })
+      }
+      return res.status(500).json({ message: 'Server error while sending sign-in code' })
+    }
+  }
+)
+
+// @route   POST /api/auth/complete/verify-email
+// @desc    Verify the registration email OTP for a completion flow. Logs the user
+//          in only once BOTH email and phone are verified; otherwise asks for the
+//          missing step. Independent of ENABLE_MOBILE_OTP so mobile is always
+//          required for these flows.
+// @access  Public
+router.post(
+  '/complete/verify-email',
+  [
+    body('email').isEmail().withMessage('Please enter a valid email'),
+    body('otp').trim().isLength({ min: OTP_LENGTH, max: OTP_LENGTH }).withMessage('Invalid OTP length'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req)
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg })
+      }
+
+      const email = normalizeEmail(req.body.email)
+      const otp = String(req.body.otp || '').trim()
+
+      const otpResult = await verifyStoredEmailOtp(email, otp, OTP_PURPOSES.REGISTER)
+      if (!otpResult.ok) {
+        return res.status(otpResult.status).json({ message: otpResult.message })
+      }
+
+      const user = await User.findOne({ email })
+      if (!user) return res.status(404).json({ message: 'User not found' })
+      if (user.status === 'inactive') {
+        return res.status(403).json({ message: 'Your account has been deactivated' })
+      }
+
+      user.isEmailVerified = true
+      await user.save()
+
+      const phoneDone = Boolean(user.isPhoneVerified && user.phone)
+      if (!phoneDone) {
+        return res.status(200).json({
+          verificationRequired: true,
+          nextStep: 'phone',
+          email: user.email,
+          phone: user.phone || null,
+        })
+      }
+
+      return sendAuthSuccessWithPermissions(res, user, 'Login successful')
+    } catch (error) {
+      console.error('complete/verify-email error:', error)
+      return res.status(500).json({ message: 'Server error while verifying OTP' })
+    }
+  }
+)
+
+// @route   POST /api/auth/complete/verify-phone
+// @desc    Verify the registration mobile OTP for a completion flow. Logs the user
+//          in only once BOTH email and phone are verified.
+// @access  Public
+router.post(
+  '/complete/verify-phone',
+  [
+    body('phone').trim().notEmpty().withMessage('Phone number is required'),
+    body('otp').trim().isLength({ min: OTP_LENGTH, max: OTP_LENGTH }).withMessage('Invalid OTP length'),
+    body('phoneCountryCode').optional().trim(),
+    body('phoneCountryIso').optional().trim(),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req)
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg })
+      }
+
+      const phone = normalizePhone(req.body.phone)
+      const otp = String(req.body.otp || '').trim()
+
+      let parsedPhone
+      try {
+        parsedPhone = parsePhoneInput({
+          phone,
+          phoneCountryCode: req.body.phoneCountryCode,
+          phoneCountryIso: req.body.phoneCountryIso,
+        })
+      } catch {
+        return res.status(400).json({ message: 'Please enter a valid phone number' })
+      }
+
+      const otpResult = await verifyStoredPhoneOtp(parsedPhone.phoneDigits, otp, OTP_PURPOSES.REGISTER)
+      if (!otpResult.ok) {
+        return res.status(otpResult.status).json({ message: otpResult.message })
+      }
+
+      const user = await findUserByPhone(parsedPhone.phoneDigits)
+      if (!user) return res.status(404).json({ message: 'User not found' })
+      if (user.status === 'inactive') {
+        return res.status(403).json({ message: 'Your account has been deactivated' })
+      }
+
+      user.isPhoneVerified = true
+      await user.save()
+
+      const emailDone = Boolean(user.isEmailVerified && user.email)
+      if (!emailDone) {
+        return res.status(200).json({
+          verificationRequired: true,
+          nextStep: 'email',
+          email: user.email || null,
+          phone: user.phone,
+        })
+      }
+
+      return sendAuthSuccessWithPermissions(res, user, 'Login successful')
+    } catch (error) {
+      console.error('complete/verify-phone error:', error)
+      return res.status(500).json({ message: 'Server error while verifying OTP' })
+    }
+  }
+)
+
+// @route   POST /api/auth/mobile/attach
+// @desc    Attach a mobile number to a user identified by their verified email,
+//          then send a registration OTP via WhatsApp (email→mobile completion).
+// @access  Public
+router.post(
+  '/mobile/attach',
+  [
+    body('email').isEmail().withMessage('Please enter a valid email'),
+    body('phone').trim().notEmpty().withMessage('Phone number is required'),
+    body('phoneCountryCode').optional().trim(),
+    body('phoneCountryIso').optional().trim(),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req)
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg })
+      }
+
+      const email = normalizeEmail(req.body.email)
+      const user = await User.findOne({ email })
+      if (!user) return res.status(404).json({ message: 'User not found' })
+      if (!user.isEmailVerified) {
+        return res.status(400).json({ message: 'Please verify your email first' })
+      }
+
+      let parsedPhone
+      try {
+        parsedPhone = parsePhoneInput({
+          phone: normalizePhone(req.body.phone),
+          phoneCountryCode: req.body.phoneCountryCode,
+          phoneCountryIso: req.body.phoneCountryIso,
+        })
+      } catch {
+        return res.status(400).json({ message: 'Please enter a valid phone number' })
+      }
+
+      const owner = await findUserByPhone(parsedPhone.phoneDigits)
+      if (owner && String(owner._id) !== String(user._id)) {
+        return res.status(409).json({ message: 'This mobile number is already linked to another account' })
+      }
+
+      applyPhoneFieldsToUser(user, parsedPhone)
+      user.isPhoneVerified = false
+      await user.save()
+
+      await sendRegistrationPhoneOtp(parsedPhone.phoneDigits)
+
+      return res.status(200).json({ phone: parsedPhone.phoneDigits, message: 'Verification code sent to your WhatsApp' })
+    } catch (error) {
+      console.error('mobile/attach error:', error)
+      if (String(error.message || '').includes('WABA_')) {
+        return res
+          .status(500)
+          .json({ message: 'WhatsApp OTP service is not configured (WABA env vars missing)' })
+      }
+      return res.status(500).json({ message: 'Server error while sending OTP' })
+    }
+  }
+)
+
+// @route   POST /api/auth/email/attach
+// @desc    Attach an email to a user identified by their verified phone, then send
+//          a registration OTP by email (phone→email completion).
+// @access  Public
+router.post(
+  '/email/attach',
+  [
+    body('phone').trim().notEmpty().withMessage('Phone number is required'),
+    body('email').isEmail().withMessage('Please enter a valid email'),
+    body('phoneCountryCode').optional().trim(),
+    body('phoneCountryIso').optional().trim(),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req)
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg })
+      }
+
+      const phone = normalizePhone(req.body.phone)
+      const user = await findUserByPhone(phone)
+      if (!user) return res.status(404).json({ message: 'User not found' })
+      if (!user.isPhoneVerified) {
+        return res.status(400).json({ message: 'Please verify your mobile number first' })
+      }
+
+      const email = normalizeEmail(req.body.email)
+      if (!isEmailLike(email)) {
+        return res.status(400).json({ message: 'Please enter a valid email' })
+      }
+
+      const owner = await User.findOne({ email })
+      if (owner && String(owner._id) !== String(user._id)) {
+        return res.status(409).json({ message: 'This email is already linked to another account' })
+      }
+
+      user.email = email
+      user.isEmailVerified = false
+      await user.save()
+
+      await sendRegistrationOtp(email)
+
+      return res.status(200).json({ email, message: 'Verification code sent to your email' })
+    } catch (error) {
+      console.error('email/attach error:', error)
+      if (error.code === 11000) {
+        return res.status(409).json({ message: 'This email is already linked to another account' })
+      }
+      if (String(error.message || '').includes('GOOGLE_SMTP_USER')) {
+        return res
+          .status(500)
+          .json({ message: 'Email service is not configured (Google SMTP env vars missing)' })
+      }
+      return res.status(500).json({ message: 'Server error while sending OTP' })
     }
   }
 )

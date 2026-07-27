@@ -15,6 +15,7 @@ function ReelsFeed({
   heightOverride = null,
   embedded = false,
   onOpenComments = null,
+  onOpenShare = null,
 }) {
   const containerBgClass = embedded ? 'bg-transparent' : 'bg-black'
   const itemBgClass = embedded ? 'bg-transparent' : 'bg-black'
@@ -300,6 +301,7 @@ function ReelsFeed({
                 isVisible={index === visibleIndex}
                 embedded={embedded}
                 onOpenComments={onOpenComments}
+                onOpenShare={onOpenShare}
               />
             </div>
             {/* End-of-feed overlay on last reel so reels always stay visible when data is finished */}

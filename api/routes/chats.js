@@ -22,6 +22,11 @@ async function getUnreadTotalForUser(userId) {
   }
   const supportChat = await Chat.findOne({ type: 'support', user: userId }).select('unreadForUser')
   if (supportChat) total += supportChat.unreadForUser || 0
+
+  const groupChats = await Chat.find({ type: 'group', participants: userId }).select('unreadFor')
+  for (const chat of groupChats) {
+    total += Number(chat.unreadFor?.[userId.toString()] || 0)
+  }
   return total
 }
 
@@ -37,7 +42,7 @@ router.get('/', authMiddleware, async (req, res) => {
       type: { $ne: 'support' },
       $or: [{ buyer: userId }, { seller: userId }],
     })
-      .populate('product', 'title images video')
+      .populate('product', 'title images video isSold status')
       .populate('buyer', 'name username avatar isVerified identityVerificationStatus')
       .populate('seller', 'name username avatar isVerified identityVerificationStatus')
       .lean()
@@ -46,7 +51,12 @@ router.get('/', authMiddleware, async (req, res) => {
       .populate('user', 'name username avatar isVerified identityVerificationStatus')
       .lean()
 
-    const chats = [...productChats]
+    const groupChats = await Chat.find({ type: 'group', participants: userId })
+      .populate('product', 'title images video isSold status')
+      .populate('participants', 'name username avatar isVerified identityVerificationStatus')
+      .lean()
+
+    const chats = [...productChats, ...groupChats]
     if (supportChat) chats.push(supportChat)
     chats.sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0))
 
@@ -79,10 +89,11 @@ router.get('/:id', authMiddleware, async (req, res) => {
     const userId = req.user._id
 
     const chat = await Chat.findById(chatId)
-      .populate('product', 'title images video price currency')
+      .populate('product', 'title images video price currency isSold status')
       .populate('buyer', 'name username avatar isVerified identityVerificationStatus')
       .populate('seller', 'name username avatar isVerified identityVerificationStatus')
       .populate('user', 'name username avatar isVerified identityVerificationStatus')
+      .populate('participants', 'name username avatar isVerified identityVerificationStatus')
 
     if (!chat) {
       return res.status(404).json({ message: 'Chat not found' })
@@ -91,6 +102,13 @@ router.get('/:id', authMiddleware, async (req, res) => {
     const isAdmin = req.user.role === 'admin'
     if (chat.type === 'support') {
       if (!isAdmin && (!chat.user || chat.user._id.toString() !== userId.toString())) {
+        return res.status(403).json({ message: 'Not authorized to view this chat' })
+      }
+    } else if (chat.type === 'group') {
+      const isMember = (chat.participants || []).some(
+        (p) => (p?._id?.toString?.() || p?.toString?.()) === userId.toString(),
+      )
+      if (!isMember && !isAdmin) {
         return res.status(403).json({ message: 'Not authorized to view this chat' })
       }
     } else {
@@ -117,6 +135,143 @@ router.get('/:id', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Invalid chat ID' })
     }
     res.status(500).json({ message: 'Error fetching chat' })
+  }
+})
+
+// @route   POST /api/chats/group
+// @desc    Create a group chat with the given members and an optional first message
+// @access  Private
+router.post('/group', authMiddleware, async (req, res) => {
+  try {
+    const creatorId = req.user._id
+    const io = req.app.get('io')
+    const { memberIds, name, productId, text } = req.body
+
+    const rawMembers = Array.isArray(memberIds) ? memberIds : []
+    // Dedupe members, drop the creator (added separately), keep valid ids only.
+    const memberSet = new Set(
+      rawMembers
+        .map((m) => String(m || '').trim())
+        .filter((m) => m && m !== creatorId.toString()),
+    )
+
+    if (memberSet.size < 2) {
+      return res.status(400).json({ message: 'A group needs at least 2 other members' })
+    }
+
+    const members = await User.find({ _id: { $in: Array.from(memberSet) } }).select('name')
+    if (members.length !== memberSet.size) {
+      return res.status(400).json({ message: 'One or more members were not found' })
+    }
+
+    const participants = [creatorId, ...members.map((m) => m._id)]
+
+    // Default group name: creator + first couple of member names, else "Group".
+    const creator = await User.findById(creatorId).select('name')
+    const memberNames = members.map((m) => m.name).filter(Boolean)
+    const defaultName = [creator?.name, ...memberNames]
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(', ') || 'Group'
+
+    const chat = await Chat.create({
+      type: 'group',
+      name: String(name || '').trim() || defaultName,
+      participants,
+      createdBy: creatorId,
+      product: productId || null,
+      unreadFor: {},
+    })
+
+    const messages = []
+    const body = String(text || '').trim()
+    if (body) {
+      const message = await Message.create({
+        chat: chat._id,
+        sender: creatorId,
+        type: 'text',
+        text: body,
+      })
+      chat.lastMessage = body
+      chat.lastMessageAt = new Date()
+      const unreadFor = {}
+      for (const p of participants) {
+        if (p.toString() === creatorId.toString()) continue
+        unreadFor[p.toString()] = 1
+      }
+      chat.unreadFor = unreadFor
+      chat.markModified('unreadFor')
+      await chat.save()
+      await message.populate('sender', 'name username avatar')
+      messages.push(message)
+    }
+
+    await chat.populate('participants', 'name username avatar isVerified identityVerificationStatus')
+    if (productId) {
+      await chat.populate('product', 'title images video price currency isSold status')
+    }
+
+    // Notify every member (real-time thread + notification bell).
+    const messageData = messages[0]
+      ? {
+          _id: messages[0]._id,
+          chat: chat._id,
+          sender: {
+            _id: messages[0].sender._id,
+            name: messages[0].sender.name,
+            username: messages[0].sender.username,
+            avatar: messages[0].sender.avatar,
+          },
+          type: messages[0].type,
+          text: messages[0].text,
+          attachments: messages[0].attachments || [],
+          createdAt: messages[0].createdAt,
+          updatedAt: messages[0].updatedAt,
+          read: false,
+          readAt: null,
+        }
+      : null
+
+    if (io) {
+      for (const p of participants) {
+        const pid = p.toString()
+        const isOwnMessage = pid === creatorId.toString()
+        let unreadTotal = 0
+        try { unreadTotal = await getUnreadTotalForUser(pid) } catch (e) {}
+        io.to(`user-${pid}`).emit('group-created', { chatId: chat._id, unreadTotal })
+        if (messageData) {
+          io.to(`user-${pid}`).emit('new-message', { chatId: chat._id, message: messageData, isOwnMessage, unreadTotal })
+        }
+      }
+    }
+
+    if (messageData) {
+      const preview = String(messageData.text || '').slice(0, 160)
+      for (const p of participants) {
+        const pid = p.toString()
+        if (pid === creatorId.toString()) continue
+        try {
+          await Notification.create({
+            user: pid,
+            type: 'message',
+            title: `New message in ${chat.name}`,
+            body: preview,
+            actor: creatorId,
+            data: { chatId: String(chat._id), senderId: String(creatorId) },
+          })
+        } catch (e) {
+          console.error('Error creating group notification:', e)
+        }
+      }
+    }
+
+    res.status(201).json({ chat, messages })
+  } catch (error) {
+    console.error('Error creating group chat:', error)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid member id' })
+    }
+    res.status(500).json({ message: 'Error creating group chat' })
   }
 })
 
@@ -175,7 +330,7 @@ router.post('/', authMiddleware, async (req, res) => {
       buyer: buyerId,
       seller: sellerId,
     })
-      .populate('product', 'title images video price currency')
+      .populate('product', 'title images video price currency isSold status')
       .populate('buyer', 'name username avatar isVerified identityVerificationStatus')
       .populate('seller', 'name username avatar isVerified identityVerificationStatus')
 
@@ -198,7 +353,7 @@ router.post('/', authMiddleware, async (req, res) => {
       seller: sellerId,
     })
 
-    await chat.populate('product', 'title images video price currency')
+    await chat.populate('product', 'title images video price currency isSold status')
     await chat.populate('buyer', 'name username avatar isVerified identityVerificationStatus')
     await chat.populate('seller', 'name username avatar isVerified identityVerificationStatus')
 
@@ -223,7 +378,7 @@ router.post('/', authMiddleware, async (req, res) => {
           }
 
       const chat = await Chat.findOne(chatQuery)
-        .populate('product', 'title images video price currency')
+        .populate('product', 'title images video price currency isSold status')
         .populate('buyer', 'name username avatar isVerified identityVerificationStatus')
         .populate('seller', 'name username avatar isVerified identityVerificationStatus')
         .populate('user', 'name username avatar isVerified identityVerificationStatus')
@@ -271,11 +426,18 @@ router.post('/:id/messages', authMiddleware, (req, res, next) => {
     }
 
     let otherPartyId = null
+    let groupRecipients = null
     if (chat.type === 'support') {
       if (!chat.user) return res.status(400).json({ message: 'Invalid support chat' })
       const isCustomer = chat.user.toString() === userId.toString()
       if (!isCustomer && !isAdmin) return res.status(403).json({ message: 'Not authorized to send in this chat' })
       otherPartyId = isCustomer ? null : chat.user.toString()
+    } else if (chat.type === 'group') {
+      const memberIds = (chat.participants || []).map((p) => p.toString())
+      if (!memberIds.includes(userId.toString()) && !isAdmin) {
+        return res.status(403).json({ message: 'Not authorized to send messages in this chat' })
+      }
+      groupRecipients = memberIds.filter((pid) => pid !== userId.toString())
     } else {
       if (
         (!chat.buyer || chat.buyer.toString() !== userId.toString()) &&
@@ -315,6 +477,13 @@ router.post('/:id/messages', authMiddleware, (req, res, next) => {
       } else {
         chat.unreadForAdmin = (chat.unreadForAdmin || 0) + 1
       }
+    } else if (chat.type === 'group') {
+      const unreadFor = { ...(chat.unreadFor || {}) }
+      for (const pid of groupRecipients) {
+        unreadFor[pid] = Number(unreadFor[pid] || 0) + 1
+      }
+      chat.unreadFor = unreadFor
+      chat.markModified('unreadFor')
     } else {
       const isBuyer = chat.buyer.toString() === userId.toString()
       if (isBuyer) chat.unreadForSeller += 1
@@ -355,31 +524,41 @@ router.post('/:id/messages', authMiddleware, (req, res, next) => {
       } else {
         io.to('admin').emit('new-support-message', { chatId, message: messageData, chat })
       }
+    } else if (chat.type === 'group') {
+      for (const pid of groupRecipients) {
+        let unreadTotal = 0
+        try { unreadTotal = await getUnreadTotalForUser(pid) } catch (e) {}
+        io.to(`user-${pid}`).emit('new-message', { chatId, message: messageData, isOwnMessage: false, unreadTotal })
+      }
     } else {
       let unreadTotal = 0
       try { unreadTotal = await getUnreadTotalForUser(otherPartyId) } catch (e) {}
       io.to(`user-${otherPartyId}`).emit('new-message', { chatId, message: messageData, isOwnMessage: false, unreadTotal })
     }
 
-    // Create an in-app notification for the receiver so it appears in Notifications page too.
-    if (otherPartyId) {
-      try {
-        const preview = String(message.text || '').slice(0, 160)
-        await Notification.create({
-          user: otherPartyId,
-          type: 'message',
-          title: 'New message',
-          body: preview,
-          actor: userId,
-          relatedProduct: chat.product || null,
-          data: {
-            chatId: String(chatId),
-            productId: chat.product ? String(chat.product) : null,
-            senderId: String(userId),
-          },
-        })
-      } catch (notificationError) {
-        console.error('Error creating message notification:', notificationError)
+    // Create an in-app notification for the receiver(s) so it appears in Notifications page too.
+    const notifyRecipients = chat.type === 'group' ? groupRecipients : (otherPartyId ? [otherPartyId] : [])
+    if (notifyRecipients.length > 0) {
+      const preview = String(message.text || '').slice(0, 160)
+      const title = chat.type === 'group' ? `New message in ${chat.name || 'group'}` : 'New message'
+      for (const rid of notifyRecipients) {
+        try {
+          await Notification.create({
+            user: rid,
+            type: 'message',
+            title,
+            body: preview,
+            actor: userId,
+            relatedProduct: chat.product || null,
+            data: {
+              chatId: String(chatId),
+              productId: chat.product ? String(chat.product) : null,
+              senderId: String(userId),
+            },
+          })
+        } catch (notificationError) {
+          console.error('Error creating message notification:', notificationError)
+        }
       }
     }
 
@@ -471,7 +650,9 @@ router.delete('/:chatId/messages/:messageId', authMiddleware, async (req, res) =
 
     // Only participants can delete
     const isParticipant =
-      chat.buyer.toString() === userId.toString() || chat.seller.toString() === userId.toString()
+      chat.type === 'group'
+        ? (chat.participants || []).some((p) => p.toString() === userId.toString())
+        : (chat.buyer?.toString() === userId.toString() || chat.seller?.toString() === userId.toString())
     if (!isParticipant) {
       return res.status(403).json({ message: 'Not authorized to delete messages in this chat' })
     }
@@ -560,6 +741,28 @@ router.put('/:id/read', authMiddleware, async (req, res) => {
       return res.json({ message: 'Messages marked as read' })
     }
 
+    if (chat.type === 'group') {
+      const isMember = (chat.participants || []).some((p) => p.toString() === userId.toString())
+      if (!isMember && !isAdmin) {
+        return res.status(403).json({ message: 'Not authorized to mark this chat as read' })
+      }
+      const unreadFor = { ...(chat.unreadFor || {}) }
+      unreadFor[userId.toString()] = 0
+      chat.unreadFor = unreadFor
+      chat.markModified('unreadFor')
+      await chat.save()
+      await Notification.updateMany(
+        { user: userId, type: 'message', 'data.chatId': String(chatId), isRead: false },
+        { isRead: true },
+      )
+      const io = req.app.get('io')
+      if (io) {
+        const readerUnread = await getUnreadTotalForUser(userId).catch(() => 0)
+        io.to(`user-${userId}`).emit('unread-updated', { unreadTotal: readerUnread })
+      }
+      return res.json({ message: 'Messages marked as read' })
+    }
+
     if (
       (!chat.buyer || chat.buyer.toString() !== userId.toString()) &&
       (!chat.seller || chat.seller.toString() !== userId.toString())
@@ -622,6 +825,8 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     let allowed = false
     if (chat.type === 'support') {
       allowed = isAdmin || (chat.user && chat.user.toString() === userId.toString())
+    } else if (chat.type === 'group') {
+      allowed = isAdmin || (chat.participants || []).some((p) => p.toString() === userId.toString())
     } else {
       allowed =
         (chat.buyer && chat.buyer.toString() === userId.toString()) ||

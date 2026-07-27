@@ -29,7 +29,7 @@ function OAuthSuccessPage() {
       .catch(() => {})
       .finally(() => {
         toast.success('Signed in successfully')
-        navigate(target === 'seller' ? '/post-ad' : '/', { replace: true })
+        navigate(target === 'seller' ? '/post-ad' : '/dashboard/settings', { replace: true })
       })
   }, [dispatch, navigate])
 

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { adminService, packageService, storageFacilityService, categoryService } from '@shared/services/api'
+import { adminService, packageService, storageFacilityService, categoryService } from '@/services/api'
 import AdminFormShell from '../../components/AdminUI/AdminFormShell'
 import FormSection from '../../components/AdminUI/FormSection'
 import Input from '../../components/AdminUI/Input'

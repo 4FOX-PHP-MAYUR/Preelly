@@ -402,7 +402,14 @@ function useImagePreviewSrc(file) {
     setObjectUrl(null)
   }, [file])
   if (!file) return ''
-  if (typeof file === 'object' && file !== null && typeof file.url === 'string') return file.url
+  if (typeof file === 'object' && file !== null && typeof file.url === 'string') {
+    const url = file.url
+    // blob:/data: URLs are already fully resolved; only server-relative paths
+    // (e.g. /uploads/videos/screenshots/...) need the backend BASE_URL prefixed
+    // so images load when the app is served from a non-localhost origin.
+    if (/^(blob:|data:)/i.test(url)) return url
+    return getMediaUrl(url) || url
+  }
   return objectUrl || ''
 }
 
@@ -1159,10 +1166,7 @@ function Step3VideoUpload({
       const response = await videoService.captureScreenshot(videoFile, currentTime)
       const { screenshot } = response.data
 
-      const BASE_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8029'
-      const screenshotUrl = screenshot.url.startsWith('http') 
-        ? screenshot.url 
-        : `${BASE_URL}${screenshot.url}`
+      const screenshotUrl = getMediaUrl(screenshot.url)
 
       // Add screenshot to list
       const newScreenshot = {
@@ -2201,8 +2205,7 @@ function PhotoCropFromVideo({ videoFile, onBack, onCrop }) {
       toast.loading('Capturing frame...', { id: 'crop-frame' })
       const res = await videoService.captureScreenshot(videoFile, currentTime)
       const { screenshot } = res.data
-      const BASE_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8029'
-      const screenshotUrl = screenshot.url.startsWith('http') ? screenshot.url : `${BASE_URL}${screenshot.url}`
+      const screenshotUrl = getMediaUrl(screenshot.url)
       onCrop({
         url: screenshotUrl,
         name: `screenshot-${Math.floor(screenshot.timestamp)}s.jpg`,
@@ -3238,7 +3241,10 @@ function PostAdPage() {
   const [selectedPath, setSelectedPath] = useState([])
   const [levelLabelsFromApi, setLevelLabelsFromApi] = useState(null)
   const [loadingLevels, setLoadingLevels] = useState(false)
-  const [categoryPhase, setCategoryPhase] = useState('root')
+  // Category-selection level currently being shown: 0 = root grid, 1+ = deeper
+  // grids. Drilling continues while the selected category has isChild === 1,
+  // supporting unlimited depth (Parent → Child → Sub-child → …).
+  const [categoryLevel, setCategoryLevel] = useState(0)
   const [loadingSubcategories, setLoadingSubcategories] = useState(false)
   const [loadingProduct, setLoadingProduct] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -3286,7 +3292,12 @@ function PostAdPage() {
         if (draft.videoFile) setValue('video', draft.videoFile)
         setSelectedPath(draft.selectedPath || [])
         setSelectedCategory(draft.selectedCategory || '')
-        setCategoryPhase(draft.categoryPhase || 'root')
+        // Restore the drill level; map legacy string phases from older drafts.
+        setCategoryLevel(
+          typeof draft.categoryLevel === 'number'
+            ? draft.categoryLevel
+            : { root: 0, subcategory: 1, childCategory: 2 }[draft.categoryPhase] ?? 0
+        )
         setVideoFile(draft.videoFile || null)
         setImageFiles(draft.imageFiles || [])
         restoredDynamicFormValuesRef.current = draft.dynamicFormValues || null
@@ -3310,7 +3321,7 @@ function PostAdPage() {
       setValue('categoryPath', [])
       setVideoFile(null)
       setImageFiles([])
-      setCategoryPhase('root')
+      setCategoryLevel(0)
 
       const defaultStep = user ? (user?.role === 'admin' || user.isVerified ? 2 : 1) : 1
       const requestedDisplayStep = Number(searchParams.get('step'))
@@ -3337,7 +3348,7 @@ function PostAdPage() {
       const { video, ...formValues } = getValues()
       savePostAdDraft(user._id, {
         currentStep,
-        categoryPhase,
+        categoryLevel,
         selectedPath,
         selectedCategory,
         formValues,
@@ -3353,7 +3364,7 @@ function PostAdPage() {
     initialStepResolved,
     user?._id,
     currentStep,
-    categoryPhase,
+    categoryLevel,
     selectedPath,
     selectedCategory,
     videoFile,
@@ -3632,119 +3643,84 @@ function PostAdPage() {
     }
   }
 
-  /** Step 2a: pick root category → show subcategory list (or skip if none). */
-  const handleRootCategorySelect = (categoryId) => {
+  /**
+   * Unified, depth-agnostic category picker. Selecting a category at the current
+   * level (`categoryLevel`) sets it into the hierarchy, then:
+   *   - isChild === 1 → fetch its children (GET /api/categories?parent_id=…) and
+   *     drill into the next level's grid WITHOUT navigating away.
+   *   - otherwise (leaf) → move on to Step 2 (video upload; internal step 3).
+   * Motors keeps its existing behaviour: it always stops at the subcategory level
+   * so the dynamic form (make/model) loads there, regardless of isChild.
+   */
+  const handleCategorySelect = (categoryId) => {
     if (!categoryId) return
 
-    setSelectedPath([categoryId])
-    setSelectedCategory(categoryId)
-    setValue('category', categoryId, { shouldValidate: true })
-    setValue('subcategory', '')
-    setValue('childCategory', '')
-    setValue('categoryPath', [categoryId])
+    const level = categoryLevel
+    const options = levelOptions[level] || []
+    const selectedCat = options.find((c) => String(c._id) === String(categoryId))
 
-    const roots = levelOptions[0] || []
+    // A new pick at this level supersedes any deeper selections.
+    const newPath = [...selectedPath.slice(0, level), categoryId]
+    setSelectedPath(newPath)
+    setSelectedCategory(newPath[0])
+    setValue('category', newPath[0], { shouldValidate: true })
+    setValue('subcategory', newPath[1] || '', { shouldValidate: true })
+    // Deepest selection (3+ levels) is the effective leaf used by the dynamic form.
+    setValue('childCategory', newPath.length >= 3 ? newPath[newPath.length - 1] : '', { shouldValidate: true })
+    setValue('categoryPath', newPath.filter(Boolean))
+
+    if (level === 0) setSubcategories([])
+
+    const goToNextStep = () => {
+      setLevelOptions((prev) => prev.slice(0, level + 1))
+      toast.success('Category selected')
+      setCurrentStep(3)
+      window.scrollTo(0, 0)
+    }
+
+    // Motors: never drill past the subcategory level.
+    const rootName = (levelOptions[0] || []).find((c) => String(c._id) === String(newPath[0]))?.name
+    if (isMotorsRootCategory(rootName) && level >= 1) {
+      goToNextStep()
+      return
+    }
+
+    // Leaf category (isChild !== 1): proceed to the next step.
+    if (Number(selectedCat?.isChild) !== 1) {
+      goToNextStep()
+      return
+    }
+
+    // Has children: load them and drill into the next level.
     setLoadingSubcategories(true)
     categoryService
       .getCategoryChildren(categoryId, { signal: getRouteAbortSignal() })
       .then((res) => {
         const children = Array.isArray(res.data) ? res.data : []
-        setLevelOptions([roots, children])
-        setSubcategories(children)
         if (children.length === 0) {
-          setCategoryPhase('root')
-          toast.success('Category selected')
-          setCurrentStep(3)
-          window.scrollTo(0, 0)
-        } else {
-          setCategoryPhase('subcategory')
-          window.scrollTo(0, 0)
+          // isChild claimed children but none are active — treat as a leaf.
+          goToNextStep()
+          return
         }
-      })
-      .catch(() => {
-        setLevelOptions([roots])
-        setSubcategories([])
-        setCategoryPhase('root')
-      })
-      .finally(() => setLoadingSubcategories(false))
-  }
-
-  const handleSubcategorySelect = (subcategoryId) => {
-    if (!subcategoryId) return
-    const rootId = selectedPath[0]
-    setSelectedPath([rootId, subcategoryId])
-    setValue('subcategory', subcategoryId, { shouldValidate: true })
-    setValue('childCategory', '')
-    setValue('categoryPath', [rootId, subcategoryId].filter(Boolean))
-
-    const roots = levelOptions[0] || []
-    const subs = levelOptions[1] || []
-
-    // Motors: skip the child-category step entirely — even if children exist — so the
-    // dynamic form loads for the chosen subcategory.
-    const rootName = roots.find((c) => String(c._id) === String(rootId))?.name
-    if (isMotorsRootCategory(rootName)) {
-      setLevelOptions([roots, subs])
-      setCurrentStep(3)
-      window.scrollTo(0, 0)
-      return
-    }
-
-    setLoadingSubcategories(true)
-    categoryService
-      .getCategoryChildren(subcategoryId, { signal: getRouteAbortSignal() })
-      .then((res) => {
-        const children = Array.isArray(res.data) ? res.data : []
-        setLevelOptions([roots, subs, children])
-        if (children.length > 0) {
-          setCategoryPhase('childCategory')
-          window.scrollTo(0, 0)
-        } else {
-          setCurrentStep(3)
-          window.scrollTo(0, 0)
-        }
-      })
-      .catch(() => {
-        setLevelOptions([roots, subs])
-        setCurrentStep(3)
+        setLevelOptions((prev) => [...prev.slice(0, level + 1), children])
+        if (level === 0) setSubcategories(children)
+        setCategoryLevel(level + 1)
         window.scrollTo(0, 0)
       })
+      .catch(() => {
+        // On failure don't strand the user — move on with what's selected.
+        goToNextStep()
+      })
       .finally(() => setLoadingSubcategories(false))
   }
 
-  const handleChildCategorySelect = (childCategoryId) => {
-    if (!childCategoryId) return
-    const rootId = selectedPath[0]
-    const subId = selectedPath[1]
-    setSelectedPath([rootId, subId, childCategoryId])
-    setValue('childCategory', childCategoryId, { shouldValidate: true })
-    setValue('categoryPath', [rootId, subId, childCategoryId].filter(Boolean))
-    setCurrentStep(3)
-    window.scrollTo(0, 0)
-  }
-
-  const handleCategoryPhaseBack = () => {
-    if (categoryPhase === 'childCategory') {
-      const rootId = selectedPath[0]
-      const subId = selectedPath[1]
-      setCategoryPhase('subcategory')
-      setValue('childCategory', '')
-      setSelectedPath([rootId, subId].filter(Boolean))
-      setValue('categoryPath', [rootId, subId].filter(Boolean))
+  const handleCategoryLevelBack = () => {
+    if (categoryLevel > 0) {
+      setCategoryLevel(categoryLevel - 1)
       window.scrollTo(0, 0)
       return
     }
-    const rootId = selectedPath[0]
-    if (!rootId) {
-      navigate('/', { replace: true })
-      return
-    }
-    setCategoryPhase('root')
-    setValue('subcategory', '')
-    setValue('childCategory', '')
-    setSelectedPath([rootId])
-    setValue('categoryPath', [rootId])
-    window.scrollTo(0, 0)
+    navigate('/', { replace: true })
   }
 
   const handleCategoryChange = (categoryId) => {
@@ -3757,12 +3733,6 @@ function PostAdPage() {
 
   const rootCategoryName =
     levelOptions[0]?.find((c) => String(c._id) === String(selectedPath[0]))?.name || ''
-  const subcategoryOptions = levelOptions[1] || []
-  const selectedSubcategoryId = watch('subcategory') || selectedPath[1] || ''
-  const selectedSubcategoryName =
-    subcategoryOptions.find((c) => String(c._id) === String(selectedSubcategoryId))?.name || ''
-  const childCategoryOptions = levelOptions[2] || []
-  const selectedChildCategoryId = watch('childCategory') || selectedPath[2] || ''
   const levelLabels = levelLabelsFromApi ?? getLevelLabels(rootCategoryName)
   const flatCategoriesForSteps = levelOptions.flat()
   const selectedCategoryForSteps = watch('category')
@@ -3931,15 +3901,14 @@ function PostAdPage() {
         window.scrollTo(0, 0)
         return
       }
-      const hasChildCategory = selectedPath.length > 2 && (levelOptions[2] || []).length > 0
-      const hasSubs = (levelOptions[1] || []).length > 0
+      // Return to the deepest category grid that was loaded.
       setCurrentStep(2)
-      setCategoryPhase(hasChildCategory ? 'childCategory' : hasSubs ? 'subcategory' : 'root')
+      setCategoryLevel(Math.max(0, (levelOptions.length || 1) - 1))
       window.scrollTo(0, 0)
       return
     }
-    if (currentStep === 2 && (categoryPhase === 'subcategory' || categoryPhase === 'childCategory')) {
-      handleCategoryPhaseBack()
+    if (currentStep === 2 && categoryLevel > 0) {
+      handleCategoryLevelBack()
       return
     }
     if (currentStep === 2) {
@@ -3964,7 +3933,8 @@ function PostAdPage() {
     setSelectedCategory('')
     setVideoFile(null)
     setImageFiles([])
-    setCategoryPhase('root')
+    setCategoryLevel(0)
+    setLevelOptions((prev) => (prev[0]?.length ? [prev[0]] : [[]]))
     dispatch(resetDynamicForm())
     restoredDynamicFormValuesRef.current = null
     setCurrentStep(user ? (user?.role === 'admin' || user.isVerified ? 2 : 1) : 1)
@@ -4551,38 +4521,24 @@ function PostAdPage() {
       {/* Step Content */}
       <form onSubmit={handleSubmit(onSubmit)}>
         {currentStep === 1 && <Step1Auth user={user} onNext={nextStep} />}
-        {currentStep === 2 && categoryPhase === 'root' && (
+        {currentStep === 2 && categoryLevel === 0 && (
           <Step2Category
             levelOptions={levelOptions}
             selectedPath={selectedPath}
-            onCategorySelect={handleRootCategorySelect}
+            onCategorySelect={handleCategorySelect}
             onBack={handlePostAdBack}
             loadingLevels={loadingLevels || loadingSubcategories}
             register={register}
             errors={errors}
           />
         )}
-        {currentStep === 2 && categoryPhase === 'subcategory' && (
+        {currentStep === 2 && categoryLevel > 0 && (
           <Step2Subcategory
-            rootCategoryName={rootCategoryName}
-            subcategories={subcategoryOptions}
-            selectedSubcategoryId={selectedSubcategoryId}
-            onSubcategorySelect={handleSubcategorySelect}
-            onBack={handleCategoryPhaseBack}
-            loading={loadingSubcategories}
-            register={register}
-            errors={errors}
-          />
-        )}
-        {currentStep === 2 && categoryPhase === 'childCategory' && (
-          <Step2Subcategory
-            rootCategoryName={
-              selectedSubcategoryName ? `${rootCategoryName} > ${selectedSubcategoryName}` : rootCategoryName
-            }
-            subcategories={childCategoryOptions}
-            selectedSubcategoryId={selectedChildCategoryId}
-            onSubcategorySelect={handleChildCategorySelect}
-            onBack={handleCategoryPhaseBack}
+            rootCategoryName={categoryPathNames.slice(0, categoryLevel).join(' > ') || rootCategoryName}
+            subcategories={levelOptions[categoryLevel] || []}
+            selectedSubcategoryId={selectedPath[categoryLevel] || ''}
+            onSubcategorySelect={handleCategorySelect}
+            onBack={handleCategoryLevelBack}
             loading={loadingSubcategories}
             register={register}
             errors={errors}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { adminService } from '@shared/services/api'
+import { adminService } from '@/services/api'
 import { EmiratesIdPreviewPanel } from './EmiratesIdPreview'
 import toast from 'react-hot-toast'
 import { ArrowLeft, CheckCircle2, XCircle, Loader2, Clock, ShieldCheck } from 'lucide-react'

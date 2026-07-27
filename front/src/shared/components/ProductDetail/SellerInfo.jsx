@@ -5,7 +5,7 @@ import toast from 'react-hot-toast'
 import { User, Phone, MessageCircle } from 'lucide-react'
 import { isIdentityVerified, getMediaUrl } from '../../utils/helpers'
 import { VERIFIED_BADGE_IMAGES } from '../../utils/verifiedBadge'
-import { selectIsAuthenticated, selectUser } from '../../store/slices/authSlice'
+import { selectIsAuthenticated, selectIsGuest, selectUser } from '../../store/slices/authSlice'
 import { useChat } from '../Chat/ChatContext'
 import DetailCard from './DetailCard'
 import { pickDisplay } from './detailHelpers'
@@ -20,6 +20,7 @@ function SellerInfo({ product }) {
   const seller = product.seller
   const navigate = useNavigate()
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const isGuest = useSelector(selectIsGuest)
   const user = useSelector(selectUser)
   const { createOrGetThread } = useChat()
   const [showPhoneNumber, setShowPhoneNumber] = useState(false)
@@ -38,7 +39,7 @@ function SellerInfo({ product }) {
   const handleChat = async () => {
     if (!isAuthenticated) {
       toast.error('Please login to chat with sellers')
-      navigate('/login')
+      if (!isGuest) navigate('/login')
       return
     }
     if (isOwner) {

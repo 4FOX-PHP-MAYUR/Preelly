@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ArrowLeft, Mail } from 'lucide-react'
-import { clearError, sendOtp, verifyOtp } from '@shared/store/slices/authSlice'
+import { clearError, sendOtp, sendEmailOtp, verifyOtp, completeVerifyEmail } from '@shared/store/slices/authSlice'
 import { AuthSidePanel } from '../components/Auth/AuthSplitLayout'
 import OtpIllustration from '../components/Auth/OtpIllustration'
 import { getCountryByIso } from '@shared/data/countryCodes'
@@ -38,6 +38,13 @@ function VerifyEmailOtpPage() {
     return params.get('mode') === 'signup' ? 'signup' : 'login'
   }, [location.search])
 
+  // "email-complete" is the new email→mobile completion chain for auto-created
+  // (U-XXXXXXXX) users and phone→email completion. It requires BOTH verifications.
+  const isCompleteFlow = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    return params.get('flow') === 'email-complete'
+  }, [location.search])
+
   const target = useMemo(
     () => (localStorage.getItem('authTarget') === 'seller' ? 'seller' : 'buyer'),
     []
@@ -70,7 +77,7 @@ function VerifyEmailOtpPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate(target === 'seller' ? '/post-ad' : '/')
+      navigate(target === 'seller' ? '/post-ad' : '/dashboard/settings')
     }
   }, [isAuthenticated, navigate, target])
 
@@ -182,6 +189,17 @@ function VerifyEmailOtpPage() {
     }
 
     try {
+      if (isCompleteFlow) {
+        const result = await dispatch(completeVerifyEmail({ email, otp: otpValue })).unwrap()
+        if (result?.nextStep === 'phone') {
+          toast.success('Email verified. Please verify your mobile number to continue.')
+          navigate(`/complete-mobile?email=${encodeURIComponent(email)}`)
+          return
+        }
+        toast.success('Signed in successfully!')
+        return
+      }
+
       await dispatch(verifyOtp({
         email,
         otp: otpValue,
@@ -205,7 +223,11 @@ function VerifyEmailOtpPage() {
     }
 
     try {
-      await dispatch(sendOtp({ email, mode: authMode })).unwrap()
+      if (isCompleteFlow) {
+        await dispatch(sendEmailOtp({ email })).unwrap()
+      } else {
+        await dispatch(sendOtp({ email, mode: authMode })).unwrap()
+      }
       setOtpDigits(Array(OTP_LENGTH).fill(''))
       setOtpError('')
       setResendCountdown(RESEND_DELAY)

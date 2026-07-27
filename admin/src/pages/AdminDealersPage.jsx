@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { adminService } from '@shared/services/api'
+import { adminService } from '@/services/api'
 import PageHeader from '../components/AdminUI/PageHeader'
 import AdminPage from '../components/AdminUI/AdminPage'
 import DataTable from '../components/AdminUI/DataTable'

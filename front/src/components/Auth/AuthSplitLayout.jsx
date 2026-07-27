@@ -27,7 +27,7 @@ export const AuthField = forwardRef(function AuthField({
         <input
           ref={ref}
           {...inputProps}
-          className={`h-12 sm:h-14 w-full rounded-2xl border border-[#d8dbea] bg-white pr-4 text-base sm:text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#3128ff] focus:ring-4 focus:ring-[#3128ff]/10 ${Icon ? 'pl-12' : 'pl-4'} ${className}`.trim()}
+          className={`h-[52px] w-full rounded-[14px] border border-[#dfe1ec] bg-white pr-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#3128ff] focus:ring-4 focus:ring-[#3128ff]/10 ${Icon ? 'pl-12' : 'pl-4'} ${className}`.trim()}
         />
       </div>
       {error ? <p className="mt-2 text-sm text-red-500">{error}</p> : null}
@@ -91,9 +91,9 @@ function CountryCodePicker({ countryIso, onCountryIsoChange }) {
   return (
     <div
       ref={containerRef}
-      className="relative min-w-[148px] max-w-[42%] shrink-0 sm:min-w-[168px]"
+      className="relative w-[104px] shrink-0 sm:w-[112px]"
     >
-      <div className="relative flex h-12 sm:h-14 items-center gap-1 rounded-2xl border border-[#d8dbea] bg-white px-3 transition focus-within:border-[#3128ff] focus-within:ring-4 focus-within:ring-[#3128ff]/10">
+      <div className="relative flex h-[52px] items-center gap-1 rounded-[14px] border border-[#dfe1ec] bg-white px-3 transition focus-within:border-[#3128ff] focus-within:ring-4 focus-within:ring-[#3128ff]/10">
         <span className="pointer-events-none text-base leading-none">{selected.flag}</span>
         <input
           ref={inputRef}
@@ -132,7 +132,7 @@ function CountryCodePicker({ countryIso, onCountryIsoChange }) {
       {open && filteredCountries.length > 0 ? (
         <ul
           role="listbox"
-          className="absolute left-0 right-0 top-[calc(100%+4px)] z-30 max-h-56 overflow-y-auto rounded-2xl border border-[#d8dbea] bg-white py-1 shadow-[0_16px_40px_rgba(15,23,42,0.12)]"
+          className="absolute left-0 top-[calc(100%+4px)] z-30 max-h-56 w-[260px] max-w-[80vw] overflow-y-auto rounded-2xl border border-[#d8dbea] bg-white py-1 shadow-[0_16px_40px_rgba(15,23,42,0.12)]"
         >
           {filteredCountries.map((item) => (
             <li key={item.iso} role="option" aria-selected={item.iso === selected.iso}>
@@ -182,7 +182,7 @@ export const AuthPhoneField = forwardRef(function AuthPhoneField({
             type="tel"
             inputMode="tel"
             {...inputProps}
-            className={`h-12 sm:h-14 w-full rounded-2xl border border-[#d8dbea] bg-white pl-12 pr-4 text-base sm:text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#3128ff] focus:ring-4 focus:ring-[#3128ff]/10 ${className}`.trim()}
+            className={`h-[52px] w-full rounded-[14px] border border-[#dfe1ec] bg-white pl-12 pr-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#3128ff] focus:ring-4 focus:ring-[#3128ff]/10 ${className}`.trim()}
           />
         </div>
       </div>
@@ -199,7 +199,7 @@ export function AuthSocialButton({ label, onClick, disabled, children, active = 
       title={label}
       onClick={onClick}
       disabled={disabled}
-      className={`flex h-12 items-center justify-center rounded-2xl border bg-white transition disabled:cursor-not-allowed disabled:opacity-60 ${
+      className={`flex h-14 items-center justify-center rounded-2xl border bg-white transition disabled:cursor-not-allowed disabled:opacity-60 ${
         active
           ? 'border-[#3128ff] shadow-[0_12px_30px_rgba(49,40,255,0.18)]'
           : 'border-[#e4e7f1] hover:border-[#cfd5e6] hover:shadow-sm'
@@ -240,7 +240,7 @@ export function AuthSidePanel({ quote, quoteAuthor, quoteRole }) {
         </div>
 
         <div className="mt-auto w-full max-w-[630px] self-center">
-          <div className="min-h-[300px] rounded-[40px] border border-white/8 bg-white/[0.18] px-8 py-9 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-md xl:min-h-[335px] xl:px-8 xl:py-10">
+          <div className="min-h-[300px] rounded-[32px] border border-white/10 bg-white/[0.16] px-8 py-9 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-md xl:min-h-[335px] xl:px-9 xl:py-10">
             <p className="max-w-[34rem] text-[2rem] font-normal leading-[1.25] text-white xl:text-[36px] xl:leading-[45px]">
               {quote}
             </p>
@@ -249,24 +249,25 @@ export function AuthSidePanel({ quote, quoteAuthor, quoteRole }) {
               <p className="mt-1 text-base font-medium text-[#E1E1E1]">{quoteRole}</p>
             </div>
           </div>
-
-          <div className="mt-6 flex justify-end gap-[14px]">
-            <button
-              type="button"
-              aria-label="Previous testimonial"
-              className="flex h-[78px] w-[98px] items-center justify-center rounded-[24px] border-[1.5px] border-[#E4EBFF] bg-white text-[#21357C] shadow-sm transition hover:bg-[#f8faff]"
-            >
-              <ArrowLeft className="h-10 w-10 stroke-[1.5]" />
-            </button>
-            <button
-              type="button"
-              aria-label="Next testimonial"
-              className="flex h-[78px] w-[98px] items-center justify-center rounded-[24px] border-[1.5px] border-[#E4EBFF] bg-white text-[#21357C] shadow-sm transition hover:bg-[#f8faff]"
-            >
-              <ArrowRight className="h-10 w-10 stroke-[1.5]" />
-            </button>
-          </div>
         </div>
+      </div>
+
+      {/* Bottom-right nav buttons, seated in a white notch carved from the panel corner. */}
+      <div className="absolute bottom-0 right-0 z-20 flex items-center gap-[14px] rounded-tl-[32px] rounded-br-[40px] bg-white pb-5 pl-7 pr-5 pt-6">
+        <button
+          type="button"
+          aria-label="Previous testimonial"
+          className="flex h-[62px] w-[74px] items-center justify-center rounded-[18px] border border-[#E6E9F5] bg-white text-[#21357C] shadow-[0_6px_18px_rgba(20,0,255,0.10)] transition hover:bg-[#f8faff]"
+        >
+          <ArrowLeft className="h-6 w-6 stroke-[1.75]" />
+        </button>
+        <button
+          type="button"
+          aria-label="Next testimonial"
+          className="flex h-[62px] w-[74px] items-center justify-center rounded-[18px] border border-[#E6E9F5] bg-white text-[#21357C] shadow-[0_6px_18px_rgba(20,0,255,0.10)] transition hover:bg-[#f8faff]"
+        >
+          <ArrowRight className="h-6 w-6 stroke-[1.75]" />
+        </button>
       </div>
     </aside>
   )
@@ -279,15 +280,17 @@ function AuthSplitLayout({
   switchPrompt,
   switchLabel,
   switchTo,
+  switchArrow = false,
+  switchOnClick,
   children,
   quote,
   quoteAuthor,
   quoteRole,
 }) {
   return (
-    <div className="min-h-screen bg-[#f6f7fb] px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
+    <div className="min-h-screen bg-white px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
       <div className="mx-auto grid max-w-6xl gap-6 sm:gap-8 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] lg:items-center">
-        <section className="mx-auto w-full max-w-[440px] rounded-[24px] sm:rounded-[32px] bg-white px-5 py-7 shadow-[0_24px_80px_rgba(15,23,42,0.08)] sm:px-8 lg:mx-0 lg:px-10 lg:py-10">
+        <section className="mx-auto w-full max-w-[440px] px-5 py-7 sm:px-8 lg:mx-0 lg:px-10 lg:py-10">
           {modeLabel ? (
             <p className="mb-4 sm:mb-6 text-xs sm:text-sm font-semibold uppercase tracking-[0.3em] text-[#3128ff]">
               {modeLabel}
@@ -304,11 +307,16 @@ function AuthSplitLayout({
 
           {children}
 
-          {switchPrompt && switchTo && switchLabel ? (
+          {switchTo && switchLabel ? (
             <p className="mt-8 text-center text-sm text-slate-500">
-              {switchPrompt}{' '}
-              <Link to={switchTo} className="font-semibold text-[#3128ff] hover:text-[#221bc9]">
+              {switchPrompt ? <>{switchPrompt}{' '}</> : null}
+              <Link
+                to={switchTo}
+                onClick={switchOnClick}
+                className="inline-flex items-center gap-1 align-middle font-semibold text-[#3128ff] hover:text-[#221bc9]"
+              >
                 {switchLabel}
+                {switchArrow ? <ArrowRight className="h-4 w-4" /> : null}
               </Link>
             </p>
           ) : null}

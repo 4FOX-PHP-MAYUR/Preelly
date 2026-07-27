@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useSelector } from 'react-redux'
-import { adminService } from '@shared/services/api'
+import { adminService } from '@/services/api'
 import { selectIsAdmin, selectUser } from '@shared/store/slices/authSlice'
 import { 
   Package, 
@@ -27,7 +27,7 @@ import { EmiratesIdThumbnailPair, EmiratesIdLightbox } from '../components/Admin
 import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
 import toast from 'react-hot-toast'
 import { getMediaUrl } from '@shared/utils/helpers'
-import { getSocket } from '@shared/services/socket'
+import { getSocket } from '@/services/socket'
 import { REJECTION_REASON_CATEGORIES } from '@shared/constants/rejectionReasons'
 
 function AdminDashboardPage() {

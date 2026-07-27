@@ -41,6 +41,23 @@ function getConfig() {
  * Builds the encrypted request to POST to CCAvenue.
  * @param {object} order  { orderId, amount, currency, redirectUrl, cancelUrl, billing, merchantParams }
  */
+// CCAvenue rejects special characters in billing fields (e.g. apostrophes,
+// ampersands, quotes) — even URL-encoded — producing "Problem while returning
+// back to application". Keep only a safe set of characters and cap the length.
+function sanitizeText(value, maxLen = 150, fallback = 'NA') {
+  const cleaned = String(value ?? '')
+    .replace(/[^a-zA-Z0-9 ,.\-/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, maxLen)
+  return cleaned || fallback
+}
+
+function sanitizeTel(value, fallback = '') {
+  const cleaned = String(value ?? '').replace(/[^0-9]/g, '').slice(0, 15)
+  return cleaned || fallback
+}
+
 function buildRedirect(order) {
   const { merchantId, accessCode, workingKey, paymentUrl } = readConfig()
   const b = order.billing || {}
@@ -54,14 +71,14 @@ function buildRedirect(order) {
     cancel_url: order.cancelUrl,
     language: 'EN',
 
-    billing_name: b.name || 'Customer',
+    billing_name: sanitizeText(b.name, 60, 'Customer'),
     billing_email: b.email || '',
-    billing_tel: b.mobile || '',
-    billing_address: b.address || 'NA',
-    billing_city: b.city || 'NA',
-    billing_state: b.state || 'NA',
-    billing_zip: b.pincode || '00000',
-    billing_country: b.country || 'United Arab Emirates',
+    billing_tel: sanitizeTel(b.mobile),
+    billing_address: sanitizeText(b.address, 150, 'NA'),
+    billing_city: sanitizeText(b.city, 60, 'NA'),
+    billing_state: sanitizeText(b.state, 60, 'NA'),
+    billing_zip: sanitizeTel(b.pincode) || '00000',
+    billing_country: sanitizeText(b.country, 60, 'United Arab Emirates'),
 
     integration_type: 'iframe_normal',
     merchant_param1: order.merchantParams?.p1 || '',

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
-import { sendOtp, clearError } from '@shared/store/slices/authSlice'
+import { sendOtp, emailStart, clearError, enterGuestMode } from '@shared/store/slices/authSlice'
 import toast from 'react-hot-toast'
 import { Mail } from 'lucide-react'
 import AuthSplitLayout, {
@@ -50,7 +50,8 @@ function LoginPage() {
   const { loading, error, isAuthenticated } = useSelector((state) => state.auth)
   const { register, handleSubmit, formState: { errors } } = useForm()
   const [oauthLoading, setOauthLoading] = useState(null)
-  const [channel, setChannel] = useState('email')
+  // Phone tab is the default per the new login design.
+  const [channel, setChannel] = useState('whatsapp')
   const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO)
 
   const params = new URLSearchParams(location.search)
@@ -59,7 +60,7 @@ function LoginPage() {
   useEffect(() => {
     localStorage.setItem('authTarget', target)
     if (isAuthenticated) {
-      navigate(target === 'seller' ? '/post-ad' : '/')
+      navigate(target === 'seller' ? '/post-ad' : '/dashboard/settings')
     }
   }, [isAuthenticated, navigate, target])
 
@@ -112,11 +113,15 @@ function LoginPage() {
         return
       }
 
-      await dispatch(sendOtp({ email: data.email.trim(), mode: 'login', channel: 'email' })).unwrap()
-      toast.success('Sign-in code sent to your email')
-      navigate(
-        `/verify-email-otp?email=${encodeURIComponent(data.email.trim())}&mode=login&channel=email`
-      )
+      const email = data.email.trim()
+      const result = await dispatch(emailStart({ email })).unwrap()
+      toast.success(result?.message || 'Verification code sent to your email')
+      if (result?.mode === 'signup') {
+        // New user — created as U-XXXXXXXX. Run the email→mobile completion chain.
+        navigate(`/verify-email-otp?email=${encodeURIComponent(email)}&flow=email-complete`)
+      } else {
+        navigate(`/verify-email-otp?email=${encodeURIComponent(email)}&mode=login&channel=email`)
+      }
     } catch {
       // Error handled by useEffect
     }
@@ -130,42 +135,42 @@ function LoginPage() {
 
   return (
     <AuthSplitLayout
-      modeLabel="Login"
-      title="Sign In"
+      title="Login"
       subtitle={
         target === 'seller'
           ? 'Access your seller dashboard, manage listings, and reply to buyers without missing a step.'
-          : 'Explore listings your way, discover the best deals, and pick up where you left off.'
+          : 'Explore cars your way scroll effortlessly, discover the best deals, and drive home your perfect match.'
       }
-      switchPrompt="Do not have an account?"
-      switchLabel="Sign Up"
-      switchTo={target === 'seller' ? '/signup?target=seller' : '/signup'}
+      switchLabel="Continue as Guest"
+      switchTo="/"
+      switchArrow
+      switchOnClick={() => dispatch(enterGuestMode())}
       quote="I found my perfect car in minutes. Scrolling through Preelly made the whole process effortless."
       quoteAuthor="Aarav Mehta"
       quoteRole="Car Buyer"
     >
-      <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-[#e7e9f2] bg-[#f8f9fc] p-1">
-        <button
-          type="button"
-          onClick={() => setChannel('email')}
-          className={`rounded-xl px-4 py-3 text-sm font-medium transition ${
-            channel === 'email'
-              ? 'bg-white text-[#1400ff] shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
-          }`}
-        >
-          Email
-        </button>
+      <div className="mb-6 grid grid-cols-2 gap-2 rounded-2xl border border-[#e7e9f2] bg-[#f4f5fb] p-1.5">
         <button
           type="button"
           onClick={() => setChannel('whatsapp')}
-          className={`rounded-xl px-4 py-3 text-sm font-medium transition ${
+          className={`rounded-xl px-4 py-3.5 text-sm font-semibold transition ${
             channel === 'whatsapp'
-              ? 'bg-white text-[#1400ff] shadow-sm'
-              : 'text-slate-500 hover:text-slate-700'
+              ? 'bg-[#1400ff] text-white shadow-[0_8px_20px_rgba(20,0,255,0.25)]'
+              : 'text-[#1400ff] hover:bg-white/70'
           }`}
         >
-          WhatsApp
+          Phone
+        </button>
+        <button
+          type="button"
+          onClick={() => setChannel('email')}
+          className={`rounded-xl px-4 py-3.5 text-sm font-semibold transition ${
+            channel === 'email'
+              ? 'bg-[#1400ff] text-white shadow-[0_8px_20px_rgba(20,0,255,0.25)]'
+              : 'text-[#1400ff] hover:bg-white/70'
+          }`}
+        >
+          Email
         </button>
       </div>
 
@@ -187,10 +192,10 @@ function LoginPage() {
           />
         ) : (
           <AuthPhoneField
-            label="WhatsApp Number"
+            label="Mobile Number"
             countryIso={countryIso}
             onCountryIsoChange={setCountryIso}
-            placeholder="Enter your mobile number"
+            placeholder="Enter your Phone Number"
             error={errors.phone?.message}
             {...register('phone', {
               required: channel === 'whatsapp' ? 'Mobile number is required' : false,

@@ -109,7 +109,28 @@ export function DynamicCategoryFormSection({ categoryId, onAdvancePastForm, setV
 
       {isLastStep && (
         <div className="mt-6 w-full">
-          <LocationMapPicker setValue={setValue} watch={watch} />
+          <LocationMapPicker
+            setValue={setValue}
+            watch={watch}
+            onAddressChange={({ formatted, street }) => {
+              // Reverse-geocoded pin → fill the visible location textboxes (dynamic form
+              // fields). Field names vary per category ("location" / "locateyouritem" /
+              // "buildingstreetname"), so match by name first, then by title keyword.
+              const byName = (names) =>
+                currentStepFields.find((f) => names.includes((f.fieldName || '').toLowerCase()))
+              const byTitle = (keywords) =>
+                currentStepFields.find((f) =>
+                  keywords.some((k) => (f.fieldTitle || '').toLowerCase().includes(k)),
+                )
+
+              const locateField = byName(['location', 'locateyouritem']) || byTitle(['locate', 'location'])
+              if (locateField && formatted) setFieldValue(locateField, formatted)
+
+              const streetField =
+                byName(['buildingstreetname', 'buildingandstreetname']) || byTitle(['building', 'street'])
+              if (streetField && street) setFieldValue(streetField, street)
+            }}
+          />
         </div>
       )}
 

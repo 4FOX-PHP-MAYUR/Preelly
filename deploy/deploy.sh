@@ -16,9 +16,9 @@ if command -v pm2 >/dev/null 2>&1; then
   pm2 save
   echo ""
   echo "Deployed successfully:"
-  echo "  Frontend: http://117.254.196.100:8030"
-  echo "  Admin:    http://117.254.196.100:8031"
-  echo "  API:      http://117.254.196.100:8029/api/health"
+  echo "  Frontend: http://localhost:8030"
+  echo "  Admin:    http://localhost:8031"
+  echo "  API:      http://localhost:8029/api/health"
   echo ""
   echo "Open firewall ports 8029, 8030, 8031 if not already open."
 else

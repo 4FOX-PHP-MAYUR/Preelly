@@ -3,7 +3,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ArrowLeft, Phone } from 'lucide-react'
-import { clearError, sendOtp, sendPhoneOtp, verifyOtp, verifyPhoneOtp } from '@shared/store/slices/authSlice'
+import { clearError, sendOtp, sendPhoneOtp, verifyOtp, verifyPhoneOtp, completeVerifyPhone } from '@shared/store/slices/authSlice'
 import { AuthSidePanel } from '../components/Auth/AuthSplitLayout'
 import OtpIllustration from '../components/Auth/OtpIllustration'
 import { getCountryByIso } from '@shared/data/countryCodes'
@@ -40,6 +40,13 @@ function VerifyPhoneOtpPage() {
 
   const isLoginFlow = authMode === 'login' && authChannel === 'whatsapp'
 
+  // "mobile-complete" is the email→mobile completion chain for auto-created
+  // (U-XXXXXXXX) users; it requires BOTH verifications before granting access.
+  const isCompleteFlow = useMemo(() => {
+    const params = new URLSearchParams(location.search)
+    return params.get('flow') === 'mobile-complete'
+  }, [location.search])
+
   const target = useMemo(
     () => (localStorage.getItem('authTarget') === 'seller' ? 'seller' : 'buyer'),
     []
@@ -47,7 +54,7 @@ function VerifyPhoneOtpPage() {
 
   const loginPath = target === 'seller' ? '/login?target=seller' : '/login'
   const signupPath = target === 'seller' ? '/signup?target=seller' : '/signup'
-  const backPath = isLoginFlow ? loginPath : signupPath
+  const backPath = isLoginFlow || isCompleteFlow ? loginPath : signupPath
   const [phone, setPhone] = useState(queryPhone)
   const [otpDigits, setOtpDigits] = useState(Array(OTP_LENGTH).fill(''))
   const [otpError, setOtpError] = useState('')
@@ -69,15 +76,15 @@ function VerifyPhoneOtpPage() {
   }, [error, dispatch])
 
   useEffect(() => {
-    if (isLoginFlow && isAuthenticated) {
-      navigate(target === 'seller' ? '/post-ad' : '/')
+    if ((isLoginFlow || isCompleteFlow) && isAuthenticated) {
+      navigate(target === 'seller' ? '/post-ad' : '/dashboard/settings')
       return
     }
 
-    if (!isLoginFlow && user?.isVerified) {
+    if (!isLoginFlow && !isCompleteFlow && user?.isVerified) {
       navigate('/dashboard')
     }
-  }, [isLoginFlow, isAuthenticated, user, navigate, target])
+  }, [isLoginFlow, isCompleteFlow, isAuthenticated, user, navigate, target])
 
   useEffect(() => {
     if (!phone) {
@@ -192,8 +199,26 @@ function VerifyPhoneOtpPage() {
     }
 
     try {
+      if (isCompleteFlow) {
+        const result = await dispatch(
+          completeVerifyPhone({
+            phone,
+            otp: otpValue,
+            phoneCountryCode,
+            phoneCountryIso: queryCountryIso || undefined,
+          })
+        ).unwrap()
+        if (result?.nextStep === 'email') {
+          toast.success('Mobile verified. Please verify your email to continue.')
+          navigate(`/complete-email?phone=${encodeURIComponent(phone)}`)
+          return
+        }
+        toast.success('Signed in successfully!')
+        return
+      }
+
       if (isLoginFlow) {
-        await dispatch(
+        const result = await dispatch(
           verifyOtp({
             phone,
             otp: otpValue,
@@ -203,6 +228,12 @@ function VerifyPhoneOtpPage() {
             channel: 'whatsapp',
           })
         ).unwrap()
+        // Phone login for a user with no linked email → complete the email step.
+        if (result?.nextStep === 'email') {
+          toast.success('Mobile verified. Please add your email to continue.')
+          navigate(`/complete-email?phone=${encodeURIComponent(phone)}`)
+          return
+        }
         toast.success('Signed in successfully!')
         return
       }

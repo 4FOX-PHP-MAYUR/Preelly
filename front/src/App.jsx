@@ -1,4 +1,4 @@
-import { Suspense, lazy, useMemo, useEffect, useRef } from 'react'
+import { Suspense, lazy, useEffect, useRef } from 'react'
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import Layout from './components/Layout/Layout'
@@ -20,7 +20,6 @@ const SelectPackagePage = lazy(() => import('./pages/SelectPackagePage'))
 const StorageCheckoutPage = lazy(() => import('./pages/StorageCheckoutPage'))
 const PaymentResultPage = lazy(() => import('./pages/PaymentResultPage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
-const SignupPage = lazy(() => import('./pages/SignupPage'))
 const DashboardLayout = lazy(() => import('./components/Dashboard/DashboardLayout'))
 const DashboardOverviewPage = lazy(() => import('./pages/dashboard/DashboardOverviewPage'))
 const DashboardListingsPage = lazy(() => import('./pages/dashboard/DashboardListingsPage'))
@@ -36,10 +35,10 @@ const SearchResultsPage = lazy(() => import('./pages/SearchResultsPage'))
 const CategoryProductsPage = lazy(() => import('./pages/CategoryProductsPage'))
 const ChatInboxPage = lazy(() => import('./pages/ChatInboxPage'))
 const CartCheckoutPage = lazy(() => import('./pages/CartCheckoutPage'))
-const PostAdDynamicFormPage = lazy(() => import('./pages/PostAdDynamicFormPage'))
 const VerifyEmailOtpPage = lazy(() => import('./pages/VerifyEmailOtpPage'))
 const VerifyPhoneOtpPage = lazy(() => import('./pages/VerifyPhoneOtpPage'))
-const ProfileSetupPage = lazy(() => import('./pages/ProfileSetupPage'))
+const CompleteMobilePage = lazy(() => import('./pages/CompleteMobilePage'))
+const CompleteEmailPage = lazy(() => import('./pages/CompleteEmailPage'))
 const OAuthSuccessPage = lazy(() => import('./pages/OAuthSuccessPage'))
 const WelcomePage = lazy(() => import('./pages/WelcomePage'))
 const BookmarkPage = lazy(() => import('./pages/BookmarkPage'))
@@ -58,15 +57,21 @@ function PrivateRoute({ children }) {
   const hydrating = useSelector(selectAuthHydrating)
   const location = useLocation()
   const isSellerIntent =
-    location.pathname === '/post-ad' || location.pathname === '/post-ad-dynamic'
-  const target = isSellerIntent ? 'seller' : 'buyer'
+    location.pathname === '/post-ad'
   const hasOptimisticSession = Boolean(user) || readCachedUserFlag()
   const hasSession = hydrating ? hasOptimisticSession || isAuthenticated : isAuthenticated
 
   if (hydrating && !hasOptimisticSession && !isAuthenticated) return null
-  if (!hasSession) return <Navigate to={`/login?target=${target}`} replace />
+  // Buyers land on a clean /login; only the seller intent carries ?target=seller.
+  if (!hasSession) return <Navigate to={isSellerIntent ? '/login?target=seller' : '/login'} replace />
 
   return children
+}
+
+// /signup has been removed — send visitors to /login, preserving any query (e.g. ?target=seller).
+function SignupRedirect() {
+  const { search } = useLocation()
+  return <Navigate to={`/login${search}`} replace />
 }
 
 function App() {
@@ -77,12 +82,6 @@ function App() {
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const hydrating = useSelector(selectAuthHydrating)
 
-  const inferredTarget = useMemo(() => {
-    const isSellerIntent =
-      location.pathname === '/post-ad' || location.pathname === '/post-ad-dynamic'
-    return isSellerIntent ? 'seller' : 'buyer'
-  }, [location.pathname])
-
   useSyncRouteApiScope()
 
   const authBootstrappedRef = useRef(false)
@@ -92,16 +91,6 @@ function App() {
     authBootstrappedRef.current = true
     dispatch(initializeAuth())
   }, [dispatch])
-
-  useEffect(() => {
-    if (hydrating) return
-    if (!isAuthenticated) return
-    if (!user || user.role === 'admin') return
-    if (user.isProfileComplete) return
-    if (location.pathname === '/profile-setup') return
-    if (location.pathname === '/post-ad' || location.pathname === '/post-ad-dynamic') return
-    navigate(`/profile-setup?target=${inferredTarget}`, { replace: true })
-  }, [hydrating, isAuthenticated, user, location.pathname, navigate, inferredTarget])
 
   return (
     <Layout>
@@ -116,23 +105,18 @@ function App() {
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/search" element={<SearchResultsPage />} />
           <Route path="/login" element={<LoginPage />} />
-          <Route path="/signup" element={<SignupPage />} />
+          {/* Signup is unified into /login (auto-detects new vs. existing users). */}
+          <Route path="/signup" element={<SignupRedirect />} />
           <Route path="/verify-email-otp" element={<VerifyEmailOtpPage />} />
           <Route path="/verify-phone-otp" element={<VerifyPhoneOtpPage />} />
+          <Route path="/complete-mobile" element={<CompleteMobilePage />} />
+          <Route path="/complete-email" element={<CompleteEmailPage />} />
           <Route path="/oauth-success" element={<OAuthSuccessPage />} />
           <Route
             path="/welcome"
             element={
               <PrivateRoute>
                 <WelcomePage />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/profile-setup"
-            element={
-              <PrivateRoute>
-                <ProfileSetupPage />
               </PrivateRoute>
             }
           />
@@ -221,14 +205,6 @@ function App() {
             element={
               <PrivateRoute>
                 <PaymentResultPage variant="failure" />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/post-ad-dynamic"
-            element={
-              <PrivateRoute>
-                <PostAdDynamicFormPage />
               </PrivateRoute>
             }
           />

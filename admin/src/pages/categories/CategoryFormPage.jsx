@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { adminService, categoryService } from '@shared/services/api'
+import { adminService, categoryService } from '@/services/api'
 import AdminFormShell from '../../components/AdminUI/AdminFormShell'
 import Input from '../../components/AdminUI/Input'
+import Select from '../../components/AdminUI/Select'
 import Checkbox from '../../components/AdminUI/Checkbox'
 import FormSection from '../../components/AdminUI/FormSection'
 import toast from 'react-hot-toast'
@@ -22,6 +23,7 @@ const emptyForm = {
   clear_categoryImage: false,
   colorCode: '',
   xOrder: '',
+  isChild: '0',
 }
 
 function CategoryFormPage() {
@@ -98,6 +100,7 @@ function CategoryFormPage() {
           clear_categoryImage: false,
           colorCode: row.colorCode || '',
           xOrder: row.xOrder !== undefined && row.xOrder !== null ? String(row.xOrder) : '',
+          isChild: row.isChild !== undefined && row.isChild !== null ? String(row.isChild) : '0',
         })
         setExistingImage(row.image || row.icon || '')
         setExistingCategoryImage(row.categoryImage || '')
@@ -196,6 +199,7 @@ function CategoryFormPage() {
         isActive: form.isActive !== false,
         colorCode: form.colorCode || '',
         xOrder: form.xOrder !== '' ? form.xOrder : 0,
+        isChild: form.isChild !== '' ? Number(form.isChild) || 0 : 0,
       }
       if (form.category_image_file) {
         payload.category_image = form.category_image_file
@@ -420,6 +424,19 @@ function CategoryFormPage() {
           value={form.xOrder}
           onChange={(e) => setForm({ ...form, xOrder: e.target.value })}
           placeholder="0"
+        />
+      </FormSection>
+
+      <FormSection title="Is Child">
+        <Select
+          label="Is Child"
+          value={form.isChild}
+          onChange={(e) => setForm({ ...form, isChild: e.target.value })}
+          options={[
+            { value: '0', label: 'No (0)' },
+            { value: '1', label: 'Yes (1)' },
+          ]}
+          hint="Defaults to 0"
         />
       </FormSection>
     </AdminFormShell>

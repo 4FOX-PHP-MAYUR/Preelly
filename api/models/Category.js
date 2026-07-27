@@ -29,6 +29,8 @@ const CategorySchema = new Schema(
     xOrder: { type: Number, default: 0 },
     emoji: { type: String, default: '📦' },
     count: { type: Number, default: 0 },
+    // 0 = not a child category, 1 = child. Defaults to 0 on add/update.
+    isChild: { type: Number, default: 0 },
   },
   { timestamps: true }
 )

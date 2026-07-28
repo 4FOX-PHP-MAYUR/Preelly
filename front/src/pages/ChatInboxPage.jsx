@@ -1282,7 +1282,7 @@ export default function ChatInboxPage() {
                   {isBuyer && (
                     <button
                       title="View cart"
-                      onClick={() => navigate(`/cart${activeThread?.productId ? `?productId=${activeThread.productId}` : ''}`)}
+                      onClick={handleProceedClick}
                       className="relative text-gray-400 hover:opacity-80 transition-opacity"
                     >
                       <img src="/images/shopping_cart.png" alt="Cart" className="h-5 w-5 object-contain" />

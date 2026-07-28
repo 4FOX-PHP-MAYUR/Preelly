@@ -41,6 +41,9 @@ const CartSchema = new Schema(
       comment: { type: String, default: '' },
       approved: { type: Boolean, default: false },
       approvedAt: { type: Date, default: null },
+      // Buyer explicitly declined Preelly Pay in chat and proceeded to cart.
+      notInterested: { type: Boolean, default: false },
+      notInterestedAt: { type: Date, default: null },
     },
 
     // Soft delete

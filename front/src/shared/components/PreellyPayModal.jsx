@@ -52,6 +52,7 @@ export function PreellyPayModal({
   initialComment,
   onClose,
   onConfirm,
+  onNotInterested,
 }) {
   const [selected, setSelected] = useState(initialSelected || [])
   const [comment, setComment] = useState(initialComment || '')
@@ -208,13 +209,24 @@ export function PreellyPayModal({
 
         {/* Footer */}
         <div className="border-t border-slate-100 px-6 py-4">
-          <button
-            type="button"
-            onClick={() => onConfirm(selected, comment)}
-            className="w-full rounded-full bg-[#1414e6] px-6 py-4 text-base font-bold text-white transition hover:bg-[#1010c4]"
-          >
-            Confirm
-          </button>
+          <div className="flex gap-3">
+            {onNotInterested && (
+              <button
+                type="button"
+                onClick={onNotInterested}
+                className="flex-1 rounded-full border border-slate-300 px-6 py-4 text-base font-bold text-slate-700 transition hover:bg-slate-50"
+              >
+                Not Interested
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onConfirm(selected, comment)}
+              className="flex-1 rounded-full bg-[#1414e6] px-6 py-4 text-base font-bold text-white transition hover:bg-[#1010c4]"
+            >
+              Confirm
+            </button>
+          </div>
         </div>
       </div>
     </div>

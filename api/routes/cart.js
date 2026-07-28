@@ -136,6 +136,57 @@ router.post('/preelly-conditions', authMiddleware, async (req, res) => {
   }
 })
 
+// @route   POST /api/cart/preelly-not-interested
+// @desc    Buyer declined Preelly Pay in chat — record the opt-out on their active
+//          cart row for the chat's product, then they proceed to cart.
+// @access  Private
+router.post('/preelly-not-interested', authMiddleware, async (req, res) => {
+  try {
+    const requesterId = req.user._id
+    const { chatId } = req.body
+
+    if (!chatId) {
+      return res.status(400).json({ success: false, message: 'chatId is required' })
+    }
+
+    const chat = await Chat.findById(chatId).select('product buyer seller')
+    if (!chat || !chat.product || !chat.buyer || !chat.seller) {
+      return res.status(404).json({ success: false, message: 'Chat not found' })
+    }
+
+    // Only the buyer of this chat can opt out on their own cart.
+    if (chat.buyer.toString() !== requesterId.toString()) {
+      return res.status(403).json({ success: false, message: 'Not allowed for this chat' })
+    }
+
+    const cart = await Cart.findOneAndUpdate(
+      { userId: chat.buyer, productId: chat.product, cartStatus: 'ACTIVE', deletedAt: null },
+      {
+        $set: {
+          preellyInspection: {
+            conditions: ['Not Interested'],
+            comment: '',
+            approved: false,
+            approvedAt: null,
+            notInterested: true,
+            notInterestedAt: new Date(),
+          },
+        },
+      },
+      { new: true }
+    )
+
+    if (!cart) {
+      return res.status(404).json({ success: false, message: 'Cart item not found for this product' })
+    }
+
+    return res.status(200).json({ success: true, data: cart })
+  } catch (err) {
+    console.error('cart/preelly-not-interested error:', err)
+    return res.status(500).json({ success: false, message: 'Failed to save preference' })
+  }
+})
+
 // @route   GET /api/cart
 // @desc    List the current user's active cart items (as buyer)
 // @access  Private

@@ -1082,6 +1082,17 @@ export default function ChatInboxPage() {
     }
   }
 
+  // Buyer declined Preelly Pay → record the opt-out in the DB and go to cart.
+  const handleNotInterestedPreelly = async () => {
+    setPreellyModalOpen(false)
+    try {
+      await cartService.setPreellyNotInterested(activeId)
+    } catch {
+      /* non-fatal: still take the buyer to the cart */
+    }
+    navigate(`/cart${activeThread?.productId ? `?productId=${activeThread.productId}` : ''}`)
+  }
+
   // Buyer confirmed the popup → send the conditions to the seller for approval.
   const handleConfirmPreellyChat = (selected, comment) => {
     if (!selected || selected.length === 0) {
@@ -1642,6 +1653,7 @@ export default function ChatInboxPage() {
                 charge={preellyCharge}
                 onClose={() => setPreellyModalOpen(false)}
                 onConfirm={handleConfirmPreellyChat}
+                onNotInterested={handleNotInterestedPreelly}
               />
 
               {/* input */}

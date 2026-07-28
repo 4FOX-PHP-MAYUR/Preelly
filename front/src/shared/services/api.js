@@ -515,6 +515,9 @@ export const cartService = {
   // Persist seller-approved Preelly inspection conditions onto the buyer's cart.
   savePreellyConditions: (chatId, conditions, comment) =>
     api.post('/cart/preelly-conditions', { chatId, conditions, comment }),
+  // Buyer declined Preelly Pay — record the opt-out on their cart row.
+  setPreellyNotInterested: (chatId) =>
+    api.post('/cart/preelly-not-interested', { chatId }),
 }
 
 /**

@@ -796,6 +796,13 @@ export default function ChatInboxPage() {
   const doSend = async (msg = text.trim(), files = attachFiles) => {
     if (!msg && files.length === 0) return
     if (!activeId || !activeThread || sending) return
+    // Blocked threads are read-only (either direction).
+    if (activeThread.blockedByMe || activeThread.blockedMe) {
+      toast.error(activeThread.blockedByMe
+        ? "You've blocked this account. Unblock them to send messages."
+        : "You can't send messages in this chat.")
+      return
+    }
     // A sold product can no longer be chatted about or offered on (1:1 threads only).
     if (!activeThread.isGroup && activeThread.productSold) { setSoldModalOpen(true); return }
     setText('')
@@ -900,6 +907,21 @@ export default function ChatInboxPage() {
   const is1to1 = Boolean(activeThread && !activeThread.isGroup && activeThread.type !== 'support')
   const otherPartyId = is1to1 ? (otherParty?.id || null) : null
   const isMuted = Boolean(activeThread?.muted)
+  const [blocking, setBlocking] = useState(false)
+
+  // A blocked thread is read-only for both sides; the copy differs by who blocked whom.
+  const blockedByMe = Boolean(is1to1 && activeThread?.blockedByMe)
+  const blockedMe = Boolean(is1to1 && activeThread?.blockedMe)
+  const isBlocked = blockedByMe || blockedMe
+  const blockNotice = blockedByMe
+    ? {
+        title: "You've blocked this account",
+        subtitle: `You can't message ${otherParty?.name || 'this user'} until you unblock them.`,
+      }
+    : {
+        title: `${otherParty?.name || 'This account'} has blocked you`,
+        subtitle: "You can't send messages in this chat.",
+      }
 
   // Close the kebab menu on outside click / Escape.
   useEffect(() => {
@@ -927,16 +949,25 @@ export default function ChatInboxPage() {
     }
   }
 
-  const handleBlock = async () => {
+  // Block/unblock is the same toggle endpoint. Blocking locks the thread in place
+  // (rather than navigating away) so the "You've blocked this account" state shows.
+  const handleToggleBlock = async () => {
     setMenuOpen(false)
-    if (!otherPartyId) return
-    if (!window.confirm(`Block ${otherParty?.name || 'this user'}? They will no longer be able to follow you.`)) return
+    if (!otherPartyId || blocking) return
+    if (!blockedByMe && !window.confirm(
+      `Block ${otherParty?.name || 'this user'}? You won't be able to message each other and they can no longer follow you.`
+    )) return
+    setBlocking(true)
     try {
       const res = await userService.blockUser(otherPartyId)
-      toast.success(res?.data?.message || 'User blocked')
-      navigate('/chat', { replace: true })
+      const blocked = Boolean(res?.data?.blocked)
+      setActiveThread((prev) => (prev && prev.id === activeId ? { ...prev, blockedByMe: blocked } : prev))
+      toast.success(res?.data?.message || (blocked ? 'User blocked' : 'User unblocked'))
+      refreshChats()
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to block user')
+      toast.error(err?.response?.data?.message || 'Failed to update block status')
+    } finally {
+      setBlocking(false)
     }
   }
 
@@ -1238,15 +1269,6 @@ export default function ChatInboxPage() {
                 ))
               )}
             </div>
-
-            {/* new chat */}
-            <div className="p-3 border-t border-gray-100 shrink-0">
-              <button onClick={() => navigate('/reels')}
-                className="w-full h-11 rounded-full text-white text-sm font-bold transition-opacity hover:opacity-90 flex items-center justify-center gap-2"
-                style={{ background: 'linear-gradient(135deg,#8b5cf6 0%,#7c3aed 100%)' }}>
-                <Plus className="h-4 w-4" /> New Chat
-              </button>
-            </div>
           </div>
 
           {/* ═══ RIGHT: thread ═══ */}
@@ -1315,11 +1337,12 @@ export default function ChatInboxPage() {
                           <button
                             type="button"
                             role="menuitem"
-                            onClick={handleBlock}
-                            className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                            onClick={handleToggleBlock}
+                            disabled={blocking}
+                            className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-60"
                           >
                             <Ban className="h-5 w-5 text-purple-600" />
-                            Block
+                            {blockedByMe ? 'Unblock' : 'Block'}
                           </button>
                         )}
                         {is1to1 && (
@@ -1403,7 +1426,7 @@ export default function ChatInboxPage() {
                                       isSelf={isSelf}
                                       senderName={otherParty?.name}
                                       senderAvatar={otherParty?.avatar || otherParty?.image}
-                                      locked={lockedOfferIds.has(m.id)}
+                                      locked={lockedOfferIds.has(m.id) || isBlocked}
                                       onAccept={() => acceptOffer(offerAmount)}
                                       onReject={() => doSend('❌ Offer rejected')}
                                       onCounter={amt => doSend(`💰 Offer: AED ${amt.toLocaleString()}`)}
@@ -1483,8 +1506,8 @@ export default function ChatInboxPage() {
                 )}
               </div>
 
-              {/* quick replies */}
-              <div className="flex gap-2 px-5 py-2.5 bg-white border-t border-gray-100 overflow-x-auto shrink-0">
+              {/* quick replies — hidden on a blocked (read-only) thread */}
+              <div className={`gap-2 px-5 py-2.5 bg-white border-t border-gray-100 overflow-x-auto shrink-0 ${isBlocked ? 'hidden' : 'flex'}`}>
                 {QUICK_REPLIES.map(qr => (
                   <button key={qr} onClick={() => handleQuickReply(qr)}
                     className="whitespace-nowrap px-4 py-1.5 rounded-full border border-gray-200 bg-white text-xs text-gray-600 hover:border-purple-300 hover:text-purple-700 hover:bg-purple-50 transition-colors shrink-0">
@@ -1656,6 +1679,31 @@ export default function ChatInboxPage() {
                 onNotInterested={handleNotInterestedPreelly}
               />
 
+              {/* blocked thread — read-only, copy depends on who blocked whom */}
+              {isBlocked ? (
+                <div className="shrink-0 border-t border-gray-200 bg-white px-6 py-8">
+                  <div className="mx-auto flex max-w-xs flex-col items-center text-center">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-200">
+                      <Ban className="h-7 w-7 text-white" strokeWidth={2} />
+                    </div>
+                    <p className="mt-4 text-base font-bold leading-snug text-[#25246E]">
+                      {blockNotice.title}
+                    </p>
+                    <p className="mt-1.5 text-xs text-gray-500">{blockNotice.subtitle}</p>
+                    {blockedByMe && (
+                      <button
+                        type="button"
+                        onClick={handleToggleBlock}
+                        disabled={blocking}
+                        className="mt-4 rounded-full border border-gray-200 px-5 py-2 text-sm font-semibold text-[#25246E] transition-colors hover:bg-gray-50 disabled:opacity-60"
+                      >
+                        {blocking ? 'Unblocking…' : 'Unblock'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+              <>
               {/* input */}
               <div className="px-5 py-3 bg-white border-t border-gray-200 shrink-0">
                 <input ref={fileRef} type="file" multiple className="hidden"
@@ -1730,6 +1778,8 @@ export default function ChatInboxPage() {
                   </>)}
                 </div>
               </div>
+              </>
+              )}
             </>) : (
               /* placeholder */
               <div className="flex-1 flex flex-col items-center justify-center text-center p-10 bg-gray-50/60">

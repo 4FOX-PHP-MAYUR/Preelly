@@ -6,9 +6,46 @@ const Product = require('../models/Product')
 const User = require('../models/User')
 const Notification = require('../models/Notification')
 const Report = require('../models/Report')
+const Follow = require('../models/Follow')
 const authMiddleware = require('../middleware/auth')
 const { chatUpload } = require('../middleware/upload')
 const path = require('path')
+const fs = require('fs')
+
+// A block is stored as { follower: blockedUser, following: blocker, status: 'blocked' }
+// (see routes/interactions.js POST /user/:id/block).
+// Returns, for each counterparty id: who blocked whom relative to `userId`.
+async function getBlockMap(userId, otherIds) {
+  const ids = Array.from(new Set((otherIds || []).filter(Boolean).map(String)))
+  const map = {}
+  for (const id of ids) map[id] = { blockedByMe: false, blockedMe: false }
+  if (ids.length === 0) return map
+
+  const me = String(userId)
+  const records = await Follow.find({
+    status: 'blocked',
+    $or: [
+      { following: userId, follower: { $in: ids } }, // I blocked them
+      { follower: userId, following: { $in: ids } }, // they blocked me
+    ],
+  })
+    .select('follower following')
+    .lean()
+
+  for (const rec of records) {
+    const blocker = String(rec.following)
+    const blocked = String(rec.follower)
+    if (blocker === me && map[blocked]) map[blocked].blockedByMe = true
+    if (blocked === me && map[blocker]) map[blocker].blockedMe = true
+  }
+  return map
+}
+
+async function getBlockState(userId, otherId) {
+  if (!otherId) return { blockedByMe: false, blockedMe: false }
+  const map = await getBlockMap(userId, [otherId])
+  return map[String(otherId)] || { blockedByMe: false, blockedMe: false }
+}
 
 async function getUnreadTotalForUser(userId) {
   const productChats = await Chat.find({
@@ -61,7 +98,22 @@ router.get('/', authMiddleware, async (req, res) => {
     if (supportChat) chats.push(supportChat)
     chats.sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0))
 
-    res.json(chats)
+    // 1:1 threads carry the block state so the inbox can lock them right away.
+    const counterpartyOf = (chat) => {
+      if (chat.type === 'support' || chat.type === 'group') return null
+      const buyerId = chat.buyer?._id || chat.buyer
+      const sellerId = chat.seller?._id || chat.seller
+      if (!buyerId || !sellerId) return null
+      return String(buyerId) === String(userId) ? String(sellerId) : String(buyerId)
+    }
+    const blockMap = await getBlockMap(userId, chats.map(counterpartyOf))
+    const withBlockState = chats.map((chat) => {
+      const otherId = counterpartyOf(chat)
+      const state = (otherId && blockMap[otherId]) || { blockedByMe: false, blockedMe: false }
+      return { ...chat, ...state }
+    })
+
+    res.json(withBlockState)
   } catch (error) {
     console.error('Error fetching chats:', error)
     res.status(500).json({ message: 'Error fetching chats' })
@@ -128,8 +180,19 @@ router.get('/:id', authMiddleware, async (req, res) => {
 
     const muted = (chat.mutedBy || []).some((id) => id.toString() === userId.toString())
 
+    // Block state (1:1 product threads only) — locks the composer on the client.
+    let blockState = { blockedByMe: false, blockedMe: false }
+    if (chat.type !== 'support' && chat.type !== 'group') {
+      const buyerId = chat.buyer?._id?.toString?.() || chat.buyer?.toString?.()
+      const sellerId = chat.seller?._id?.toString?.() || chat.seller?.toString?.()
+      const otherId = buyerId === userId.toString() ? sellerId : buyerId
+      if (otherId && otherId !== userId.toString()) {
+        blockState = await getBlockState(userId, otherId)
+      }
+    }
+
     res.json({
-      chat: { ...chat.toObject(), muted },
+      chat: { ...chat.toObject(), muted, ...blockState },
       messages,
     })
   } catch (error) {
@@ -343,8 +406,9 @@ router.post('/', authMiddleware, async (req, res) => {
         .populate('sender', 'name username avatar')
         .sort({ createdAt: 1 })
 
+      const blockState = await getBlockState(buyerId, sellerId)
       return res.json({
-        chat,
+        chat: { ...chat.toObject(), ...blockState },
         messages,
       })
     }
@@ -360,8 +424,9 @@ router.post('/', authMiddleware, async (req, res) => {
     await chat.populate('buyer', 'name username avatar isVerified identityVerificationStatus')
     await chat.populate('seller', 'name username avatar isVerified identityVerificationStatus')
 
+    const blockState = await getBlockState(buyerId, sellerId)
     res.status(201).json({
-      chat,
+      chat: { ...chat.toObject(), ...blockState },
       messages: [],
     })
   } catch (error) {
@@ -449,6 +514,25 @@ router.post('/:id/messages', authMiddleware, (req, res, next) => {
         return res.status(403).json({ message: 'Not authorized to send messages in this chat' })
       }
       otherPartyId = chat.buyer.toString() === userId.toString() ? chat.seller.toString() : chat.buyer.toString()
+
+      // A blocked thread is locked in both directions.
+      if (!isAdmin && otherPartyId) {
+        const { blockedByMe, blockedMe } = await getBlockState(userId, otherPartyId)
+        if (blockedByMe || blockedMe) {
+          // Drop anything multer already wrote to disk for this rejected send.
+          for (const f of files) {
+            fs.unlink(f.path, () => {})
+          }
+          return res.status(403).json({
+            blocked: true,
+            blockedByMe,
+            blockedMe,
+            message: blockedByMe
+              ? "You've blocked this account. Unblock them to send messages."
+              : "You can't send messages in this chat.",
+          })
+        }
+      }
     }
 
     const attachments = files.map((f) => ({

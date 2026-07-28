@@ -109,6 +109,9 @@ const transformChat = (chat, messages = [], meId = null) => {
     unreadForBuyer: chat.unreadForBuyer || 0,
     unreadForSeller: chat.unreadForSeller || 0,
     muted: Boolean(chat.muted),
+    // Block state of this 1:1 thread, relative to the viewer.
+    blockedByMe: Boolean(chat.blockedByMe),
+    blockedMe: Boolean(chat.blockedMe),
   }
 }
 
@@ -442,7 +445,9 @@ export function ChatProvider({ children }) {
     } catch (err) {
       console.error('Error sending message:', err)
       setError(err.response?.data?.message || 'Failed to send message')
-      
+
+      const blocked = err.response?.status === 403 && err.response?.data?.blocked
+
       // Remove temp message on error
       setThreads((prev) =>
         prev.map((thread) => {
@@ -450,10 +455,21 @@ export function ChatProvider({ children }) {
           return {
             ...thread,
             messages: thread.messages.filter(m => !m.id.startsWith('temp-')),
+            // The block may have happened while this thread was open — sync it so
+            // the composer locks immediately.
+            ...(blocked
+              ? {
+                  blockedByMe: Boolean(err.response.data.blockedByMe),
+                  blockedMe: Boolean(err.response.data.blockedMe),
+                }
+              : {}),
           }
         })
       )
-      
+
+      // Blocked sends must surface to the caller so it can lock the UI.
+      if (blocked) throw err
+
       return null
     }
   }, [])

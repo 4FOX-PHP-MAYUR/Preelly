@@ -10,7 +10,6 @@ import {
   Menu,
   Search as SearchIcon,
   Settings,
-  Shield,
   User,
 } from 'lucide-react'
 import BrandLogo from '@shared/components/BrandLogo'
@@ -20,13 +19,11 @@ import { MARKETPLACE_TOPBAR_DESKTOP } from './marketplaceLayoutStyles'
 import {
   logout,
   exitGuestMode,
-  selectIsAdmin,
   selectIsAuthenticated,
   selectIsGuest,
   selectUser,
 } from '@shared/store/slices/authSlice'
 import { getMediaUrl, isUserVerified } from '@shared/utils/helpers'
-import { ADMIN_PANEL_URL } from '@shared/utils/constants'
 
 function TopBarIcon({ to, label, Icon, badge }) {
   return (
@@ -60,7 +57,6 @@ function MarketplaceTopBar({ className = '', onToggleMobileMenu, topBarColSpan =
     : ''
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const isGuest = useSelector(selectIsGuest)
-  const isAdmin = useSelector(selectIsAdmin)
   const user = useSelector(selectUser)
   const unreadChatCount = useSelector((state) => (isAuthenticated ? state.feed?.unreadCount || 0 : 0))
 
@@ -218,12 +214,6 @@ function MarketplaceTopBar({ className = '', onToggleMobileMenu, topBarColSpan =
                       <Settings className="h-4 w-4 text-slate-400" />
                       Settings
                     </Link>
-                    {isAdmin && (
-                      <a href={ADMIN_PANEL_URL} onClick={() => setProfileOpen(false)} className="flex items-center gap-3 px-4 py-2.5 text-sm text-purple-600 transition-colors hover:bg-purple-50">
-                        <Shield className="h-4 w-4" />
-                        Admin Panel
-                      </a>
-                    )}
                   </nav>
                   <div className="border-t border-slate-100">
                     <button

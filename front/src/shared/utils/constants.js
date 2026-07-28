@@ -25,9 +25,12 @@ export const SOCKET_URL =
 // BACKEND_URL, so media URLs resolve correctly even outside the Vite dev proxy.
 export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || SOCKET_URL
 
-// Admin panel runs on a separate Vite app (default localhost:8031 in dev)
+// Admin panel runs on a separate Vite app (default localhost:8031 in dev).
+// Vite base is /admin/ — trailing slash is required in both origin and path forms.
 export const ADMIN_URL = import.meta.env.VITE_ADMIN_URL || 'http://localhost:8031'
-export const ADMIN_PANEL_URL = `${ADMIN_URL}/admin`
+export const ADMIN_PANEL_URL = /\/admin\/?$/.test(ADMIN_URL)
+  ? ADMIN_URL.replace(/\/?$/, '/')
+  : `${ADMIN_URL.replace(/\/$/, '')}/admin/`
 
 // Product Conditions
 export const PRODUCT_CONDITIONS = [

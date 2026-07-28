@@ -24,7 +24,38 @@ export default defineConfig(({ mode }) => {
   return {
     envDir,
     base: '/admin/',
-    plugins: [react()],
+    plugins: [
+      react(),
+      // Vite's base middleware 404s /admin (no slash). Redirect so bookmarks and
+      // ADMIN_PANEL_URL links that omit the trailing slash still work in dev.
+      {
+        name: 'redirect-admin-base',
+        configureServer(server) {
+          server.middlewares.use((req, res, next) => {
+            const pathOnly = (req.url || '').split(/[?#]/)[0]
+            if (pathOnly === '/admin') {
+              const suffix = (req.url || '').slice('/admin'.length)
+              res.writeHead(302, { Location: `/admin/${suffix}` })
+              res.end()
+              return
+            }
+            next()
+          })
+        },
+        configurePreviewServer(server) {
+          server.middlewares.use((req, res, next) => {
+            const pathOnly = (req.url || '').split(/[?#]/)[0]
+            if (pathOnly === '/admin') {
+              const suffix = (req.url || '').slice('/admin'.length)
+              res.writeHead(302, { Location: `/admin/${suffix}` })
+              res.end()
+              return
+            }
+            next()
+          })
+        },
+      },
+    ],
     resolve: {
       // Force a single copy of React / Router — @shared lives under front/ and
       // otherwise Vite can pull a second react-router-dom from front/node_modules,

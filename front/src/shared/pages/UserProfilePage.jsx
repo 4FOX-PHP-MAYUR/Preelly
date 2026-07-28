@@ -412,61 +412,63 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
               <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-gray-600">{bio}</p>
             )}
 
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              {isOwnProfile ? (
-                <>
-                  <Link
-                    to="/dashboard/settings"
-                    className="flex items-center gap-1.5 rounded-full bg-primary-50 px-5 py-2 text-sm font-semibold text-primary-700 transition hover:bg-primary-100"
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                    Edit Profile
-                  </Link>
-                  <button
-                    type="button"
-                    onClick={handleShareProfile}
-                    className="flex items-center gap-1.5 rounded-full bg-primary-50 px-5 py-2 text-sm font-semibold text-primary-700 transition hover:bg-primary-100"
-                  >
-                    <Share2 className="h-3.5 w-3.5" />
-                    Share Profile
-                  </button>
-                </>
-              ) : (
-                <>
-                  {isAuthenticated && (
+            {!isAdminUserDetail && (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {isOwnProfile ? (
+                  <>
+                    <Link
+                      to="/dashboard/settings"
+                      className="flex items-center gap-1.5 rounded-full bg-primary-50 px-5 py-2 text-sm font-semibold text-primary-700 transition hover:bg-primary-100"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                      Edit Profile
+                    </Link>
                     <button
                       type="button"
-                      onClick={handleFollow}
-                      className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
-                        followStatus === 'active'
-                          ? 'border border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          : followStatus === 'pending'
-                            ? 'border border-yellow-300 bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
-                            : 'bg-primary-600 text-white hover:bg-primary-700'
-                      }`}
+                      onClick={handleShareProfile}
+                      className="flex items-center gap-1.5 rounded-full bg-primary-50 px-5 py-2 text-sm font-semibold text-primary-700 transition hover:bg-primary-100"
                     >
-                      {followStatus === 'active' ? 'Following' : followStatus === 'pending' ? 'Requested' : 'Follow'}
+                      <Share2 className="h-3.5 w-3.5" />
+                      Share Profile
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleMessage}
-                    className="flex items-center gap-1.5 rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 sm:px-5"
-                  >
-                    <MessageCircle className="h-3.5 w-3.5" />
-                    Message
-                  </button>
-                </>
-              )}
-              <button
-                type="button"
-                onClick={() => toast('More options coming soon')}
-                className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-primary-700 transition hover:bg-primary-100"
-                aria-label="More options"
-              >
-                <MoreHorizontal className="h-4 w-4" />
-              </button>
-            </div>
+                  </>
+                ) : (
+                  <>
+                    {isAuthenticated && (
+                      <button
+                        type="button"
+                        onClick={handleFollow}
+                        className={`rounded-full px-5 py-2 text-sm font-semibold transition ${
+                          followStatus === 'active'
+                            ? 'border border-gray-200 bg-gray-100 text-gray-700 hover:bg-gray-200'
+                            : followStatus === 'pending'
+                              ? 'border border-yellow-300 bg-yellow-50 text-yellow-700 hover:bg-yellow-100'
+                              : 'bg-primary-600 text-white hover:bg-primary-700'
+                        }`}
+                      >
+                        {followStatus === 'active' ? 'Following' : followStatus === 'pending' ? 'Requested' : 'Follow'}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleMessage}
+                      className="flex items-center gap-1.5 rounded-full border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 sm:px-5"
+                    >
+                      <MessageCircle className="h-3.5 w-3.5" />
+                      Message
+                    </button>
+                  </>
+                )}
+                <button
+                  type="button"
+                  onClick={() => toast('More options coming soon')}
+                  className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-primary-700 transition hover:bg-primary-100"
+                  aria-label="More options"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

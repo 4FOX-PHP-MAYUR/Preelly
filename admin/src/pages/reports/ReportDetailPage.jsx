@@ -153,12 +153,7 @@ function ReportDetailPage() {
     <AdminPage>
       <PageHeader
         title={displayName(user)}
-        subtitle={
-          <>
-            <span className="sm:hidden">User · {truncateId(user?.id)}</span>
-            <span className="hidden sm:inline">Reported user · {user?.id}</span>
-          </>
-        }
+        subtitle="Reported user"
         action={
           <div className="flex flex-wrap gap-2">
             <Button variant="secondary" icon={ArrowLeft} onClick={() => navigate(LIST_PATH)}>
@@ -258,9 +253,6 @@ function ReportDetailPage() {
         <div className="space-y-6 sm:space-y-8">
           <FormSection title="User Information">
             <SectionGrid>
-              <Field label="User ID">
-                <span className="font-mono text-xs break-all">{user?.id || '—'}</span>
-              </Field>
               <Field label="Name">{user?.name || '—'}</Field>
               <Field label="Display Name">{user?.displayName || '—'}</Field>
               <Field label="Email" className="sm:col-span-2 lg:col-span-1">

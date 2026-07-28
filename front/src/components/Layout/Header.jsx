@@ -1,14 +1,13 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useSelector, useDispatch } from 'react-redux'
-import { selectIsAuthenticated, selectUser, selectIsAdmin, logout } from '@shared/store/slices/authSlice'
-import { Bell, CheckCircle2, ChevronDown, LayoutDashboard, LogOut, Menu, Settings, Shield, SlidersHorizontal, User, X } from 'lucide-react'
+import { selectIsAuthenticated, selectUser, logout } from '@shared/store/slices/authSlice'
+import { Bell, CheckCircle2, ChevronDown, LayoutDashboard, LogOut, Menu, Settings, SlidersHorizontal, User, X } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { chatService } from '@shared/services/api'
 import { getSocket } from '@shared/services/socket'
 import BrandLogo from '@shared/components/BrandLogo'
 import SearchBar from '../Search/SearchBar'
 import { getMediaUrl, isUserVerified } from '@shared/utils/helpers'
-import { ADMIN_PANEL_URL } from '@shared/utils/constants'
 
 /**
  * Site-wide header. Self-contained (owns its own auth/menu state) so it can be
@@ -19,7 +18,6 @@ function Header() {
   const location = useLocation()
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const user = useSelector(selectUser)
-  const isAdmin = useSelector(selectIsAdmin)
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -181,12 +179,6 @@ function Header() {
                             <Settings className="h-4 w-4 text-slate-400" />
                             Settings
                           </Link>
-                          {isAdmin && (
-                            <a href={ADMIN_PANEL_URL} className="flex items-center gap-3 px-4 py-2.5 text-sm text-purple-600 hover:bg-purple-50 transition-colors">
-                              <Shield className="h-4 w-4" />
-                              Admin Panel
-                            </a>
-                          )}
                         </nav>
                         <div className="border-t border-slate-100">
                           <button type="button" onClick={handleLogout} className="flex items-center gap-3 w-full px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition-colors">
@@ -302,12 +294,6 @@ function Header() {
                               <Settings className="h-4 w-4 text-slate-400" />
                               Settings
                             </Link>
-                            {isAdmin && (
-                              <a href={ADMIN_PANEL_URL} className="flex items-center gap-3 px-4 py-2.5 text-sm text-purple-600 hover:bg-purple-50 transition-colors">
-                                <Shield className="h-4 w-4" />
-                                Admin Panel
-                              </a>
-                            )}
                           </nav>
 
                           {/* Logout */}
@@ -401,11 +387,6 @@ function Header() {
                         <p className="text-xs text-slate-500">{userSubcopy}</p>
                       </div>
                     </Link>
-                    {isAdmin && (
-                      <a href={ADMIN_PANEL_URL} className="block px-3 py-2.5 text-purple-600 hover:bg-slate-50 rounded-xl text-sm font-medium">
-                        Admin Panel
-                      </a>
-                    )}
                     <button onClick={() => { handleLogout(); setMobileMenuOpen(false) }} className="flex items-center gap-2 w-full px-3 py-2.5 text-slate-700 hover:bg-red-50 hover:text-red-600 rounded-xl text-sm font-medium">
                       <LogOut className="h-4 w-4" />
                       Logout
@@ -448,11 +429,6 @@ function Header() {
                   <Link to="/dashboard" className="block px-4 py-2 text-white hover:bg-gray-800 rounded" onClick={() => setMobileMenuOpen(false)}>
                     Profile
                   </Link>
-                  {isAdmin && (
-                    <a href={ADMIN_PANEL_URL} className="block px-4 py-2 text-purple-400 hover:bg-gray-800 rounded">
-                      Admin
-                    </a>
-                  )}
                   <button onClick={() => { handleLogout(); setMobileMenuOpen(false) }} className="block w-full text-left px-4 py-2 text-white hover:bg-gray-800 rounded">
                     Logout
                   </button>

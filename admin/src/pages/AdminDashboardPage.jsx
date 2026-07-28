@@ -86,7 +86,7 @@ function AdminDashboardPage() {
   const [selectedRejectCategories, setSelectedRejectCategories] = useState([])
   const [rejectSelectionByCategory, setRejectSelectionByCategory] = useState({})
   const [rejectCustomReason, setRejectCustomReason] = useState('')
-  const [confirmAction, setConfirmAction] = useState(null) // { type: 'approve' | 'reject', productId, productTitle }
+  const [confirmAction, setConfirmAction] = useState(null) // { type: 'approve', productId, productTitle }
 
   const getMemberSinceYear = (u) => {
     const raw = u?.memberSince || u?.createdAt
@@ -178,13 +178,28 @@ function AdminDashboardPage() {
       navigate('/reports', { replace: true })
       return
     }
-    const validTabs = ['dashboard', 'products', 'sold', 'users', 'contacts', 'categories']
-    if (tab && validTabs.includes(tab) && tab !== activeTab) {
-      setActiveTab(tab)
+    // Legacy Products tab (?tab=products) now lives at /products → /admin/products
+    if (tab === 'products') {
+      navigate('/products', { replace: true })
+      return
     }
-  }, [searchParams, navigate, activeTab])
+    if (location.pathname === '/products') {
+      if (activeTab !== 'products') setActiveTab('products')
+      return
+    }
+    if (location.pathname === '/') {
+      const nextTab = tab && ['dashboard', 'sold', 'users', 'contacts', 'categories'].includes(tab)
+        ? tab
+        : 'dashboard'
+      if (nextTab !== activeTab) setActiveTab(nextTab)
+    }
+  }, [searchParams, navigate, activeTab, location.pathname])
 
   const setActiveTabWithUrl = (tab) => {
+    if (tab === 'products') {
+      navigate('/products')
+      return
+    }
     setActiveTab(tab)
     setSearchParams({ tab })
   }
@@ -652,16 +667,10 @@ function AdminDashboardPage() {
   const closeConfirmAction = () => setConfirmAction(null)
 
   const handleConfirmAction = async () => {
-    if (!confirmAction) return
-    const { type, productId } = confirmAction
+    if (!confirmAction || confirmAction.type !== 'approve') return
+    const { productId } = confirmAction
     closeConfirmAction()
-    if (type === 'approve') {
-      await handleApprove(productId)
-      return
-    }
-    if (type === 'reject') {
-      openRejectModal(productId)
-    }
+    await handleApprove(productId)
   }
 
   const renderProductActions = (p) => (
@@ -680,7 +689,7 @@ function AdminDashboardPage() {
           </button>
           <button
             type="button"
-            onClick={() => openConfirmAction('reject', p)}
+            onClick={() => openRejectModal(p._id)}
             disabled={processingId === p._id}
             className="admin-table-action text-red-600 dark:text-red-400 disabled:opacity-50"
             title="Reject"
@@ -1585,7 +1594,7 @@ function AdminDashboardPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => openConfirmAction('reject', product)}
+                              onClick={() => openRejectModal(product._id)}
                               disabled={processingId === product._id}
                               className="flex-1 sm:flex-none justify-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                               aria-label="Reject product"
@@ -1709,21 +1718,19 @@ function AdminDashboardPage() {
         open={Boolean(confirmAction)}
         onClose={closeConfirmAction}
         size="sm"
-        title={confirmAction?.type === 'approve' ? 'Confirm Approve' : 'Confirm Reject'}
+        title="Confirm Approve"
         footer={
           <Modal.Footer
             onCancel={closeConfirmAction}
             onConfirm={handleConfirmAction}
             cancelLabel="Cancel"
-            confirmLabel={confirmAction?.type === 'approve' ? 'Yes, Approve' : 'Yes, Reject'}
-            confirmVariant={confirmAction?.type === 'approve' ? 'success' : 'danger'}
+            confirmLabel="Yes, Approve"
+            confirmVariant="success"
           />
         }
       >
         <p className="text-sm text-slate-600 dark:text-slate-300">
-          {confirmAction?.type === 'approve'
-            ? `Are you sure you want to approve "${confirmAction?.productTitle}"? The listing will go live.`
-            : `Are you sure you want to reject "${confirmAction?.productTitle}"? You will select rejection reasons next.`}
+          {`Are you sure you want to approve "${confirmAction?.productTitle}"? The listing will go live.`}
         </p>
       </Modal>
 

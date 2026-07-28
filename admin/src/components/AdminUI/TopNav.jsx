@@ -18,6 +18,9 @@ function TopNav({ onMenuClick }) {
 
   const pageMeta = useMemo(() => {
     const pathname = location.pathname
+    if (pathname === '/products') {
+      return ADMIN_TAB_META.products || resolveAdminRouteMeta(pathname)
+    }
     if (pathname === '/') {
       const tab = searchParams.get('tab') || 'dashboard'
       return ADMIN_TAB_META[tab] || ADMIN_TAB_META.dashboard

@@ -66,6 +66,14 @@ function App() {
         <Routes>
           <Route path="/login" element={<AdminLoginPage />} />
           <Route
+            path="/products"
+            element={
+              <AdminRoute>
+                <AdminDashboardPage />
+              </AdminRoute>
+            }
+          />
+          <Route
             path="/products/:id"
             element={
               <AdminRoute>

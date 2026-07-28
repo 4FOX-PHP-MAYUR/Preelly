@@ -1,15 +1,14 @@
 import { useEffect, useState, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { Link, useNavigate, useLocation, useParams } from 'react-router-dom'
-import { selectUser, selectIsAuthenticated, selectIsAdmin } from '@shared/store/slices/authSlice'
+import { selectUser, selectIsAuthenticated } from '@shared/store/slices/authSlice'
 import { productService, userService, globalSearchService } from '@shared/services/api'
 import { clearReels, fetchFeedPage, fetchFeedShell, pinReelAtTop, setCurrentFeedType, REELS_PAGE_LIMIT } from '@shared/store/slices/feedSlice'
 import { getReelsStorageKey, getLocalReelsIndex, getSavedReelIndex, saveReelIndex } from '@shared/utils/reelsProgress'
 import { getMediaUrl, isValidObjectId } from '@shared/utils/helpers'
-import { ADMIN_PANEL_URL } from '@shared/utils/constants'
 import ReelsFeed from '@shared/components/Reels/ReelsFeed'
 import ReelsSkeleton from '@shared/components/Reels/ReelsSkeleton'
-import { Search, X, ArrowLeft, Filter, MapPin, DollarSign, Package, TrendingUp, Calendar, Home, Grid3x3, Bell, User, Plus, Shield, MessageCircle, Bookmark, ExternalLink, LogOut } from 'lucide-react'
+import { Search, X, ArrowLeft, Filter, MapPin, DollarSign, Package, TrendingUp, Calendar, Home, Grid3x3, Bell, User, Plus, MessageCircle, Bookmark, ExternalLink, LogOut } from 'lucide-react'
 import BrandLogo from '@shared/components/BrandLogo'
 import { chatService } from '@shared/services/api'
 import toast from 'react-hot-toast'
@@ -42,7 +41,6 @@ function ReelsFeedPage() {
   const isCategoryRoute = !!categoryId
   const user = useSelector(selectUser)
   const isAuthenticated = useSelector(selectIsAuthenticated)
-  const isAdmin = useSelector(selectIsAdmin)
   const { reels, loading, reelsMeta, priceRange: feedPriceRange, shellLoaded, priceRangeLoaded } = useSelector((state) => state.feed)
   const categoriesState = useSelector((state) => state.categories)
   const { rootCategories = [] } = categoriesState || {}
@@ -646,15 +644,6 @@ function ReelsFeedPage() {
             <div className="mt-4 border-t border-gray-800 pt-3 flex flex-col gap-2">
               {isAuthenticated ? (
                 <>
-                  {isAdmin && (
-                    <button
-                      onClick={() => { window.location.href = ADMIN_PANEL_URL }}
-                      className="flex items-center gap-3 text-sm font-medium text-white hover:text-primary-400 transition-colors px-3 py-2 rounded-md"
-                    >
-                      <Shield className="h-5 w-5" />
-                      Admin
-                    </button>
-                  )}
                   <button
                     onClick={() => { dispatch(logout('user-click')); navigate('/'); }}
                     className="flex items-center gap-3 text-sm font-medium text-white hover:text-red-400 transition-colors px-3 py-2 rounded-md"

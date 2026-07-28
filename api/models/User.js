@@ -170,10 +170,15 @@ const userSchema = new mongoose.Schema(
       enum: ['user', 'admin'],
       default: 'user',
     },
+    /**
+     * FK → admin_roles._id (normalized RBAC).
+     * Stored as adminRole for backward compatibility with existing clients.
+     */
     adminRole: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'AdminRole',
       default: null,
+      index: true,
     },
     savedProducts: [
       {

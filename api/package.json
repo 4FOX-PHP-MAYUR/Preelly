@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "seed:admin-roles": "node scripts/seed_admin_roles.js",
     "test": "node tests/categoryService.test.js && node tests/classifiedCategoriesApi.test.js && node tests/filterService.test.js && node tests/filterApi.test.js && node tests/searchService.test.js && node tests/searchMiddleware.test.js && node tests/searchApi.test.js"
   },
   "engines": {

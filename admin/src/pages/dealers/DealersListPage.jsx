@@ -10,12 +10,14 @@ import StatusBadge from '../../components/AdminUI/StatusBadge'
 import { Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { getMediaUrl } from '@shared/utils/helpers'
+import { usePermission } from '../../hooks/usePermission'
 
 const LIMIT = 20
 const LIST_PATH = '/dealers'
 
 function DealersListPage() {
   const navigate = useNavigate()
+  const { canCreate, canEdit, canDelete } = usePermission('Dealers')
   const [dealers, setDealers] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -93,9 +95,11 @@ function DealersListPage() {
         title="Dealers"
         subtitle="Manage dealer information and contact details"
         action={
-          <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
-            Add Dealer
-          </Button>
+          canCreate ? (
+            <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
+              Add Dealer
+            </Button>
+          ) : null
         }
       />
 
@@ -175,8 +179,8 @@ function DealersListPage() {
           total,
           onPageChange: (p) => fetchDealers(p, search, statusFilter),
         }}
-        onEdit={(row) => navigate(`${LIST_PATH}/${row._id}/edit`)}
-        onDelete={handleDelete}
+        onEdit={canEdit ? (row) => navigate(`${LIST_PATH}/${row._id}/edit`) : undefined}
+        onDelete={canDelete ? handleDelete : undefined}
       />
     </AdminPage>
   )

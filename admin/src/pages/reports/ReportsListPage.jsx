@@ -1,8 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useSelector } from 'react-redux'
 import { adminService } from '@/services/api'
-import { selectPermissions } from '@shared/store/slices/authSlice'
 import { getMediaUrl } from '@shared/utils/helpers'
 import {
   AdminPage,
@@ -14,6 +12,7 @@ import {
   Card,
   Panel,
 } from '../../components/AdminUI'
+import { usePermission } from '../../hooks/usePermission'
 import {
   Eye,
   Flag,
@@ -127,17 +126,10 @@ function ReportMobileCard({ row, actions }) {
   )
 }
 
-function canEditReports(permissions) {
-  if (!permissions) return true
-  const mod = permissions.Reports || permissions.Users
-  if (!mod) return false
-  return !!(mod.can_edit || mod.can_delete)
-}
-
 function ReportsListPage() {
   const navigate = useNavigate()
-  const permissions = useSelector(selectPermissions)
-  const allowActions = canEditReports(permissions)
+  const { canEdit, canDelete } = usePermission('Reports')
+  const allowActions = canEdit || canDelete
 
   const [items, setItems] = useState([])
   const [mostReported, setMostReported] = useState([])

@@ -12,6 +12,7 @@ import {
 } from '../../components/AdminUI'
 import { Plus, ImageOff } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { usePermission } from '../../hooks/usePermission'
 
 const LIMIT = 20
 const LIST_PATH = '/storage-facilities'
@@ -25,6 +26,7 @@ function formatAmount(value) {
 
 function StorageFacilitiesListPage() {
   const navigate = useNavigate()
+  const { canCreate, canEdit, canDelete } = usePermission('Storage Facilities')
   const [facilities, setFacilities] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -139,9 +141,11 @@ function StorageFacilitiesListPage() {
         title="Storage Facilities"
         subtitle="Manage storage facility durations, pricing and icons"
         action={
-          <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
-            Add Storage Facility
-          </Button>
+          canCreate ? (
+            <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
+              Add Storage Facility
+            </Button>
+          ) : null
         }
       />
 
@@ -185,8 +189,8 @@ function StorageFacilitiesListPage() {
         data={facilities}
         loading={loading}
         emptyTitle="No storage facilities found"
-        onEdit={(row) => navigate(`${LIST_PATH}/${row.id || row._id}/edit`)}
-        onDelete={handleDelete}
+        onEdit={canEdit ? (row) => navigate(`${LIST_PATH}/${row.id || row._id}/edit`) : undefined}
+        onDelete={canDelete ? handleDelete : undefined}
         showSearch={false}
         pagination={{
           page,

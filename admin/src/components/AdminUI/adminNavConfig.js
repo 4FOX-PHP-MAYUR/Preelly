@@ -80,6 +80,8 @@ export const MENU_PERMISSION_MAP = {
   dashboard: 'Dashboard',
   categories: 'Categories',
   filters: 'Filters',
+  'field-types': 'Field Types',
+  'form-fields': 'Form Fields',
   dealers: 'Dealers',
   emirates: 'Emirates',
   packages: 'Packages',
@@ -92,7 +94,9 @@ export const MENU_PERMISSION_MAP = {
   sold: 'Listings',
   users: 'Users',
   'identity-verification': 'Users',
+  contacts: 'Contacts',
   reports: 'Reports',
+  'admin-roles': 'Settings',
 }
 
 export const ADMIN_ROUTE_META = {
@@ -150,6 +154,13 @@ export function resolveAdminRouteMeta(pathname) {
     return {
       title: 'Role Permissions',
       breadcrumbs: [{ label: 'Settings', to: '/roles' }, { label: 'Permissions' }],
+    }
+  }
+
+  if (pathname.startsWith('/roles/') && pathname.includes('/assign')) {
+    return {
+      title: 'Assign Users',
+      breadcrumbs: [{ label: 'Settings', to: '/roles' }, { label: 'Assign Users' }],
     }
   }
 

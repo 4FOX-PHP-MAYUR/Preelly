@@ -11,6 +11,7 @@ import {
 } from '../../components/AdminUI'
 import { Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { usePermission } from '../../hooks/usePermission'
 
 const LIMIT = 20
 const LIST_PATH = '/checkout-services'
@@ -32,6 +33,7 @@ function formatPrice(row) {
 
 function CheckoutServicesListPage() {
   const navigate = useNavigate()
+  const { canCreate, canEdit, canDelete } = usePermission('Checkout Services')
   const [services, setServices] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -139,9 +141,11 @@ function CheckoutServicesListPage() {
         title="Checkout Services"
         subtitle="Manage checkout add-ons (Pay Through Preelly, Pick & Drop Service, …)"
         action={
-          <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
-            Add Checkout Service
-          </Button>
+          canCreate ? (
+            <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
+              Add Checkout Service
+            </Button>
+          ) : null
         }
       />
 
@@ -185,8 +189,8 @@ function CheckoutServicesListPage() {
         data={services}
         loading={loading}
         emptyTitle="No checkout services found"
-        onEdit={(row) => navigate(`${LIST_PATH}/${row.id || row._id}/edit`)}
-        onDelete={handleDelete}
+        onEdit={canEdit ? (row) => navigate(`${LIST_PATH}/${row.id || row._id}/edit`) : undefined}
+        onDelete={canDelete ? handleDelete : undefined}
         showSearch={false}
         pagination={{
           page,

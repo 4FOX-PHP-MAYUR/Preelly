@@ -8,6 +8,7 @@ import FilterBar from '../../components/AdminUI/FilterBar'
 import Select from '../../components/AdminUI/Select'
 import Panel from '../../components/AdminUI/Panel'
 import toast from 'react-hot-toast'
+import { usePermission } from '../../hooks/usePermission'
 import {
   Edit2, Trash2, Plus, ChevronUp, ChevronDown, LayoutList, RotateCcw,
 } from 'lucide-react'
@@ -17,6 +18,7 @@ const LIST_PATH = '/form-fields'
 
 function FormFieldsListPage() {
   const navigate = useNavigate()
+  const { canCreate, canEdit, canDelete } = usePermission('Form Fields')
   const [formFields, setFormFields] = useState([])
   const [loading, setLoading] = useState(false)
   const [deleting, setDeleting] = useState(null)
@@ -181,9 +183,11 @@ function FormFieldsListPage() {
         title="Form Fields"
         subtitle="Manage dynamic form fields linked to categories, field types and filters"
         action={
-          <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
-            Add Form Field
-          </Button>
+          canCreate ? (
+            <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
+              Add Form Field
+            </Button>
+          ) : null
         }
       />
 
@@ -294,11 +298,11 @@ function FormFieldsListPage() {
               <Button variant="secondary" icon={RotateCcw} onClick={handleResetFilters} className="mt-4">
                 Reset Filters
               </Button>
-            ) : (
+            ) : canCreate ? (
               <Button icon={Plus} onClick={() => navigate(`${LIST_PATH}/new`)} className="mt-4">
                 Add Form Field
               </Button>
-            )}
+            ) : null}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -440,21 +444,25 @@ function FormFieldsListPage() {
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => navigate(`${LIST_PATH}/${row._id}/edit`)}
-                          className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(row)}
-                          disabled={deleting === row._id}
-                          className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
-                          title="Delete"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
+                        {canEdit ? (
+                          <button
+                            onClick={() => navigate(`${LIST_PATH}/${row._id}/edit`)}
+                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            title="Edit"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </button>
+                        ) : null}
+                        {canDelete ? (
+                          <button
+                            onClick={() => handleDelete(row)}
+                            disabled={deleting === row._id}
+                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                            title="Delete"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        ) : null}
                       </div>
                     </td>
                   </tr>

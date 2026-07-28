@@ -9,12 +9,14 @@ import FilterBar from '../../components/AdminUI/FilterBar'
 import StatusBadge from '../../components/AdminUI/StatusBadge'
 import { Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { usePermission } from '../../hooks/usePermission'
 
 const LIMIT = 20
 const LIST_PATH = '/field-types'
 
 function FieldTypesListPage() {
   const navigate = useNavigate()
+  const { canCreate, canEdit, canDelete } = usePermission('Field Types')
   const [fieldTypes, setFieldTypes] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -91,9 +93,11 @@ function FieldTypesListPage() {
         title="Field Types"
         subtitle="Manage field type values used across the platform"
         action={
-          <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
-            Add Field Type
-          </Button>
+          canCreate ? (
+            <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
+              Add Field Type
+            </Button>
+          ) : null
         }
       />
 
@@ -167,8 +171,8 @@ function FieldTypesListPage() {
           total,
           onPageChange: (p) => fetchFieldTypes(p, search, statusFilter),
         }}
-        onEdit={(row) => navigate(`${LIST_PATH}/${row._id}/edit`)}
-        onDelete={handleDelete}
+        onEdit={canEdit ? (row) => navigate(`${LIST_PATH}/${row._id}/edit`) : undefined}
+        onDelete={canDelete ? handleDelete : undefined}
       />
     </AdminPage>
   )

@@ -10,6 +10,10 @@ function DataTable({
   loading = false,
   onEdit,
   onDelete,
+  /** Optional (row) => boolean — hide edit button when false */
+  canEditRow,
+  /** Optional (row) => boolean — hide delete button when false */
+  canDeleteRow,
   onRowClick,
   pagination = null,
   serverSide = false,
@@ -43,36 +47,40 @@ function DataTable({
 
   const getColumnHeader = (col) => col.title || col.label || col.key
 
-  const renderRowActions = (row) => (
-    <div className="flex items-center justify-end gap-1">
-      {onEdit && (
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onEdit(row) }}
-          className="admin-table-action text-primary-600 dark:text-primary-400"
-          aria-label="Edit row"
-        >
-          <Edit2 className="h-4 w-4" />
-        </button>
-      )}
-      {onDelete && (
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onDelete(row) }}
-          className="admin-table-action text-red-600 dark:text-red-400"
-          aria-label="Delete row"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      )}
-      {customActions?.(row)}
-      {!onEdit && !onDelete && !customActions && (
-        <button type="button" className="admin-table-action text-slate-400" aria-label="More actions">
-          <MoreHorizontal className="h-4 w-4" />
-        </button>
-      )}
-    </div>
-  )
+  const renderRowActions = (row) => {
+    const showEdit = onEdit && (typeof canEditRow !== 'function' || canEditRow(row))
+    const showDelete = onDelete && (typeof canDeleteRow !== 'function' || canDeleteRow(row))
+    return (
+      <div className="flex items-center justify-end gap-1">
+        {showEdit && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onEdit(row) }}
+            className="admin-table-action text-primary-600 dark:text-primary-400"
+            aria-label="Edit row"
+          >
+            <Edit2 className="h-4 w-4" />
+          </button>
+        )}
+        {showDelete && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDelete(row) }}
+            className="admin-table-action text-red-600 dark:text-red-400"
+            aria-label="Delete row"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
+        {customActions?.(row)}
+        {!showEdit && !showDelete && !customActions && (
+          <button type="button" className="admin-table-action text-slate-400" aria-label="More actions">
+            <MoreHorizontal className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className={`admin-table-wrapper overflow-hidden ${className}`}>

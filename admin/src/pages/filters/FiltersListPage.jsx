@@ -20,6 +20,7 @@ import {
   Layers,
   AlertCircle,
 } from 'lucide-react'
+import { usePermission } from '../../hooks/usePermission'
 
 const LIST_PATH = '/filters'
 const LIMIT = 200
@@ -181,22 +182,26 @@ function FilterGroupRow({ group, onEdit, onDelete, onToggleStatus, categoryLabel
           >
             {group.isActive !== false ? 'Active' : 'Inactive'}
           </button>
-          <button
-            type="button"
-            onClick={() => onEdit(group)}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
-            title="Edit"
-          >
-            <Pencil className="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(group)}
-            className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
-            title="Delete"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {onEdit ? (
+            <button
+              type="button"
+              onClick={() => onEdit(group)}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
+              title="Edit"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
+          {onDelete ? (
+            <button
+              type="button"
+              onClick={() => onDelete(group)}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
+              title="Delete"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          ) : null}
         </div>
       </div>
 
@@ -234,22 +239,26 @@ function FilterGroupRow({ group, onEdit, onDelete, onToggleStatus, categoryLabel
               >
                 {child.isActive !== false ? 'Active' : 'Inactive'}
               </button>
-              <button
-                type="button"
-                onClick={() => onEdit(child)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition shrink-0"
-                title="Edit"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onDelete(child)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition shrink-0"
-                title="Delete"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              {onEdit ? (
+                <button
+                  type="button"
+                  onClick={() => onEdit(child)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition shrink-0"
+                  title="Edit"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
+              {onDelete ? (
+                <button
+                  type="button"
+                  onClick={() => onDelete(child)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition shrink-0"
+                  title="Delete"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
             </div>
           ))}
         </div>
@@ -260,6 +269,7 @@ function FilterGroupRow({ group, onEdit, onDelete, onToggleStatus, categoryLabel
 
 function FiltersListPage() {
   const navigate = useNavigate()
+  const { canCreate, canEdit, canDelete } = usePermission('Filters')
   const [filters, setFilters] = useState([])
   const [loading, setLoading] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -541,9 +551,11 @@ function FiltersListPage() {
             >
               {importing ? 'Importing…' : 'Import Excel'}
             </Button>
-            <Button onClick={handleAdd} icon={Plus}>
-              Add Filter
-            </Button>
+            {canCreate ? (
+              <Button onClick={handleAdd} icon={Plus}>
+                Add Filter
+              </Button>
+            ) : null}
           </div>
         }
       />
@@ -614,9 +626,11 @@ function FiltersListPage() {
                 ? `No filters assigned to "${selectedCategoryLabel}" yet. Click "Add Filter" to create one.`
                 : 'Select a category above to see its filters, or add a new one.'}
             </p>
-            <Button onClick={handleAdd} icon={Plus} className="mt-4">
-              Add First Filter
-            </Button>
+            {canCreate ? (
+              <Button onClick={handleAdd} icon={Plus} className="mt-4">
+                Add First Filter
+              </Button>
+            ) : null}
           </div>
         ) : (
           <>
@@ -657,8 +671,8 @@ function FiltersListPage() {
               <FilterGroupRow
                 key={group._id}
                 group={group}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
+                onEdit={canEdit ? handleEdit : undefined}
+                onDelete={canDelete ? handleDelete : undefined}
                 onToggleStatus={handleToggleStatus}
                 categoryLabelById={categoryLabelById}
               />

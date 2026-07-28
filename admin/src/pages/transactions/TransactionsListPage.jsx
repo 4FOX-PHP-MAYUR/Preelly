@@ -12,6 +12,7 @@ import {
   Input,
   Modal,
 } from '../../components/AdminUI'
+import { usePermission } from '../../hooks/usePermission'
 import {
   Eye,
   Receipt,
@@ -117,6 +118,7 @@ function TransactionMobileCard({ row, actions }) {
 
 function TransactionsListPage() {
   const navigate = useNavigate()
+  usePermission('Transactions')
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(false)
   const [statsLoading, setStatsLoading] = useState(false)

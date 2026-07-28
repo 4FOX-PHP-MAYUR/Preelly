@@ -11,12 +11,14 @@ import {
 } from '../../components/AdminUI'
 import { Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { usePermission } from '../../hooks/usePermission'
 
 const LIMIT = 20
 const LIST_PATH = '/emirates'
 
 function EmiratesListPage() {
   const navigate = useNavigate()
+  const { canCreate, canEdit, canDelete } = usePermission('Emirates')
   const [emirates, setEmirates] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -100,7 +102,11 @@ function EmiratesListPage() {
       <PageHeader
         title="Emirates (Cities)"
         subtitle="Manage emirates used as form-field option sources and location master data"
-        action={<Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>Add Emirate</Button>}
+        action={
+          canCreate ? (
+            <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>Add Emirate</Button>
+          ) : null
+        }
       />
 
       <FilterBar
@@ -136,8 +142,8 @@ function EmiratesListPage() {
         data={emirates}
         loading={loading}
         emptyTitle="No emirates found"
-        onEdit={(row) => navigate(`${LIST_PATH}/${row.id || row._id}/edit`)}
-        onDelete={handleDelete}
+        onEdit={canEdit ? (row) => navigate(`${LIST_PATH}/${row.id || row._id}/edit`) : undefined}
+        onDelete={canDelete ? handleDelete : undefined}
         showSearch={false}
         pagination={{
           page,

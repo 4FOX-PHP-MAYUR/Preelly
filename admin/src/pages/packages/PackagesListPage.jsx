@@ -11,6 +11,7 @@ import {
 } from '../../components/AdminUI'
 import { Plus, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { usePermission } from '../../hooks/usePermission'
 
 const LIMIT = 20
 const LIST_PATH = '/packages'
@@ -22,6 +23,7 @@ function formatAmount(value) {
 
 function PackagesListPage() {
   const navigate = useNavigate()
+  const { canCreate, canEdit, canDelete } = usePermission('Packages')
   const [packages, setPackages] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -158,7 +160,11 @@ function PackagesListPage() {
       <PageHeader
         title="Packages"
         subtitle="Manage subscription packages, pricing, VAT and validity"
-        action={<Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>Add Package</Button>}
+        action={
+          canCreate ? (
+            <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>Add Package</Button>
+          ) : null
+        }
       />
 
       <FilterBar
@@ -214,8 +220,8 @@ function PackagesListPage() {
         data={packages}
         loading={loading}
         emptyTitle="No packages found"
-        onEdit={(row) => navigate(`${LIST_PATH}/${row.id || row._id}/edit`)}
-        onDelete={handleDelete}
+        onEdit={canEdit ? (row) => navigate(`${LIST_PATH}/${row.id || row._id}/edit`) : undefined}
+        onDelete={canDelete ? handleDelete : undefined}
         showSearch={false}
         pagination={{
           page,

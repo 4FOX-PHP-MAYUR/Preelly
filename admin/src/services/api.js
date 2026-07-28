@@ -354,8 +354,9 @@ export const adminService = {
   deleteRole: (id) => api.delete(`/admin/roles/${id}`),
   getRolePermissions: (id) => api.get(`/admin/roles/${id}/permissions`),
   saveRolePermissions: (id, permissions) => api.put(`/admin/roles/${id}/permissions`, { permissions }),
+  getRoleUsers: (id) => api.get(`/admin/roles/${id}/users`),
   getModules: () => api.get('/admin/modules'),
-  // User admin role assignment
+  // User admin role assignment (used from Roles → Assign Users)
   setUserAdminRole: (userId, adminRole) => api.put(`/admin/users/${userId}/admin-role`, { adminRole }),
   // Field Types endpoints
   getFieldTypes: (params) => api.get('/admin/field-types', { params }),

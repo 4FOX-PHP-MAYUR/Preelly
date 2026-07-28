@@ -6,14 +6,24 @@ const Chat = require('../models/Chat')
 const Comment = require('../models/Comment')
 const CommentReport = require('../models/CommentReport')
 const adminMiddleware = require('../middleware/admin')
+const { enforceAdminPermissions } = require('../middleware/permission')
 const Category = require('../models/Category')
 const Filter = require('../models/Filter')
 const CategoryFilter = require('../models/CategoryFilter')
 const Dealer = require('../models/Dealer')
 const AdminRole = require('../models/AdminRole')
-const AdminRolePermission = require('../models/AdminRolePermission')
 const FieldType = require('../models/FieldType')
 const FormField = require('../models/FormField')
+const {
+  AVAILABLE_MODULES,
+  SUPER_ADMIN_ROLE_NAME,
+  isSuperAdminRole,
+  hasAnyPermissionSelected,
+} = require('../config/adminPermissions')
+const {
+  getPermissionMatrixForRole,
+  saveRolePermissionMatrix,
+} = require('../services/adminPermissionService')
 const { upload, uploadAny } = require('../middleware/upload')
 const { Types } = require('mongoose')
 const XLSX = require('xlsx')
@@ -48,6 +58,11 @@ const {
   validateTableConfig,
 } = require('../core/services/dynamicTableOptionsService')
 const { listRegisteredTables, isRegisteredTable, normalizeTableName } = require('../config/dynamicTableRegistry')
+
+// Authenticate all admin routes, then enforce module permissions when the
+// user has an assigned adminRole (users without a role keep full access).
+router.use(adminMiddleware)
+router.use(enforceAdminPermissions)
 
 // @route   GET /api/admin/products/pending
 // @desc    Get all pending products for review
@@ -2878,6 +2893,7 @@ router.post('/category-filters', adminMiddleware, async (req, res) => {
 
 // ---------------------------------------------------------------------------
 // Admin Roles - CRUD
+// Uses normalized collections: admin_roles, permissions, role_permissions
 // ---------------------------------------------------------------------------
 
 // GET /api/admin/roles - list all roles
@@ -2894,8 +2910,24 @@ router.get('/roles', adminMiddleware, async (req, res) => {
       AdminRole.find(query).sort({ createdAt: -1 }).skip(skip).limit(Number(limit)).lean(),
       AdminRole.countDocuments(query),
     ])
+
+    const roleIds = roles.map((r) => r._id)
+    const userCounts = roleIds.length
+      ? await User.aggregate([
+          { $match: { adminRole: { $in: roleIds } } },
+          { $group: { _id: '$adminRole', count: { $sum: 1 } } },
+        ])
+      : []
+    const countMap = Object.fromEntries(userCounts.map((c) => [String(c._id), c.count]))
+
+    const rolesWithMeta = roles.map((r) => ({
+      ...r,
+      is_system: !!r.is_system || isSuperAdminRole(r),
+      userCount: countMap[String(r._id)] || 0,
+    }))
+
     res.json({
-      roles,
+      roles: rolesWithMeta,
       page: Number(page),
       limit: Number(limit),
       total,
@@ -2907,38 +2939,72 @@ router.get('/roles', adminMiddleware, async (req, res) => {
   }
 })
 
-// GET /api/admin/roles/:id - get a single role
+// GET /api/admin/roles/:id - get a single role (with permissions matrix)
 router.get('/roles/:id', adminMiddleware, async (req, res) => {
   try {
     const { id } = req.params
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
     const role = await AdminRole.findById(id).lean()
     if (!role) return res.status(404).json({ message: 'Role not found' })
-    res.json(role)
+    const permissions = await getPermissionMatrixForRole(id)
+    const userCount = await User.countDocuments({ adminRole: id })
+    res.json({
+      role: {
+        ...role,
+        is_system: !!role.is_system || isSuperAdminRole(role),
+        userCount,
+      },
+      permissions,
+      availableModules: AVAILABLE_MODULES,
+    })
   } catch (error) {
     console.error('Error fetching role:', error)
     res.status(500).json({ message: 'Error fetching role' })
   }
 })
 
-// POST /api/admin/roles - create a role
+// POST /api/admin/roles - create a role (optionally with permissions)
 router.post('/roles', adminMiddleware, async (req, res) => {
   try {
-    const { role_name, description, status = 'active' } = req.body
+    const { role_name, description, status = 'active', permissions } = req.body
     if (!role_name || !String(role_name).trim()) {
       return res.status(400).json({ message: 'Role name is required' })
     }
-    const existing = await AdminRole.findOne({ role_name: String(role_name).trim() })
+    const trimmedName = String(role_name).trim()
+    if (trimmedName.toLowerCase() === SUPER_ADMIN_ROLE_NAME.toLowerCase()) {
+      return res.status(400).json({ message: 'Cannot create a role with the reserved Super Admin name' })
+    }
+    const existing = await AdminRole.findOne({ role_name: trimmedName })
     if (existing) {
       return res.status(400).json({ message: 'A role with this name already exists' })
     }
+    if (permissions !== undefined) {
+      if (!Array.isArray(permissions)) {
+        return res.status(400).json({ message: 'permissions must be an array' })
+      }
+      if (!hasAnyPermissionSelected(permissions)) {
+        return res.status(400).json({ message: 'At least one permission must be selected' })
+      }
+    }
     const role = new AdminRole({
-      role_name: String(role_name).trim(),
+      role_name: trimmedName,
       description: description ? String(description).trim() : '',
-      status,
+      status: status === 'inactive' ? 'inactive' : 'active',
+      is_system: false,
     })
     await role.save()
-    res.status(201).json(role)
+
+    let savedMatrix = []
+    if (Array.isArray(permissions)) {
+      savedMatrix = await saveRolePermissionMatrix(role._id, permissions)
+    } else {
+      savedMatrix = await getPermissionMatrixForRole(role._id)
+    }
+
+    res.status(201).json({
+      role,
+      permissions: savedMatrix,
+    })
   } catch (error) {
     console.error('Error creating role:', error)
     if (error.code === 11000) return res.status(400).json({ message: 'Role name already exists' })
@@ -2946,25 +3012,53 @@ router.post('/roles', adminMiddleware, async (req, res) => {
   }
 })
 
-// PATCH /api/admin/roles/:id - update a role
+// PATCH /api/admin/roles/:id - update a role (optionally with permissions)
 router.patch('/roles/:id', adminMiddleware, async (req, res) => {
   try {
     const { id } = req.params
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
     const role = await AdminRole.findById(id)
     if (!role) return res.status(404).json({ message: 'Role not found' })
-    const { role_name, description, status } = req.body
+    if (isSuperAdminRole(role)) {
+      return res.status(403).json({ message: 'Super Admin role cannot be modified' })
+    }
+
+    const { role_name, description, status, permissions } = req.body
     if (role_name !== undefined) {
       const trimmed = String(role_name).trim()
       if (!trimmed) return res.status(400).json({ message: 'Role name cannot be empty' })
+      if (trimmed.toLowerCase() === SUPER_ADMIN_ROLE_NAME.toLowerCase()) {
+        return res.status(400).json({ message: 'Cannot rename a role to Super Admin' })
+      }
       const dup = await AdminRole.findOne({ role_name: trimmed, _id: { $ne: id } })
       if (dup) return res.status(400).json({ message: 'A role with this name already exists' })
       role.role_name = trimmed
     }
     if (description !== undefined) role.description = String(description).trim()
-    if (status !== undefined) role.status = status
+    if (status !== undefined) role.status = status === 'inactive' ? 'inactive' : 'active'
+
+    if (permissions !== undefined) {
+      if (!Array.isArray(permissions)) {
+        return res.status(400).json({ message: 'permissions must be an array' })
+      }
+      if (!hasAnyPermissionSelected(permissions)) {
+        return res.status(400).json({ message: 'At least one permission must be selected' })
+      }
+    }
+
     await role.save()
-    res.json(role)
+
+    let savedMatrix
+    if (Array.isArray(permissions)) {
+      savedMatrix = await saveRolePermissionMatrix(role._id, permissions)
+    } else {
+      savedMatrix = await getPermissionMatrixForRole(role._id)
+    }
+
+    res.json({
+      role,
+      permissions: savedMatrix,
+    })
   } catch (error) {
     console.error('Error updating role:', error)
     if (error.code === 11000) return res.status(400).json({ message: 'Role name already exists' })
@@ -2972,22 +3066,34 @@ router.patch('/roles/:id', adminMiddleware, async (req, res) => {
   }
 })
 
-// DELETE /api/admin/roles/:id - delete a role and its permissions
+// DELETE /api/admin/roles/:id - delete a role (unassigns users, clears role_permissions)
 router.delete('/roles/:id', adminMiddleware, async (req, res) => {
   try {
     const { id } = req.params
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
     const role = await AdminRole.findById(id)
     if (!role) return res.status(404).json({ message: 'Role not found' })
-    const usersWithRole = await User.countDocuments({ adminRole: id })
-    if (usersWithRole > 0) {
-      return res.status(400).json({
-        message: `Cannot delete role. ${usersWithRole} user(s) are assigned to this role.`,
-      })
+    if (isSuperAdminRole(role)) {
+      return res.status(403).json({ message: 'Super Admin role cannot be deleted' })
     }
-    await AdminRolePermission.deleteMany({ role_id: id })
+
+    const usersWithRole = await User.countDocuments({ adminRole: id })
+    // Unassign the role from any users so the role can be deleted
+    if (usersWithRole > 0) {
+      await User.updateMany({ adminRole: id }, { $set: { adminRole: null } })
+    }
+
+    const RolePermission = require('../models/RolePermission')
+    await RolePermission.deleteMany({ role_id: id })
     await AdminRole.findByIdAndDelete(id)
-    res.json({ message: 'Role deleted', deletedCount: 1 })
+
+    res.json({
+      message: usersWithRole > 0
+        ? `Role deleted. ${usersWithRole} user(s) were unassigned.`
+        : 'Role deleted',
+      deletedCount: 1,
+      unassignedUsers: usersWithRole,
+    })
   } catch (error) {
     console.error('Error deleting role:', error)
     res.status(500).json({ message: 'Error deleting role' })
@@ -2995,25 +3101,8 @@ router.delete('/roles/:id', adminMiddleware, async (req, res) => {
 })
 
 // ---------------------------------------------------------------------------
-// Admin Role Permissions
+// Admin Role Permissions (normalized: role_permissions ↔ permissions)
 // ---------------------------------------------------------------------------
-
-const AVAILABLE_MODULES = [
-  'Dashboard',
-  'Categories',
-  'Filters',
-  'Filter Assignments',
-  'Dealers',
-  'Emirates',
-  'Packages',
-  'Storage Facilities',
-  'Coupons',
-  'Form Fields',
-  'Users',
-  'Listings',
-  'Transactions',
-  'Reports',
-]
 
 // GET /api/admin/roles/:id/permissions - get permissions for a role
 router.get('/roles/:id/permissions', adminMiddleware, async (req, res) => {
@@ -3022,61 +3111,39 @@ router.get('/roles/:id/permissions', adminMiddleware, async (req, res) => {
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
     const role = await AdminRole.findById(id).lean()
     if (!role) return res.status(404).json({ message: 'Role not found' })
-    const permissions = await AdminRolePermission.find({ role_id: id }).lean()
-    const permMap = {}
-    permissions.forEach((p) => {
-      permMap[p.module_name] = {
-        can_view: p.can_view,
-        can_create: p.can_create,
-        can_edit: p.can_edit,
-        can_delete: p.can_delete,
-      }
+    const permissions = await getPermissionMatrixForRole(id)
+    res.json({
+      role: {
+        ...role,
+        is_system: !!role.is_system || isSuperAdminRole(role),
+      },
+      permissions,
+      availableModules: AVAILABLE_MODULES,
     })
-    const result = AVAILABLE_MODULES.map((mod) => ({
-      module_name: mod,
-      can_view: permMap[mod]?.can_view || false,
-      can_create: permMap[mod]?.can_create || false,
-      can_edit: permMap[mod]?.can_edit || false,
-      can_delete: permMap[mod]?.can_delete || false,
-    }))
-    res.json({ role, permissions: result, availableModules: AVAILABLE_MODULES })
   } catch (error) {
     console.error('Error fetching role permissions:', error)
     res.status(500).json({ message: 'Error fetching permissions' })
   }
 })
 
-// PUT /api/admin/roles/:id/permissions - save permissions for a role (bulk upsert)
+// PUT /api/admin/roles/:id/permissions - save permissions for a role
 router.put('/roles/:id/permissions', adminMiddleware, async (req, res) => {
   try {
     const { id } = req.params
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
     const role = await AdminRole.findById(id)
     if (!role) return res.status(404).json({ message: 'Role not found' })
+    if (isSuperAdminRole(role)) {
+      return res.status(403).json({ message: 'Super Admin permissions cannot be modified' })
+    }
     const { permissions } = req.body
     if (!Array.isArray(permissions)) {
       return res.status(400).json({ message: 'permissions must be an array' })
     }
-    const ops = permissions.map((p) => ({
-      updateOne: {
-        filter: { role_id: id, module_name: p.module_name },
-        update: {
-          $set: {
-            role_id: id,
-            module_name: p.module_name,
-            can_view: !!p.can_view,
-            can_create: !!p.can_create,
-            can_edit: !!p.can_edit,
-            can_delete: !!p.can_delete,
-          },
-        },
-        upsert: true,
-      },
-    }))
-    if (ops.length) {
-      await AdminRolePermission.bulkWrite(ops)
+    if (!hasAnyPermissionSelected(permissions)) {
+      return res.status(400).json({ message: 'At least one permission must be selected' })
     }
-    const updated = await AdminRolePermission.find({ role_id: id }).lean()
+    const updated = await saveRolePermissionMatrix(id, permissions)
     res.json({ message: 'Permissions saved', permissions: updated })
   } catch (error) {
     console.error('Error saving role permissions:', error)
@@ -3087,6 +3154,38 @@ router.put('/roles/:id/permissions', adminMiddleware, async (req, res) => {
 // GET /api/admin/modules - return available modules list
 router.get('/modules', adminMiddleware, async (req, res) => {
   res.json({ modules: AVAILABLE_MODULES })
+})
+
+// GET /api/admin/permissions - list all permission catalog rows
+router.get('/permissions', adminMiddleware, async (req, res) => {
+  try {
+    const Permission = require('../models/Permission')
+    const { ensurePermissionsCatalog } = require('../services/adminPermissionService')
+    await ensurePermissionsCatalog()
+    const permissions = await Permission.find({}).sort({ module_name: 1, action: 1 }).lean()
+    res.json({ permissions })
+  } catch (error) {
+    console.error('Error fetching permissions catalog:', error)
+    res.status(500).json({ message: 'Error fetching permissions' })
+  }
+})
+
+// GET /api/admin/roles/:id/users - list users assigned to a role
+router.get('/roles/:id/users', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
+    const role = await AdminRole.findById(id).lean()
+    if (!role) return res.status(404).json({ message: 'Role not found' })
+    const users = await User.find({ adminRole: id })
+      .select('name email phone role status adminRole createdAt')
+      .sort({ name: 1 })
+      .lean()
+    res.json({ role, users })
+  } catch (error) {
+    console.error('Error fetching role users:', error)
+    res.status(500).json({ message: 'Error fetching role users' })
+  }
 })
 
 // ---------------------------------------------------------------------------
@@ -3105,6 +3204,9 @@ router.put('/users/:id/admin-role', adminMiddleware, async (req, res) => {
       }
       const roleDoc = await AdminRole.findById(adminRole)
       if (!roleDoc) return res.status(404).json({ message: 'Admin role not found' })
+      if (roleDoc.status !== 'active') {
+        return res.status(400).json({ message: 'Cannot assign an inactive role' })
+      }
       user.adminRole = roleDoc._id
       if (user.role !== 'admin') {
         user.role = 'admin'
@@ -3113,7 +3215,7 @@ router.put('/users/:id/admin-role', adminMiddleware, async (req, res) => {
       user.adminRole = null
     }
     await user.save()
-    const populated = await User.findById(user._id).populate('adminRole', 'role_name status')
+    const populated = await User.findById(user._id).populate('adminRole', 'role_name status is_system')
     res.json({
       message: 'Admin role updated',
       user: {

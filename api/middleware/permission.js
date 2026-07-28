@@ -1,30 +1,43 @@
-const AdminRolePermission = require('../models/AdminRolePermission')
+const {
+  ROUTE_PERMISSION_RULES,
+  resolveModuleName,
+  actionToField,
+  isSuperAdminRole,
+  buildFullPermissionSet,
+} = require('../config/adminPermissions')
+const {
+  roleHasPermission,
+  getPermissionMapForRole,
+} = require('../services/adminPermissionService')
 
-const MODULE_MAP = {
-  dashboard: 'Dashboard',
-  categories: 'Categories',
-  filters: 'Filters',
-  'category-filters': 'Filter Assignments',
-  dealers: 'Dealers',
-  emirates: 'Emirates',
-  packages: 'Packages',
-  'storage-facilities': 'Storage Facilities',
-  coupons: 'Coupons',
-  'form-fields': 'Form Fields',
-  users: 'Users',
-  products: 'Listings',
-  listings: 'Listings',
-  transactions: 'Transactions',
-  reports: 'Reports',
-  'user-reports': 'Reports',
+function getRoleId(user) {
+  if (!user?.adminRole) return null
+  return user.adminRole._id || user.adminRole
+}
+
+function isSuperAdminUser(user) {
+  return isSuperAdminRole(user?.adminRole)
+}
+
+/** Full permission map for Super Admin (all modules, all actions including edit). */
+function buildSuperAdminPermissionMap() {
+  const map = {}
+  buildFullPermissionSet().forEach((p) => {
+    map[p.module_name] = {
+      can_view: true,
+      can_create: true,
+      can_edit: true,
+      can_delete: true,
+    }
+  })
+  return map
 }
 
 /**
  * Middleware factory that checks if the admin has a specific permission
  * for a given module.
  *
- * @param {string} moduleName - key from MODULE_MAP or the module display name
- * @param {'can_view'|'can_create'|'can_edit'|'can_delete'} action
+ * Admins without an assigned role, and Super Admin, keep full access.
  */
 const checkPermission = (moduleName, action) => {
   return async (req, res, next) => {
@@ -33,20 +46,27 @@ const checkPermission = (moduleName, action) => {
         return res.status(401).json({ message: 'Authentication required' })
       }
 
-      if (!req.user.adminRole) {
+      const roleId = getRoleId(req.user)
+      if (!roleId || isSuperAdminUser(req.user)) {
         return next()
       }
 
-      const resolvedModule = MODULE_MAP[moduleName] || moduleName
-
-      const perm = await AdminRolePermission.findOne({
-        role_id: req.user.adminRole,
-        module_name: resolvedModule,
-      }).lean()
-
-      if (!perm || !perm[action]) {
+      if (req.user.adminRole?.status === 'inactive') {
         return res.status(403).json({
-          message: `Access denied. You do not have ${action.replace('can_', '')} permission for ${resolvedModule}.`,
+          message: 'Access denied. Your admin role is inactive.',
+        })
+      }
+
+      const resolvedModule = resolveModuleName(moduleName) || moduleName
+      const field = actionToField(action)
+      if (!field) {
+        return res.status(500).json({ message: 'Invalid permission action' })
+      }
+
+      const allowed = await roleHasPermission(roleId, resolvedModule, field)
+      if (!allowed) {
+        return res.status(403).json({
+          message: `Access denied. You do not have ${field.replace('can_', '')} permission for ${resolvedModule}.`,
         })
       }
 
@@ -63,22 +83,18 @@ const checkPermission = (moduleName, action) => {
  */
 const loadPermissions = async (req, res, next) => {
   try {
-    if (!req.user || !req.user.adminRole) {
+    const roleId = getRoleId(req.user)
+    if (!roleId) {
       req.permissions = null
       return next()
     }
 
-    const perms = await AdminRolePermission.find({ role_id: req.user.adminRole }).lean()
-    const permMap = {}
-    perms.forEach((p) => {
-      permMap[p.module_name] = {
-        can_view: p.can_view,
-        can_create: p.can_create,
-        can_edit: p.can_edit,
-        can_delete: p.can_delete,
-      }
-    })
-    req.permissions = permMap
+    if (isSuperAdminUser(req.user)) {
+      req.permissions = buildSuperAdminPermissionMap()
+      return next()
+    }
+
+    req.permissions = await getPermissionMapForRole(roleId)
     next()
   } catch (error) {
     console.error('Error loading permissions:', error)
@@ -87,4 +103,50 @@ const loadPermissions = async (req, res, next) => {
   }
 }
 
-module.exports = { checkPermission, loadPermissions, MODULE_MAP }
+/**
+ * Path-based permission enforcement for /api/admin routes.
+ * Must run after adminMiddleware (req.user set).
+ */
+const enforceAdminPermissions = async (req, res, next) => {
+  try {
+    if (!req.user) return next()
+
+    const roleId = getRoleId(req.user)
+    if (!roleId || isSuperAdminUser(req.user)) return next()
+
+    if (req.user.adminRole?.status === 'inactive') {
+      return res.status(403).json({
+        message: 'Access denied. Your admin role is inactive.',
+      })
+    }
+
+    const path = req.path || ''
+    const method = (req.method || 'GET').toUpperCase()
+
+    const rule = ROUTE_PERMISSION_RULES.find((r) => r.pattern.test(path))
+    if (!rule) return next()
+
+    const required = rule[method]
+    if (!required) return next()
+
+    const [moduleName, action] = required
+    const allowed = await roleHasPermission(roleId, moduleName, action)
+    if (!allowed) {
+      return res.status(403).json({
+        message: `Access denied. You do not have ${action.replace('can_', '')} permission for ${moduleName}.`,
+      })
+    }
+
+    next()
+  } catch (error) {
+    console.error('enforceAdminPermissions error:', error)
+    res.status(500).json({ message: 'Error checking permissions' })
+  }
+}
+
+module.exports = {
+  checkPermission,
+  loadPermissions,
+  enforceAdminPermissions,
+  buildSuperAdminPermissionMap,
+}

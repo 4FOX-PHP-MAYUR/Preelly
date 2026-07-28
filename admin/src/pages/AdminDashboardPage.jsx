@@ -16,7 +16,6 @@ import {
   Users,
   CheckCircle2,
   XCircle as XCircleIcon,
-  Shield,
   MessageCircle,
 } from 'lucide-react'
 import Card from '../components/AdminUI/Card'
@@ -34,6 +33,7 @@ import { getMediaUrl } from '@shared/utils/helpers'
 import { formatListingPrice } from '@shared/components/categoryBrowseShared'
 import { getSocket } from '@/services/socket'
 import { REJECTION_REASON_CATEGORIES } from '@shared/constants/rejectionReasons'
+import { usePermission } from '../hooks/usePermission'
 
 function AdminDashboardPage() {
   const navigate = useNavigate()
@@ -41,6 +41,8 @@ function AdminDashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const user = useSelector(selectUser)
   const isAdmin = useSelector(selectIsAdmin)
+  const { canCreate: canCreateUser, canEdit: canEditUser } = usePermission('Users')
+  const { canEdit: canEditListing } = usePermission('Listings')
   const [pendingProducts, setPendingProducts] = useState([])
   const [allProducts, setAllProducts] = useState([])
   const [productTotal, setProductTotal] = useState(0)
@@ -77,11 +79,8 @@ function AdminDashboardPage() {
     phone: '',
     password: '',
     role: 'user',
-    adminRole: '',
     status: 'active',
   })
-  const [adminRoles, setAdminRoles] = useState([])
-  const [roleAssigningId, setRoleAssigningId] = useState(null)
   const [rejectModalProductId, setRejectModalProductId] = useState(null)
   const [selectedRejectCategories, setSelectedRejectCategories] = useState([])
   const [rejectSelectionByCategory, setRejectSelectionByCategory] = useState({})
@@ -339,31 +338,12 @@ function AdminDashboardPage() {
         phone: '',
         password: '',
         role: 'user',
-        adminRole: '',
         status: 'active',
       })
       fetchUsers(userFilter, searchQuery)
     } catch (error) {
       console.error('Error creating user:', error)
       toast.error(error.response?.data?.message || 'Failed to create user')
-    }
-  }
-
-  const handleAssignAdminRole = async (userId, adminRoleId) => {
-    try {
-      setRoleAssigningId(userId)
-      await adminService.setUserAdminRole(userId, adminRoleId || null)
-      if (adminRoleId) {
-        toast.success('Admin role assigned')
-      } else {
-        toast.success('Admin role removed')
-      }
-      fetchUsers(userFilter, searchQuery)
-    } catch (error) {
-      console.error('Error assigning admin role:', error)
-      toast.error(error.response?.data?.message || 'Failed to assign role')
-    } finally {
-      setRoleAssigningId(null)
     }
   }
 
@@ -523,9 +503,6 @@ function AdminDashboardPage() {
         setCategories(res.data.categories || [])
         setCategoriesTotal(res.data.total || 0)
       }).catch(() => {})
-      adminService.getRoles({ limit: 100 }).then((res) => {
-        setAdminRoles((res.data.roles || []).filter((r) => r.status === 'active'))
-      }).catch(() => {})
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin])
@@ -675,7 +652,7 @@ function AdminDashboardPage() {
 
   const renderProductActions = (p) => (
     <>
-      {p.status === 'pending' && (
+      {canEditListing && p.status === 'pending' && (
         <>
           <button
             type="button"
@@ -699,7 +676,7 @@ function AdminDashboardPage() {
           </button>
         </>
       )}
-      {(p.status === 'active' || p.status === 'inactive') && (
+      {canEditListing && (p.status === 'active' || p.status === 'inactive') && (
         <button
           type="button"
           onClick={() => handleToggleProductStatus(p._id, p.status)}
@@ -933,6 +910,7 @@ function AdminDashboardPage() {
       {activeTab === 'users' && (
         <div className="admin-card bg-white rounded-xl shadow-sm border border-gray-100">
           {/* Create user form */}
+          {canCreateUser ? (
           <div className="border-b p-6 bg-gray-50">
             <h2 className="text-lg font-semibold text-gray-900 mb-4">Create User</h2>
             <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end">
@@ -981,26 +959,6 @@ function AdminDashboardPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Admin Role</label>
-                <select
-                  value={newUser.adminRole}
-                  onChange={(e) => {
-                    const val = e.target.value
-                    setNewUser({
-                      ...newUser,
-                      adminRole: val,
-                      role: val ? 'admin' : 'user',
-                    })
-                  }}
-                  className="input-field h-9 text-sm"
-                >
-                  <option value="">None (Regular User)</option>
-                  {adminRoles.map((r) => (
-                    <option key={r._id} value={r._id}>{r.role_name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
                 <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
                 <select
                   value={newUser.status}
@@ -1022,6 +980,7 @@ function AdminDashboardPage() {
               </div>
             </form>
           </div>
+          ) : null}
           {loading ? (
             <div className="p-8 text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
@@ -1106,7 +1065,7 @@ function AdminDashboardPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    {user.isVerified ? (
+                    {canEditUser && (user.isVerified ? (
                       <button
                         type="button"
                         onClick={() => handleVerifyUser(user._id, false)}
@@ -1138,43 +1097,30 @@ function AdminDashboardPage() {
                         )}
                         <span className="text-xs font-medium">Verify</span>
                       </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => handleChangeUserStatus(user._id, user.status || 'active')}
-                      disabled={statusUpdatingId === user._id}
-                      className={`h-9 px-3 rounded-full flex items-center justify-center gap-1.5 border text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                        (user.status || 'active') === 'active'
-                          ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
-                          : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
-                      }`}
-                      title={(user.status || 'active') === 'active' ? 'Deactivate user' : 'Activate user'}
-                      aria-label={(user.status || 'active') === 'active' ? 'Deactivate user' : 'Activate user'}
-                    >
-                      {statusUpdatingId === user._id ? (
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                      ) : (user.status || 'active') === 'active' ? (
-                        <AlertCircle className="h-4 w-4" />
-                      ) : (
-                        <CheckCircle className="h-4 w-4" />
-                      )}
-                      <span className="text-xs font-medium">{(user.status || 'active') === 'active' ? 'Deactivate' : 'Activate'}</span>
-                    </button>
-                    <div className="flex items-center gap-1.5">
-                      <Shield className="h-4 w-4 text-purple-600" />
-                      <select
-                        value={user.adminRole?._id || ''}
-                        onChange={(e) => handleAssignAdminRole(user._id, e.target.value)}
-                        disabled={roleAssigningId === user._id}
-                        className="h-9 px-2 rounded-lg border border-purple-200 text-xs font-medium text-purple-700 bg-purple-50 focus:ring-2 focus:ring-purple-300 disabled:opacity-50 cursor-pointer"
-                        title="Assign admin role"
+                    ))}
+                    {canEditUser && (
+                      <button
+                        type="button"
+                        onClick={() => handleChangeUserStatus(user._id, user.status || 'active')}
+                        disabled={statusUpdatingId === user._id}
+                        className={`h-9 px-3 rounded-full flex items-center justify-center gap-1.5 border text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          (user.status || 'active') === 'active'
+                            ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
+                            : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+                        }`}
+                        title={(user.status || 'active') === 'active' ? 'Deactivate user' : 'Activate user'}
+                        aria-label={(user.status || 'active') === 'active' ? 'Deactivate user' : 'Activate user'}
                       >
-                        <option value="">No Role</option>
-                        {adminRoles.map((r) => (
-                          <option key={r._id} value={r._id}>{r.role_name}</option>
-                        ))}
-                      </select>
-                    </div>
+                        {statusUpdatingId === user._id ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                        ) : (user.status || 'active') === 'active' ? (
+                          <AlertCircle className="h-4 w-4" />
+                        ) : (
+                          <CheckCircle className="h-4 w-4" />
+                        )}
+                        <span className="text-xs font-medium">{(user.status || 'active') === 'active' ? 'Deactivate' : 'Activate'}</span>
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => navigate(`/users/${user._id}`)}
@@ -1576,7 +1522,7 @@ function AdminDashboardPage() {
                         </div>
                       </div>
                       <div className="flex flex-row sm:flex-col gap-2 w-full sm:w-auto shrink-0">
-                        {product.status === 'pending' && (
+                        {canEditListing && product.status === 'pending' && (
                           <>
                             <button
                               type="button"
@@ -1608,7 +1554,7 @@ function AdminDashboardPage() {
                             </button>
                           </>
                         )}
-                        {product.status === 'active' || product.status === 'inactive' ? (
+                        {canEditListing && (product.status === 'active' || product.status === 'inactive') ? (
                           <button
                             type="button"
                             onClick={() => handleToggleProductStatus(product._id, product.status)}

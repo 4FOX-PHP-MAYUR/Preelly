@@ -3,7 +3,8 @@ const router = express.Router()
 const jwt = require('jsonwebtoken')
 const crypto = require('crypto')
 const User = require('../models/User')
-const AdminRolePermission = require('../models/AdminRolePermission')
+const { isSuperAdminRole, buildFullPermissionSet } = require('../config/adminPermissions')
+const { getPermissionMapForRole } = require('../services/adminPermissionService')
 const EmailOtp = require('../models/EmailOtp')
 const PhoneOtp = require('../models/PhoneOtp')
 const { body, validationResult } = require('express-validator')
@@ -283,19 +284,23 @@ const sendAuthSuccessWithPermissions = async (res, user, message) => {
   let permissions = null
   let adminRoleData = null
   if (user.role === 'admin' && user.adminRole) {
-    const populated = await User.findById(user._id).populate('adminRole', 'role_name status')
+    const populated = await User.findById(user._id).populate('adminRole', 'role_name status is_system')
     adminRoleData = populated.adminRole
-    const perms = await AdminRolePermission.find({ role_id: user.adminRole }).lean()
-    const permMap = {}
-    perms.forEach((p) => {
-      permMap[p.module_name] = {
-        can_view: p.can_view,
-        can_create: p.can_create,
-        can_edit: p.can_edit,
-        can_delete: p.can_delete,
-      }
-    })
-    permissions = permMap
+    // Super Admin always gets full access (view/create/edit/delete) on every module
+    if (isSuperAdminRole(adminRoleData)) {
+      permissions = {}
+      buildFullPermissionSet().forEach((p) => {
+        permissions[p.module_name] = {
+          can_view: true,
+          can_create: true,
+          can_edit: true,
+          can_delete: true,
+        }
+      })
+    } else {
+      const roleId = adminRoleData?._id || user.adminRole
+      permissions = await getPermissionMapForRole(roleId)
+    }
   }
 
   return res.json({

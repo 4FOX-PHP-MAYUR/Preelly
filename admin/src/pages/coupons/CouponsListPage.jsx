@@ -12,6 +12,7 @@ import {
 } from '../../components/AdminUI'
 import { Plus, Eye } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { usePermission } from '../../hooks/usePermission'
 import {
   DISCOUNT_TYPE_OPTIONS,
   APPLICABLE_TYPE_OPTIONS,
@@ -34,6 +35,7 @@ const EMPTY_FILTERS = {
 
 function CouponsListPage() {
   const navigate = useNavigate()
+  const { canCreate, canEdit, canDelete } = usePermission('Coupons')
   const [coupons, setCoupons] = useState([])
   const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState(EMPTY_FILTERS)
@@ -158,7 +160,11 @@ function CouponsListPage() {
       <PageHeader
         title="Coupons"
         subtitle="Create and manage promotional coupon codes"
-        action={<Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>Add Coupon</Button>}
+        action={
+          canCreate ? (
+            <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>Add Coupon</Button>
+          ) : null
+        }
       />
 
       <FilterBar
@@ -240,8 +246,8 @@ function CouponsListPage() {
         data={coupons}
         loading={loading}
         emptyTitle="No coupons found"
-        onEdit={(row) => navigate(`${LIST_PATH}/${row.id}/edit`)}
-        onDelete={handleDelete}
+        onEdit={canEdit ? (row) => navigate(`${LIST_PATH}/${row.id}/edit`) : undefined}
+        onDelete={canDelete ? handleDelete : undefined}
         customActions={(row) => (
           <button
             type="button"

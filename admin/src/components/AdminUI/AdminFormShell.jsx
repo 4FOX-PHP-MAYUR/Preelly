@@ -15,6 +15,7 @@ function AdminFormShell({
   onSubmit,
   submitLabel = 'Save',
   cancelLabel = 'Cancel',
+  hideSubmit = false,
   children,
 }) {
   const navigate = useNavigate()
@@ -39,6 +40,7 @@ function AdminFormShell({
         <form
           onSubmit={(e) => {
             e.preventDefault()
+            if (hideSubmit) return
             onSubmit?.(e)
           }}
           className="space-y-6"
@@ -46,11 +48,13 @@ function AdminFormShell({
           {children}
           <div className="flex flex-wrap justify-end gap-2 pt-4 border-t border-slate-200 dark:border-slate-800">
             <Button type="button" variant="secondary" onClick={handleCancel}>
-              {cancelLabel}
+              {hideSubmit ? 'Back' : cancelLabel}
             </Button>
-            <Button type="submit" loading={loading}>
-              {submitLabel}
-            </Button>
+            {!hideSubmit && (
+              <Button type="submit" loading={loading}>
+                {submitLabel}
+              </Button>
+            )}
           </div>
         </form>
       </Panel>

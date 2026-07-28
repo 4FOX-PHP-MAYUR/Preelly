@@ -11,6 +11,7 @@ import {
 } from '../../components/AdminUI'
 import { Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { usePermission } from '../../hooks/usePermission'
 
 const LIMIT = 20
 const LIST_PATH = '/buyers-coupons'
@@ -32,6 +33,7 @@ function formatDate(value) {
 
 function BuyersCouponsListPage() {
   const navigate = useNavigate()
+  const { canCreate, canEdit, canDelete } = usePermission('Buyer Coupons')
   const [coupons, setCoupons] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -132,9 +134,11 @@ function BuyersCouponsListPage() {
         title="Buyer Coupons"
         subtitle="Coupons that discount checkout service charges only (never product prices)"
         action={
-          <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
-            Add Buyer Coupon
-          </Button>
+          canCreate ? (
+            <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
+              Add Buyer Coupon
+            </Button>
+          ) : null
         }
       />
 
@@ -178,8 +182,8 @@ function BuyersCouponsListPage() {
         data={coupons}
         loading={loading}
         emptyTitle="No buyer coupons found"
-        onEdit={(row) => navigate(`${LIST_PATH}/${row.id || row._id}/edit`)}
-        onDelete={handleDelete}
+        onEdit={canEdit ? (row) => navigate(`${LIST_PATH}/${row.id || row._id}/edit`) : undefined}
+        onDelete={canDelete ? handleDelete : undefined}
         showSearch={false}
         pagination={{
           page,

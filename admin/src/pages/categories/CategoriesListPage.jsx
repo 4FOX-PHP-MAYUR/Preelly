@@ -9,12 +9,14 @@ import FilterBar from '../../components/AdminUI/FilterBar'
 import StatusBadge from '../../components/AdminUI/StatusBadge'
 import { Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
+import { usePermission } from '../../hooks/usePermission'
 
 const LIMIT = 100
 const LIST_PATH = '/categories'
 
 function CategoriesListPage() {
   const navigate = useNavigate()
+  const { canCreate, canEdit, canDelete } = usePermission('Categories')
   const [categories, setCategories] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -281,17 +283,21 @@ function CategoriesListPage() {
               className="hidden"
               onChange={handleImportFileChange}
             />
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleImportClick}
-              disabled={importing}
-            >
-              {importing ? 'Importing…' : 'Import Excel'}
-            </Button>
-            <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
-              Add Category
-            </Button>
+            {canCreate ? (
+              <>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={handleImportClick}
+                  disabled={importing}
+                >
+                  {importing ? 'Importing…' : 'Import Excel'}
+                </Button>
+                <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
+                  Add Category
+                </Button>
+              </>
+            ) : null}
           </div>
         }
       />
@@ -409,8 +415,8 @@ function CategoriesListPage() {
           total,
           onPageChange: (p) => fetchCategories(p, search, filterParentId, statusFilter),
         }}
-        onEdit={(row) => navigate(`${LIST_PATH}/${row._id}/edit`)}
-        onDelete={handleDelete}
+        onEdit={canEdit ? (row) => navigate(`${LIST_PATH}/${row._id}/edit`) : undefined}
+        onDelete={canDelete ? handleDelete : undefined}
       />
     </AdminPage>
   )

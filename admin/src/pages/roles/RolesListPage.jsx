@@ -9,13 +9,15 @@ import {
   FilterBar,
   StatusBadge,
 } from '../../components/AdminUI'
+import { usePermission } from '../../hooks/usePermission'
 import toast from 'react-hot-toast'
-import { Settings, Plus } from 'lucide-react'
+import { Settings, Plus, Users } from 'lucide-react'
 
 const LIST_PATH = '/roles'
 
 function RolesListPage() {
   const navigate = useNavigate()
+  const { canCreate, canEdit, canDelete } = usePermission('Settings')
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
@@ -31,7 +33,7 @@ function RolesListPage() {
       setRoles(res.data.roles || [])
     } catch (err) {
       console.error(err)
-      toast.error('Failed to load roles')
+      toast.error(err.response?.data?.message || 'Failed to load roles')
     } finally {
       setLoading(false)
     }
@@ -47,10 +49,19 @@ function RolesListPage() {
   }
 
   const handleDelete = async (row) => {
-    if (!window.confirm('Are you sure you want to delete this role?')) return
+    if (row.is_system) {
+      toast.error('Super Admin role cannot be deleted')
+      return
+    }
+    const assigned = Number(row.userCount) || 0
+    const message =
+      assigned > 0
+        ? `This role is assigned to ${assigned} user(s). Deleting it will remove the role from those users. Continue?`
+        : 'Are you sure you want to delete this role?'
+    if (!window.confirm(message)) return
     try {
       await adminService.deleteRole(row._id)
-      toast.success('Role deleted')
+      toast.success(assigned > 0 ? 'Role deleted and users unassigned' : 'Role deleted')
       fetchRoles(search, statusFilter)
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to delete role')
@@ -61,8 +72,14 @@ function RolesListPage() {
     <AdminPage>
       <PageHeader
         title="Admin Roles"
-        subtitle="Manage admin roles and their permissions"
-        action={<Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>Add Role</Button>}
+        subtitle="Manage admin roles, permissions, and user assignments"
+        action={
+          canCreate ? (
+            <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
+              Add Role
+            </Button>
+          ) : null
+        }
       />
 
       <FilterBar
@@ -85,8 +102,15 @@ function RolesListPage() {
           },
         ]}
         actions={
-          (search || statusFilter !== 'all') ? (
-            <Button variant="secondary" onClick={() => { setSearch(''); setStatusFilter('all'); fetchRoles('', 'all') }}>
+          search || statusFilter !== 'all' ? (
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setSearch('')
+                setStatusFilter('all')
+                fetchRoles('', 'all')
+              }}
+            >
               Clear
             </Button>
           ) : null
@@ -95,32 +119,72 @@ function RolesListPage() {
 
       <DataTable
         columns={[
-          { key: 'role_name', title: 'Role Name', render: (r) => <span className="font-medium">{r.role_name}</span> },
+          {
+            key: 'role_name',
+            title: 'Role Name',
+            render: (r) => (
+              <span className="font-medium">
+                {r.role_name}
+                {r.is_system ? (
+                  <span className="ml-2 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
+                    System
+                  </span>
+                ) : null}
+              </span>
+            ),
+          },
           { key: 'description', title: 'Description', render: (r) => r.description || '—' },
           {
             key: 'status',
             title: 'Status',
             render: (r) => <StatusBadge status={r.status === 'active' ? 'active' : 'inactive'} />,
           },
+          {
+            key: 'userCount',
+            title: 'Users',
+            render: (r) => r.userCount ?? 0,
+          },
         ]}
         data={roles}
         loading={loading}
         emptyTitle="No roles found"
         emptyDescription="Create your first admin role to get started."
-        onEdit={(role) => navigate(`${LIST_PATH}/${role._id}/edit`)}
-        onDelete={handleDelete}
+        onEdit={
+          canEdit
+            ? (role) => navigate(`${LIST_PATH}/${role._id}/edit`)
+            : undefined
+        }
+        onDelete={canDelete ? handleDelete : undefined}
+        canDeleteRow={(role) => !role.is_system}
         customActions={(role) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={Settings}
-            onClick={(e) => {
-              e.stopPropagation()
-              navigate(`/roles/${role._id}/permissions`)
-            }}
-          >
-            Permissions
-          </Button>
+          <div className="flex items-center gap-1">
+            {canEdit && !role.is_system && (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Settings}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  navigate(`${LIST_PATH}/${role._id}/permissions`)
+                }}
+              >
+                Permissions
+              </Button>
+            )}
+            {canEdit && (
+              <Button
+                variant="ghost"
+                size="sm"
+                icon={Users}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  navigate(`${LIST_PATH}/${role._id}/assign`)
+                }}
+              >
+                Assign
+              </Button>
+            )}
+          </div>
         )}
         showSearch={false}
       />

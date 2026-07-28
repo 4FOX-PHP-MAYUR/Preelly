@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import AdminLayout from './components/Layout/AdminLayout'
 import {
@@ -7,8 +7,11 @@ import {
   selectAuthHydrating,
   selectIsAuthenticated,
   selectIsAdmin,
+  selectPermissions,
 } from '@shared/store/slices/authSlice'
 import AdminUserIdentityPanel from './components/AdminUI/AdminUserIdentityPanel'
+import PermissionRoute from './components/PermissionRoute'
+import ForbiddenPage from './pages/ForbiddenPage'
 
 const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'))
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'))
@@ -41,6 +44,55 @@ function AdminRoute({ children }) {
   return children
 }
 
+/** Infers view/create/edit from the current path under a module. */
+function ModulePermissionRoute({ module, children }) {
+  const location = useLocation()
+  let action = 'can_view'
+  if (/\/new\/?$/.test(location.pathname)) action = 'can_create'
+  else if (/\/[^/]+\/edit\/?$/.test(location.pathname)) action = 'can_edit'
+  return (
+    <PermissionRoute module={module} action={action}>
+      {children}
+    </PermissionRoute>
+  )
+}
+
+/** Dashboard tabs map to modules; block direct ?tab= access without View. */
+function DashboardPermissionGate({ children }) {
+  const location = useLocation()
+  const permissions = useSelector(selectPermissions)
+  const hydrating = useSelector(selectAuthHydrating)
+  const isAuthenticated = useSelector(selectIsAuthenticated)
+  const isAdmin = useSelector(selectIsAdmin)
+
+  if (hydrating) return null
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (!isAdmin) return <Navigate to="/login" replace />
+
+  if (permissions) {
+    const params = new URLSearchParams(location.search)
+    const tab = params.get('tab') || 'dashboard'
+    const tabModule = {
+      dashboard: 'Dashboard',
+      products: 'Listings',
+      sold: 'Listings',
+      users: 'Users',
+      contacts: 'Contacts',
+      comments: 'Reports',
+    }[tab]
+
+    if (location.pathname === '/products' || location.pathname.startsWith('/products/')) {
+      const mod = permissions.Listings
+      if (!mod?.can_view) return <ForbiddenPage moduleName="Listings" />
+    } else if (tabModule) {
+      const mod = permissions[tabModule]
+      if (!mod?.can_view) return <ForbiddenPage moduleName={tabModule} />
+    }
+  }
+
+  return children
+}
+
 function AdminUserProfilePage() {
   return (
     <UserProfilePage
@@ -68,17 +120,17 @@ function App() {
           <Route
             path="/products"
             element={
-              <AdminRoute>
+              <DashboardPermissionGate>
                 <AdminDashboardPage />
-              </AdminRoute>
+              </DashboardPermissionGate>
             }
           />
           <Route
             path="/products/:id"
             element={
-              <AdminRoute>
+              <PermissionRoute module="Listings" action="can_view">
                 <ProductDetailPage adminMode />
-              </AdminRoute>
+              </PermissionRoute>
             }
           />
           <Route
@@ -92,137 +144,137 @@ function App() {
           <Route
             path="/users/:id"
             element={
-              <AdminRoute>
+              <PermissionRoute module="Users" action="can_view">
                 <AdminUserProfilePage />
-              </AdminRoute>
+              </PermissionRoute>
             }
           />
           <Route
             path="/"
             element={
-              <AdminRoute>
+              <DashboardPermissionGate>
                 <AdminDashboardPage />
-              </AdminRoute>
+              </DashboardPermissionGate>
             }
           />
           <Route
             path="/categories/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Categories">
                 <AdminCategoriesRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route
             path="/filters/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Filters">
                 <AdminFiltersRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route
             path="/dealers/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Dealers">
                 <AdminDealersRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route
             path="/emirates/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Emirates">
                 <AdminEmiratesRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route
             path="/packages/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Packages">
                 <AdminPackagesRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route
             path="/storage-facilities/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Storage Facilities">
                 <AdminStorageFacilitiesRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route
             path="/checkout-services/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Checkout Services">
                 <AdminCheckoutServicesRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route
             path="/coupons/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Coupons">
                 <AdminCouponsRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route
             path="/buyers-coupons/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Buyer Coupons">
                 <AdminBuyersCouponsRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route
             path="/transactions/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Transactions">
                 <AdminTransactionsRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route
             path="/reports/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Reports">
                 <AdminReportsRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route
             path="/roles/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Settings">
                 <AdminRolesRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route
             path="/identity-verification"
             element={
-              <AdminRoute>
+              <PermissionRoute module="Users" action="can_view">
                 <AdminIdentityVerificationPage />
-              </AdminRoute>
+              </PermissionRoute>
             }
           />
           <Route
             path="/field-types/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Field Types">
                 <AdminFieldTypesRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route
             path="/form-fields/*"
             element={
-              <AdminRoute>
+              <ModulePermissionRoute module="Form Fields">
                 <AdminFormFieldsRoutes />
-              </AdminRoute>
+              </ModulePermissionRoute>
             }
           />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -17,6 +17,7 @@ const api = axios.create({
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',
+    'X-Platform': 'web',
   },
 })
 
@@ -32,6 +33,7 @@ api.interceptors.request.use((config) => {
       config.headers.Authorization = `Bearer ${token}`
     }
   }
+  config.headers['X-Platform'] = config.headers['X-Platform'] || 'web'
   // Let the browser set Content-Type (with boundary) for FormData uploads
   if (config.data instanceof FormData) {
     delete config.headers['Content-Type']
@@ -717,6 +719,12 @@ export const adminService = {
   setCheckoutServiceStatus: (id, status) =>
     api.put(`/admin/checkout-services/${id}/status`, { status }),
   deleteCheckoutService: (id) => api.delete(`/admin/checkout-services/${id}`),
+  // Transactions (PaymentTransaction admin module)
+  getTransactions: (params) => api.get('/admin/transactions', { params }),
+  getTransactionById: (id) => api.get(`/admin/transactions/${id}`),
+  getTransactionStats: (params) => api.get('/admin/transactions/stats', { params }),
+  exportTransactions: (params) =>
+    api.get('/admin/transactions/export', { params, responseType: 'blob' }),
   // Coupon endpoints (mounted at /api/coupon)
   getCoupons: (params) => api.get('/coupon/list', { params }),
   getCouponById: (id) => api.get(`/coupon/${id}`),

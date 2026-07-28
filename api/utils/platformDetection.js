@@ -1,3 +1,5 @@
+const { resolveOrderPlatform } = require('./paymentLabels')
+
 /**
  * Resolve request platform for analytics and search history.
  * Web routes set req.platform = 'web'; mobile routes set req.platform = 'mobile'.
@@ -21,4 +23,4 @@ function resolvePlatform(req) {
   return 'web'
 }
 
-module.exports = { resolvePlatform }
+module.exports = { resolvePlatform, resolveOrderPlatform }

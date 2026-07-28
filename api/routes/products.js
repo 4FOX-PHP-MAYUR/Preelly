@@ -27,6 +27,15 @@ const {
 } = require('../utils/productVehicleFields')
 const { buildProductAttributesPresentation, buildDetailFeaturesPresentation } = require('../utils/productAttributesResolver')
 const { enrichReelsProducts } = require('../utils/reelsProductFields')
+const { resolveOrderPlatform } = require('../utils/paymentLabels')
+
+function resolveProductAddType(req) {
+  const fromBody = String(req.body?.productAddType || '').trim().toLowerCase()
+  if (fromBody === 'web' || fromBody === 'ios' || fromBody === 'android') {
+    return fromBody
+  }
+  return resolveOrderPlatform(req)
+}
 
 function parseBooleanField (value) {
   if (value === undefined || value === null || value === '') return null
@@ -1820,6 +1829,7 @@ router.post(
         assemblyStatus: assemblyStatus || null,
         priceType: priceType || 'Fixed',
         adType: ['free', 'basic', 'premium'].includes(String(adType || 'free')) ? String(adType) : 'free',
+        productAddType: resolveProductAddType(req),
         contactName: contactName || req.user.name,
         contactPhone: contactPhone || req.user.phone,
         seller: req.user._id,

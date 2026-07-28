@@ -14,8 +14,8 @@ const PaymentTransactionSchema = new Schema(
 
     // 1 = Ads Payment (existing seller flow), 2 = Product Checkout Payment (buyer).
     paymentType: { type: Number, default: 1, index: true },
-    // 1 = Web (kept configurable for future platforms like Mobile).
-    paymentFrom: { type: Number, default: 1 },
+    // 1 = Web, 2 = iOS, 3 = Android (auto-detected from X-Platform / User-Agent).
+    paymentFrom: { type: Number, default: 1, index: true },
     // Populated for checkout payments: the product's seller and the paying buyer.
     sellerId: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },
     buyerId: { type: Schema.Types.ObjectId, ref: 'User', default: null, index: true },

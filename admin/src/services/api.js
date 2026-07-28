@@ -160,6 +160,13 @@ export const adminService = {
   rejectComment: (commentId) => api.put(`/admin/comments/${commentId}/reject`),
   getReportedComments: (params) => api.get('/admin/reported-comments', { params }),
   resolveReportedComment: (commentId, action) => api.put(`/admin/reported-comments/comment/${commentId}/action`, { action }),
+  // User Reports (reports collection grouped by reported user)
+  getUserReports: (params) => api.get('/admin/user-reports', { params }),
+  getUserReportByUserId: (userId) => api.get(`/admin/user-reports/${userId}`),
+  getUserReportStats: () => api.get('/admin/user-reports/stats'),
+  getMostReportedUsers: (params) => api.get('/admin/user-reports/most-reported', { params }),
+  getUserReportReasons: () => api.get('/admin/user-reports/reasons'),
+  resolveUserReport: (userId, payload) => api.put(`/admin/user-reports/${userId}/action`, payload),
   // Category admin endpoints
   getAdminCategories: (params) => api.get('/admin/categories', { params }),
   getAdminCategoryChildren: (params) => api.get('/admin/categories/children', { params }),
@@ -318,6 +325,12 @@ export const adminService = {
   setCheckoutServiceStatus: (id, status) =>
     api.put(`/admin/checkout-services/${id}/status`, { status }),
   deleteCheckoutService: (id) => api.delete(`/admin/checkout-services/${id}`),
+  // Transactions (PaymentTransaction admin module)
+  getTransactions: (params) => api.get('/admin/transactions', { params }),
+  getTransactionById: (id) => api.get(`/admin/transactions/${id}`),
+  getTransactionStats: (params) => api.get('/admin/transactions/stats', { params }),
+  exportTransactions: (params) =>
+    api.get('/admin/transactions/export', { params, responseType: 'blob' }),
   // Coupon endpoints (mounted at /api/coupon)
   getCoupons: (params) => api.get('/coupon/list', { params }),
   getCouponById: (id) => api.get(`/coupon/${id}`),

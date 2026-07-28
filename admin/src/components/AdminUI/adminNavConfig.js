@@ -19,6 +19,7 @@ import {
   Ticket,
   CreditCard,
   BadgePercent,
+  ArrowLeftRight,
 } from 'lucide-react'
 
 // App routes are root-relative. Nginx + Vite base=/admin/ mount the app under /admin.
@@ -51,6 +52,7 @@ export const ADMIN_MENU_GROUPS = [
       { key: 'checkout-services', label: 'Checkout Services', to: '/checkout-services', icon: CreditCard },
       { key: 'coupons', label: 'Coupons', to: '/coupons', icon: Ticket },
       { key: 'buyers-coupons', label: 'Buyer Coupons', to: '/buyers-coupons', icon: BadgePercent },
+      { key: 'transactions', label: 'Transactions', to: '/transactions', icon: ArrowLeftRight },
       { key: 'products', label: 'Products', to: '/?tab=products', icon: Box },
       { key: 'sold', label: 'Sold', to: '/?tab=sold', icon: TrendingUp },
     ],
@@ -62,7 +64,7 @@ export const ADMIN_MENU_GROUPS = [
       { key: 'users', label: 'Users', to: '/?tab=users', icon: Users },
       { key: 'identity-verification', label: 'Verification', to: '/identity-verification', icon: ShieldCheck },
       { key: 'contacts', label: 'Contacts', to: '/?tab=contacts', icon: MessageCircle },
-      { key: 'reports', label: 'Reports', to: '/?tab=comments', icon: FileText },
+      { key: 'reports', label: 'Reports', to: '/reports', icon: FileText },
     ],
   },
   {
@@ -85,10 +87,12 @@ export const MENU_PERMISSION_MAP = {
   'checkout-services': 'Checkout Services',
   coupons: 'Coupons',
   'buyers-coupons': 'Buyer Coupons',
+  transactions: 'Transactions',
   products: 'Listings',
   sold: 'Listings',
   users: 'Users',
   'identity-verification': 'Users',
+  reports: 'Reports',
 }
 
 export const ADMIN_ROUTE_META = {
@@ -102,8 +106,10 @@ export const ADMIN_ROUTE_META = {
   '/checkout-services': { title: 'Checkout Services', breadcrumbs: [{ label: 'Marketplace', to: '/checkout-services' }, { label: 'Checkout Services' }] },
   '/coupons': { title: 'Coupons', breadcrumbs: [{ label: 'Marketplace', to: '/coupons' }, { label: 'Coupons' }] },
   '/buyers-coupons': { title: 'Buyer Coupons', breadcrumbs: [{ label: 'Marketplace', to: '/buyers-coupons' }, { label: 'Buyer Coupons' }] },
+  '/transactions': { title: 'Transactions', breadcrumbs: [{ label: 'Marketplace', to: '/transactions' }, { label: 'Transactions' }] },
   '/roles': { title: 'Admin Roles', breadcrumbs: [{ label: 'Settings', to: '/roles' }, { label: 'Admin Roles' }] },
   '/identity-verification': { title: 'Identity Verification', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Verification' }] },
+  '/reports': { title: 'User Reports', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Reports' }] },
   '/field-types': { title: 'Field Types', breadcrumbs: [{ label: 'Catalog' }, { label: 'Field Types' }] },
   '/form-fields': { title: 'Form Fields', breadcrumbs: [{ label: 'Catalog' }, { label: 'Form Fields' }] },
   '/login': { title: 'Admin Login', breadcrumbs: [{ label: 'Login' }] },
@@ -115,7 +121,7 @@ export const ADMIN_TAB_META = {
   sold: { title: 'Sold Products', breadcrumbs: [{ label: 'Marketplace' }, { label: 'Sold' }] },
   users: { title: 'Users', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Users' }] },
   contacts: { title: 'Contacts', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Contacts' }] },
-  comments: { title: 'Reports', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Reports' }] },
+  comments: { title: 'User Reports', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Reports' }] },
 }
 
 /** Metadata for module add/edit routes: /:module/new and /:module/:id/edit */
@@ -131,7 +137,9 @@ export const ADMIN_MODULE_FORM_META = {
   'checkout-services': { listPath: '/checkout-services', section: 'Marketplace', label: 'Checkout Services', singular: 'Checkout Service' },
   coupons: { listPath: '/coupons', section: 'Marketplace', label: 'Coupons', singular: 'Coupon' },
   'buyers-coupons': { listPath: '/buyers-coupons', section: 'Marketplace', label: 'Buyer Coupons', singular: 'Buyer Coupon' },
+  transactions: { listPath: '/transactions', section: 'Marketplace', label: 'Transactions', singular: 'Transaction' },
   roles: { listPath: '/roles', section: 'Settings', label: 'Admin Roles', singular: 'Role' },
+  reports: { listPath: '/reports', section: 'Users & Support', label: 'Reports', singular: 'Report' },
 }
 
 export function resolveAdminRouteMeta(pathname) {
@@ -169,6 +177,22 @@ export function resolveAdminRouteMeta(pathname) {
           { label: config.section, to: config.listPath },
           { label: config.label, to: config.listPath },
           { label: 'Edit' },
+        ],
+      }
+    }
+  }
+
+  // Read-only detail routes: /:module/:id
+  const viewMatch = pathname.match(/^\/([^/]+)\/([^/]+)$/)
+  if (viewMatch) {
+    const config = ADMIN_MODULE_FORM_META[viewMatch[1]]
+    if (config) {
+      return {
+        title: `${config.singular} Details`,
+        breadcrumbs: [
+          { label: config.section, to: config.listPath },
+          { label: config.label, to: config.listPath },
+          { label: 'Details' },
         ],
       }
     }

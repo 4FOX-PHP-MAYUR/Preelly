@@ -21,6 +21,8 @@ const AdminStorageFacilitiesRoutes = lazy(() => import('./pages/storage-faciliti
 const AdminCheckoutServicesRoutes = lazy(() => import('./pages/checkout-services'))
 const AdminCouponsRoutes = lazy(() => import('./pages/coupons'))
 const AdminBuyersCouponsRoutes = lazy(() => import('./pages/buyers-coupons'))
+const AdminTransactionsRoutes = lazy(() => import('./pages/transactions'))
+const AdminReportsRoutes = lazy(() => import('./pages/reports'))
 const AdminRolesRoutes = lazy(() => import('./pages/roles'))
 const AdminIdentityVerificationPage = lazy(() => import('./pages/AdminIdentityVerificationPage'))
 const AdminFieldTypesRoutes = lazy(() => import('./pages/field-types'))
@@ -164,6 +166,22 @@ function App() {
             element={
               <AdminRoute>
                 <AdminBuyersCouponsRoutes />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/transactions/*"
+            element={
+              <AdminRoute>
+                <AdminTransactionsRoutes />
+              </AdminRoute>
+            }
+          />
+          <Route
+            path="/reports/*"
+            element={
+              <AdminRoute>
+                <AdminReportsRoutes />
               </AdminRoute>
             }
           />

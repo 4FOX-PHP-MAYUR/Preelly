@@ -94,10 +94,15 @@ router.get('/products', adminMiddleware, async (req, res) => {
       page = 1,
       limit = 20,
       search,
+      productAddType,
     } = req.query
 
     const query = {}
     if (status) query.status = status
+    const addType = String(productAddType || '').trim().toLowerCase()
+    if (addType === 'web' || addType === 'ios' || addType === 'android') {
+      query.productAddType = addType
+    }
     if (search) {
       query.$text = { $search: search }
     }
@@ -3006,6 +3011,8 @@ const AVAILABLE_MODULES = [
   'Form Fields',
   'Users',
   'Listings',
+  'Transactions',
+  'Reports',
 ]
 
 // GET /api/admin/roles/:id/permissions - get permissions for a role
@@ -3774,6 +3781,315 @@ router.delete('/form-fields/:id', adminMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Error deleting form field:', error)
     res.status(500).json({ message: 'Error deleting form field' })
+  }
+})
+
+// ---------------------------------------------------------------------------
+// Transactions (PaymentTransaction admin module)
+// ---------------------------------------------------------------------------
+
+const adminTransactionService = require('../core/services/adminTransactionService')
+const {
+  toPaginatedAdminTransactionsResponse,
+  toAdminTransactionDetailDto,
+  toAdminTransactionStatsDto,
+  toAdminTransactionExcelRows,
+} = require('../dto/adminTransaction.dto')
+
+function parseTransactionListQuery(query = {}) {
+  const {
+    search,
+    paymentStatus,
+    orderPlatform,
+    paymentMethod,
+    fromDate,
+    toDate,
+    sort,
+    sortBy = 'createdAt',
+    sortDir = 'desc',
+  } = query
+  return {
+    search,
+    paymentStatus: paymentStatus && paymentStatus !== 'all' ? paymentStatus : undefined,
+    orderPlatform: orderPlatform && orderPlatform !== 'all' ? orderPlatform : undefined,
+    paymentMethod: paymentMethod && paymentMethod !== 'all' ? paymentMethod : undefined,
+    fromDate: fromDate || undefined,
+    toDate: toDate || undefined,
+    sort,
+    sortBy,
+    sortDir,
+  }
+}
+
+// GET /api/admin/transactions/stats — summary cards (declared before :id)
+router.get(
+  '/transactions/stats',
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const stats = await adminTransactionService.getTransactionStats({
+        orderPlatform: req.query.orderPlatform,
+        paymentMethod: req.query.paymentMethod,
+        fromDate: req.query.fromDate,
+        toDate: req.query.toDate,
+      })
+      res.json(toAdminTransactionStatsDto(stats))
+    } catch (error) {
+      console.error('Error fetching transaction stats:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching transaction stats' })
+    }
+  }
+)
+
+// GET /api/admin/transactions/export — Excel download (current filters)
+router.get(
+  '/transactions/export',
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const filters = parseTransactionListQuery(req.query)
+      const { items, total, truncated } = await adminTransactionService.exportTransactions(filters)
+      const rows = toAdminTransactionExcelRows(items)
+
+      const workbook = XLSX.utils.book_new()
+      const worksheet = XLSX.utils.json_to_sheet(
+        rows.length
+          ? rows
+          : [{
+              'Transaction ID': '',
+              'Order ID': '',
+              'Customer Name': '',
+              'Customer Email': '',
+              'Order Amount': '',
+              Currency: '',
+              'Payment Status': '',
+              'Payment Method': '',
+              'Order Platform': '',
+              'Gateway Transaction ID': '',
+              'Gateway Name': '',
+              'Payment Type': '',
+              'Transaction Date & Time': '',
+              'Failure Reason': '',
+              'Bank Ref No': '',
+              'Invoice Number': '',
+            }]
+      )
+      // Reasonable column widths for readability in Excel.
+      worksheet['!cols'] = [
+        { wch: 28 }, { wch: 22 }, { wch: 20 }, { wch: 28 },
+        { wch: 14 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
+        { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 16 },
+        { wch: 22 }, { wch: 30 }, { wch: 18 }, { wch: 18 },
+      ]
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Transactions')
+
+      const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+      const stamp = [
+        filters.fromDate || 'start',
+        filters.toDate || 'end',
+      ].join('_')
+      const filename = `transactions-${stamp}.xlsx`
+
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      )
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+      res.setHeader('X-Export-Total', String(total))
+      res.setHeader('X-Export-Truncated', truncated ? '1' : '0')
+      res.setHeader('Access-Control-Expose-Headers', 'X-Export-Total, X-Export-Truncated, Content-Disposition')
+      return res.send(buffer)
+    } catch (error) {
+      console.error('Error exporting transactions:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error exporting transactions' })
+    }
+  }
+)
+
+// GET /api/admin/transactions — paginated list with search / filters / sort
+router.get(
+  '/transactions',
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const {
+        page = 1,
+        limit = 10,
+      } = req.query
+      const filters = parseTransactionListQuery(req.query)
+
+      const result = await adminTransactionService.listTransactions({
+        page: Number(page),
+        limit: Number(limit),
+        ...filters,
+      })
+      res.json(toPaginatedAdminTransactionsResponse(result))
+    } catch (error) {
+      console.error('Error fetching transactions:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching transactions' })
+    }
+  }
+)
+
+// GET /api/admin/transactions/:id — detail view
+router.get(
+  '/transactions/:id',
+  adminMiddleware,
+  async (req, res) => {
+    try {
+      const { txn, logs } = await adminTransactionService.getTransactionById(req.params.id)
+      res.json(toAdminTransactionDetailDto(txn, logs))
+    } catch (error) {
+      console.error('Error fetching transaction:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching transaction' })
+    }
+  }
+)
+
+// ---------------------------------------------------------------------------
+// User Reports (admin moderation of reports against users)
+// ---------------------------------------------------------------------------
+
+const adminUserReportService = require('../core/services/adminUserReportService')
+const {
+  toReportedUserListResponse,
+  toReportedUserDetailDto,
+  toReportStatsDto,
+  toMostReportedResponse,
+} = require('../dto/adminUserReport.dto')
+
+function parseUserReportListQuery(query = {}) {
+  const {
+    page,
+    limit,
+    search,
+    status,
+    reason,
+    dateFrom,
+    dateTo,
+    minReports,
+    sort,
+    threshold,
+  } = query
+  return {
+    page,
+    limit,
+    search: search && String(search).trim() ? String(search).trim() : undefined,
+    status: status && status !== 'all' ? status : undefined,
+    reason: reason && reason !== 'all' ? reason : undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+    minReports: minReports != null && minReports !== '' ? minReports : undefined,
+    sort,
+    threshold,
+  }
+}
+
+// GET /api/admin/user-reports/stats
+router.get('/user-reports/stats', adminMiddleware, async (req, res) => {
+  try {
+    const stats = await adminUserReportService.getReportStats()
+    res.json(toReportStatsDto(stats))
+  } catch (error) {
+    console.error('Error fetching user report stats:', error)
+    res.status(error.statusCode || 500).json({
+      message: error.message || 'Error fetching user report stats',
+    })
+  }
+})
+
+// GET /api/admin/user-reports/most-reported
+router.get('/user-reports/most-reported', adminMiddleware, async (req, res) => {
+  try {
+    const result = await adminUserReportService.getMostReportedUsers({
+      limit: req.query.limit,
+      threshold: req.query.threshold,
+    })
+    res.json(toMostReportedResponse(result))
+  } catch (error) {
+    console.error('Error fetching most reported users:', error)
+    res.status(error.statusCode || 500).json({
+      message: error.message || 'Error fetching most reported users',
+    })
+  }
+})
+
+// GET /api/admin/user-reports/reasons
+router.get('/user-reports/reasons', adminMiddleware, async (req, res) => {
+  try {
+    const reasons = await adminUserReportService.getReportReasons()
+    res.json({ reasons })
+  } catch (error) {
+    console.error('Error fetching report reasons:', error)
+    res.status(error.statusCode || 500).json({
+      message: error.message || 'Error fetching report reasons',
+    })
+  }
+})
+
+// GET /api/admin/user-reports — grouped by reported user
+router.get('/user-reports', adminMiddleware, async (req, res) => {
+  try {
+    const result = await adminUserReportService.listReportedUsers(
+      parseUserReportListQuery(req.query)
+    )
+    res.json(toReportedUserListResponse(result))
+  } catch (error) {
+    console.error('Error fetching user reports:', error)
+    res.status(error.statusCode || 500).json({
+      message: error.message || 'Error fetching user reports',
+      items: [],
+      total: 0,
+    })
+  }
+})
+
+// GET /api/admin/user-reports/:userId — detail for one reported user
+router.get('/user-reports/:userId', adminMiddleware, async (req, res) => {
+  try {
+    const detail = await adminUserReportService.getReportedUserDetail(req.params.userId)
+    res.json(toReportedUserDetailDto(detail))
+  } catch (error) {
+    console.error('Error fetching user report detail:', error)
+    res.status(error.statusCode || 500).json({
+      message: error.message || 'Error fetching user report detail',
+    })
+  }
+})
+
+// PUT /api/admin/user-reports/:userId/action — review | resolve | dismiss | block
+router.put('/user-reports/:userId/action', adminMiddleware, async (req, res) => {
+  try {
+    const { action, reportIds, adminNotes, blockUser } = req.body || {}
+    const result = await adminUserReportService.applyUserReportAction({
+      userId: req.params.userId,
+      action,
+      adminId: req.user?._id,
+      reportIds,
+      adminNotes,
+      blockUser,
+    })
+    const messages = {
+      review: 'Report(s) marked as reviewed',
+      resolve: 'Report(s) resolved',
+      dismiss: 'Report(s) dismissed',
+      block: 'User blocked and report(s) resolved',
+    }
+    const key = String(action || '').toLowerCase()
+    res.json({
+      message: result.blocked && key !== 'block'
+        ? 'User blocked and report(s) resolved'
+        : messages[key] || 'Action completed',
+      ...result,
+    })
+  } catch (error) {
+    console.error('Error applying user report action:', error)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid user ID' })
+    }
+    res.status(error.statusCode || 500).json({
+      message: error.message || 'Error applying report action',
+    })
   }
 })
 

@@ -23,6 +23,7 @@ import Card from '../components/AdminUI/Card'
 import AdminPage from '../components/AdminUI/AdminPage'
 import Panel from '../components/AdminUI/Panel'
 import Button from '../components/AdminUI/Button'
+import Modal from '../components/AdminUI/Modal'
 import DataTable from '../components/AdminUI/DataTable'
 import StatusBadge from '../components/AdminUI/StatusBadge'
 import PageHeader from '../components/AdminUI/PageHeader'
@@ -64,6 +65,7 @@ function AdminDashboardPage() {
   // Tabs: 'dashboard' (pending review + stats), 'products' (all products), 'sold' (sold products), 'users' (user list), 'contacts' (chat/contact list), 'comments' (comment moderation)
   const [activeTab, setActiveTab] = useState('dashboard')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [productAddTypeFilter, setProductAddTypeFilter] = useState('all')
   const [userFilter, setUserFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
@@ -84,6 +86,7 @@ function AdminDashboardPage() {
   const [selectedRejectCategories, setSelectedRejectCategories] = useState([])
   const [rejectSelectionByCategory, setRejectSelectionByCategory] = useState({})
   const [rejectCustomReason, setRejectCustomReason] = useState('')
+  const [confirmAction, setConfirmAction] = useState(null) // { type: 'approve' | 'reject', productId, productTitle }
 
   const getMemberSinceYear = (u) => {
     const raw = u?.memberSince || u?.createdAt
@@ -96,14 +99,90 @@ function AdminDashboardPage() {
 
   const PRODUCT_PAGE_LIMIT = 15
 
+  const PRODUCT_ADD_TYPE_LABELS = {
+    web: 'Web',
+    ios: 'iOS',
+    android: 'Android',
+  }
+
+  const formatProductAddType = (value) =>
+    PRODUCT_ADD_TYPE_LABELS[String(value || 'web').toLowerCase()] || 'Web'
+
+  const formatPostedDate = (value) => {
+    if (!value) return '—'
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return '—'
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  }
+
+  const renderProductMobileCard = (p, { actions } = {}) => (
+    <div className="space-y-3">
+      <div className="flex items-start gap-3">
+        <div className="shrink-0 w-14 h-14 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800">
+          {p.video ? (
+            <video src={getMediaUrl(p.video)} className="w-full h-full object-cover" muted playsInline />
+          ) : (
+            <img
+              src={getMediaUrl(p.images?.[0]) || '/placeholder.jpg'}
+              alt={p.title}
+              className="w-full h-full object-cover"
+            />
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-medium text-slate-900 dark:text-white truncate">{p.title}</p>
+          <p className="mt-0.5 text-xs font-semibold text-primary-600 dark:text-primary-400">
+            {formatListingPrice(p)}
+          </p>
+        </div>
+        {actions ? <div className="shrink-0">{actions}</div> : null}
+      </div>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+        <div className="min-w-0">
+          <p className="text-slate-500 dark:text-slate-400">Category</p>
+          <p className="font-medium text-slate-900 dark:text-white truncate">{p.category?.name || '—'}</p>
+        </div>
+        <div className="min-w-0">
+          <p className="text-slate-500 dark:text-slate-400">Seller</p>
+          <p className="font-medium text-slate-900 dark:text-white truncate">{p.seller?.name || '—'}</p>
+        </div>
+        <div className="min-w-0">
+          <p className="text-slate-500 dark:text-slate-400">Location</p>
+          <p className="font-medium text-slate-800 dark:text-slate-200 truncate">{p.location || '—'}</p>
+        </div>
+        <div className="min-w-0">
+          <p className="text-slate-500 dark:text-slate-400">Uploaded by</p>
+          <p className="font-medium text-slate-800 dark:text-slate-200">
+            {formatProductAddType(p.productAddType)}
+          </p>
+        </div>
+        <div className="min-w-0">
+          <p className="text-slate-500 dark:text-slate-400">Status</p>
+          <div className="mt-0.5">
+            <StatusBadge status={p.status} />
+          </div>
+        </div>
+        <div className="min-w-0">
+          <p className="text-slate-500 dark:text-slate-400">Posted</p>
+          <p className="font-medium text-slate-800 dark:text-slate-200">{formatPostedDate(p.createdAt)}</p>
+        </div>
+      </div>
+    </div>
+  )
+
   // Sync tab with URL (?tab=...) for shareable links and back/forward
   useEffect(() => {
     const tab = searchParams.get('tab')
-    const validTabs = ['dashboard', 'products', 'sold', 'users', 'contacts', 'comments', 'categories']
+    // Legacy Reports tab (?tab=comments) now lives at /reports (user reports module)
+    if (tab === 'comments') {
+      navigate('/reports', { replace: true })
+      return
+    }
+    const validTabs = ['dashboard', 'products', 'sold', 'users', 'contacts', 'categories']
     if (tab && validTabs.includes(tab) && tab !== activeTab) {
       setActiveTab(tab)
     }
-  }, [searchParams])
+  }, [searchParams, navigate, activeTab])
 
   const setActiveTabWithUrl = (tab) => {
     setActiveTab(tab)
@@ -140,12 +219,15 @@ function AdminDashboardPage() {
     }
   }
 
-  const fetchAllProducts = async (status = 'all', search = '', page = 1) => {
+  const fetchAllProducts = async (status = 'all', search = '', page = 1, addType = productAddTypeFilter) => {
     try {
       setLoading(true)
       const params = { limit: PRODUCT_PAGE_LIMIT, page }
       if (status !== 'all') {
         params.status = status
+      }
+      if (addType && addType !== 'all') {
+        params.productAddType = addType
       }
       if (search) {
         params.search = search
@@ -511,13 +593,6 @@ function AdminDashboardPage() {
     }
   }
 
-  const formatPostedDate = (value) => {
-    if (!value) return '—'
-    const d = new Date(value)
-    if (Number.isNaN(d.getTime())) return '—'
-    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-  }
-
   // Columns for the All Products table view (matches the list-page design used across admin).
   const productColumns = [
     {
@@ -546,6 +621,15 @@ function AdminDashboardPage() {
     { key: 'category', title: 'Category', render: (p) => p.category?.name || '—' },
     { key: 'seller', title: 'Seller', render: (p) => p.seller?.name || '—' },
     { key: 'location', title: 'Location', render: (p) => p.location || '—' },
+    {
+      key: 'productAddType',
+      title: 'Uploaded by',
+      render: (p) => (
+        <span className="inline-flex items-center rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-700 dark:text-slate-200 whitespace-nowrap">
+          {formatProductAddType(p.productAddType)}
+        </span>
+      ),
+    },
     { key: 'status', title: 'Status', render: (p) => <StatusBadge status={p.status} /> },
     { key: 'createdAt', title: 'Posted', render: (p) => formatPostedDate(p.createdAt) },
   ]
@@ -557,13 +641,36 @@ function AdminDashboardPage() {
     setRejectCustomReason('')
   }
 
+  const openConfirmAction = (type, product) => {
+    setConfirmAction({
+      type,
+      productId: product._id,
+      productTitle: product.title || 'this product',
+    })
+  }
+
+  const closeConfirmAction = () => setConfirmAction(null)
+
+  const handleConfirmAction = async () => {
+    if (!confirmAction) return
+    const { type, productId } = confirmAction
+    closeConfirmAction()
+    if (type === 'approve') {
+      await handleApprove(productId)
+      return
+    }
+    if (type === 'reject') {
+      openRejectModal(productId)
+    }
+  }
+
   const renderProductActions = (p) => (
     <>
       {p.status === 'pending' && (
         <>
           <button
             type="button"
-            onClick={() => handleApprove(p._id)}
+            onClick={() => openConfirmAction('approve', p)}
             disabled={processingId === p._id}
             className="admin-table-action text-emerald-600 dark:text-emerald-400 disabled:opacity-50"
             title="Approve"
@@ -573,7 +680,7 @@ function AdminDashboardPage() {
           </button>
           <button
             type="button"
-            onClick={() => openRejectModal(p._id)}
+            onClick={() => openConfirmAction('reject', p)}
             disabled={processingId === p._id}
             className="admin-table-action text-red-600 dark:text-red-400 disabled:opacity-50"
             title="Reject"
@@ -677,27 +784,53 @@ function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* Status Filter for All Products */}
+          {/* Status / Add Type filters for All Products */}
           {activeTab === 'products' && (
-            <div className="w-full md:w-auto">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Filter by Status:</label>
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  const value = e.target.value
-                  setStatusFilter(value)
-                  setProductPage(1)
-                  fetchAllProducts(value, searchQuery, 1)
-                }}
-                className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
-              >
-                <option value="all">All Statuses</option>
-                <option value="active">Approved</option>
-                <option value="pending">Pending Review</option>
-                <option value="sold">Sold</option>
-                <option value="inactive">Inactive</option>
-                <option value="rejected">Rejected</option>
-              </select>
+            <div className="w-full md:w-auto grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
+              <div className="min-w-0 w-full">
+                <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-status-filter">
+                  Status
+                </label>
+                <select
+                  id="product-status-filter"
+                  value={statusFilter}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setStatusFilter(value)
+                    setProductPage(1)
+                    fetchAllProducts(value, searchQuery, 1)
+                  }}
+                  className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="active">Approved</option>
+                  <option value="pending">Pending Review</option>
+                  <option value="sold">Sold</option>
+                  <option value="inactive">Inactive</option>
+                  <option value="rejected">Rejected</option>
+                </select>
+              </div>
+              <div className="min-w-0 w-full">
+                <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-add-type-filter">
+                  Uploaded by
+                </label>
+                <select
+                  id="product-add-type-filter"
+                  value={productAddTypeFilter}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setProductAddTypeFilter(value)
+                    setProductPage(1)
+                    fetchAllProducts(statusFilter, searchQuery, 1, value)
+                  }}
+                  className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                >
+                  <option value="all">All Platforms</option>
+                  <option value="web">Web</option>
+                  <option value="ios">iOS</option>
+                  <option value="android">Android</option>
+                </select>
+              </div>
             </div>
           )}
 
@@ -1254,6 +1387,10 @@ function AdminDashboardPage() {
             title="All Products"
             subtitle={`${productTotal} product${productTotal === 1 ? '' : 's'}${
               statusFilter !== 'all' ? ` · ${statusFilter}` : ''
+            }${
+              productAddTypeFilter !== 'all'
+                ? ` · ${formatProductAddType(productAddTypeFilter)}`
+                : ''
             }`}
           />
           <DataTable
@@ -1262,12 +1399,13 @@ function AdminDashboardPage() {
             loading={loading}
             emptyTitle="No products found"
             emptyDescription={
-              statusFilter !== 'all'
-                ? `No products with status "${statusFilter}" found.`
+              statusFilter !== 'all' || productAddTypeFilter !== 'all'
+                ? 'No products match the selected filters.'
                 : 'No products match your search.'
             }
             showSearch={false}
             customActions={renderProductActions}
+            mobileCardRender={renderProductMobileCard}
             pagination={{
               page: productPage,
               limit: PRODUCT_PAGE_LIMIT,
@@ -1285,10 +1423,10 @@ function AdminDashboardPage() {
       {/* Products List (Dashboard = pending, Sold) */}
       {(activeTab === 'dashboard' || activeTab === 'sold') && (
         <div className="admin-card bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="p-6 border-b">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-900">
+          <div className="p-4 sm:p-6 border-b">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
                   {activeTab === 'dashboard' 
                     ? `Pending Review (${pendingProducts.length})`
                     : activeTab === 'sold'
@@ -1309,7 +1447,7 @@ function AdminDashboardPage() {
                 <button
                   type="button"
                   onClick={fetchData}
-                  className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  className="w-full sm:w-auto px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
                   aria-label="Refresh pending products"
                 >
                   Refresh
@@ -1346,10 +1484,10 @@ function AdminDashboardPage() {
                 {(activeTab === 'dashboard' ? pendingProducts : allProducts).map((product) => (
                   <div
                     key={product._id}
-                    className="p-6 hover:bg-gray-50 transition-colors"
+                    className="p-4 sm:p-6 hover:bg-gray-50 transition-colors"
                   >
-                    <div className="flex items-start space-x-4">
-                      <div className="flex-shrink-0 w-32 h-32 bg-gray-200 rounded-lg overflow-hidden">
+                    <div className="flex flex-col sm:flex-row sm:items-start gap-4">
+                      <div className="flex-shrink-0 w-full sm:w-32 h-40 sm:h-32 bg-gray-200 rounded-lg overflow-hidden">
                         {product.video ? (
                           <video
                             src={getMediaUrl(product.video)}
@@ -1368,23 +1506,35 @@ function AdminDashboardPage() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-lg font-semibold text-gray-900 mb-1">
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1 break-words">
                           {product.title}
                         </h3>
-                        <p className="text-primary-600 font-bold text-lg mb-2">
+                        <p className="text-primary-600 font-bold text-base sm:text-lg mb-2">
                           {formatListingPrice(product)}
                         </p>
                         <p className="text-sm text-gray-600 mb-2 line-clamp-2">
                           {product.description}
                         </p>
-                        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-3">
-                          <span>{product.location}</span>
-                          <span>•</span>
-                          <span>{product.category?.name}</span>
-                          <span>•</span>
-                          <span>Seller: {product.seller?.name}</span>
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-600 mb-3">
+                          {product.location ? <span className="truncate max-w-full">{product.location}</span> : null}
+                          {product.category?.name ? (
+                            <>
+                              <span className="text-gray-300 hidden sm:inline" aria-hidden>•</span>
+                              <span>{product.category.name}</span>
+                            </>
+                          ) : null}
+                          {product.seller?.name ? (
+                            <>
+                              <span className="text-gray-300 hidden sm:inline" aria-hidden>•</span>
+                              <span className="truncate">Seller: {product.seller.name}</span>
+                            </>
+                          ) : null}
+                          <span className="text-gray-300 hidden sm:inline" aria-hidden>•</span>
+                          <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                            Uploaded by: {formatProductAddType(product.productAddType)}
+                          </span>
                         </div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex flex-wrap items-center gap-2">
                           <span
                             className={`px-2 py-1 rounded-full text-xs font-medium ${
                               product.status === 'active'
@@ -1403,11 +1553,11 @@ function AdminDashboardPage() {
                             {product.status === 'pending' && <Clock className="h-3 w-3 inline mr-1" />}
                             {product.status === 'active' && <CheckCircle className="h-3 w-3 inline mr-1" />}
                             {product.status === 'rejected' && <XCircle className="h-3 w-3 inline mr-1" />}
-                            {product.status === 'pending' && '⏳ Pending Review'}
-                            {product.status === 'active' && '✅ Approved'}
-                            {product.status === 'rejected' && '❌ Rejected'}
-                            {product.status === 'sold' && '💰 Sold'}
-                            {product.status === 'inactive' && '⏸️ Inactive'}
+                            {product.status === 'pending' && 'Pending Review'}
+                            {product.status === 'active' && 'Approved'}
+                            {product.status === 'rejected' && 'Rejected'}
+                            {product.status === 'sold' && 'Sold'}
+                            {product.status === 'inactive' && 'Inactive'}
                           </span>
                           {product.createdAt && (
                             <span className="text-xs text-gray-500">
@@ -1416,14 +1566,14 @@ function AdminDashboardPage() {
                           )}
                         </div>
                       </div>
-                      <div className="flex flex-col space-y-2">
+                      <div className="flex flex-row sm:flex-col gap-2 w-full sm:w-auto shrink-0">
                         {product.status === 'pending' && (
                           <>
                             <button
                               type="button"
-                              onClick={() => handleApprove(product._id)}
+                              onClick={() => openConfirmAction('approve', product)}
                               disabled={processingId === product._id}
-                              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                              className="flex-1 sm:flex-none justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                               aria-label="Approve product"
                             >
                               {processingId === product._id ? (
@@ -1435,14 +1585,9 @@ function AdminDashboardPage() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => {
-                                setRejectModalProductId(product._id)
-                                setSelectedRejectCategories([])
-                                setRejectSelectionByCategory({})
-                                setRejectCustomReason('')
-                              }}
+                              onClick={() => openConfirmAction('reject', product)}
                               disabled={processingId === product._id}
-                              className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                              className="flex-1 sm:flex-none justify-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                               aria-label="Reject product"
                             >
                               {processingId === product._id ? (
@@ -1459,7 +1604,7 @@ function AdminDashboardPage() {
                             type="button"
                             onClick={() => handleToggleProductStatus(product._id, product.status)}
                             disabled={processingId === product._id}
-                            className={`h-9 px-3 rounded-full flex items-center justify-center gap-1.5 border text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                            className={`flex-1 sm:flex-none h-9 px-3 rounded-full flex items-center justify-center gap-1.5 border text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                               product.status === 'active'
                                 ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
                                 : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
@@ -1480,7 +1625,7 @@ function AdminDashboardPage() {
                         <button
                           type="button"
                           onClick={() => navigate(`/products/${product._id}`)}
-                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center space-x-2"
+                          className="flex-1 sm:flex-none justify-center px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center gap-2"
                           aria-label="View product"
                         >
                           <Eye className="h-4 w-4" />
@@ -1494,8 +1639,8 @@ function AdminDashboardPage() {
 
               {/* Pagination for products (admin listing) */}
               {activeTab !== 'dashboard' && (
-                <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between text-sm text-gray-600">
-                  <div>
+                <div className="px-4 sm:px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-sm text-gray-600">
+                  <div className="text-center sm:text-left">
                     {productTotal > 0 && (
                       <>
                         Showing{' '}
@@ -1510,7 +1655,7 @@ function AdminDashboardPage() {
                       </>
                     )}
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center justify-center gap-2">
                     <button
                       type="button"
                       onClick={() => {
@@ -1559,6 +1704,28 @@ function AdminDashboardPage() {
           )}
         </div>
       )}
+
+      <Modal
+        open={Boolean(confirmAction)}
+        onClose={closeConfirmAction}
+        size="sm"
+        title={confirmAction?.type === 'approve' ? 'Confirm Approve' : 'Confirm Reject'}
+        footer={
+          <Modal.Footer
+            onCancel={closeConfirmAction}
+            onConfirm={handleConfirmAction}
+            cancelLabel="Cancel"
+            confirmLabel={confirmAction?.type === 'approve' ? 'Yes, Approve' : 'Yes, Reject'}
+            confirmVariant={confirmAction?.type === 'approve' ? 'success' : 'danger'}
+          />
+        }
+      >
+        <p className="text-sm text-slate-600 dark:text-slate-300">
+          {confirmAction?.type === 'approve'
+            ? `Are you sure you want to approve "${confirmAction?.productTitle}"? The listing will go live.`
+            : `Are you sure you want to reject "${confirmAction?.productTitle}"? You will select rejection reasons next.`}
+        </p>
+      </Modal>
 
       {rejectModalProductId && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">

@@ -118,9 +118,15 @@ const optionalBooleanField = (field) =>
     })
     .withMessage(`${field} must be a boolean`)
 
+const optionalProductAddType = body('productAddType')
+  .optional({ values: 'falsy' })
+  .isIn(['web', 'ios', 'android'])
+  .withMessage('productAddType must be web, ios, or android')
+
 const createProductRules = [
   ...vehicleListingFieldRules,
   optionalBooleanField('isSold'),
+  optionalProductAddType,
 ]
 const updateProductRules = [
   ...vehicleListingFieldRules,

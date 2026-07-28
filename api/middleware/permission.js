@@ -14,6 +14,9 @@ const MODULE_MAP = {
   users: 'Users',
   products: 'Listings',
   listings: 'Listings',
+  transactions: 'Transactions',
+  reports: 'Reports',
+  'user-reports': 'Reports',
 }
 
 /**

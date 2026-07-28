@@ -17,6 +17,11 @@ const paymentEmailService = require('./paymentEmailService')
 const PaymentLog = require('../../models/PaymentLog')
 const ccavenueGateway = require('../gateways/ccavenueGateway')
 const logger = require('../../utils/paymentLogger')
+const {
+  platformToPaymentFrom,
+  normalizePaymentMethod,
+  PAYMENT_FROM,
+} = require('../../utils/paymentLabels')
 
 const gateways = { CCAvenue: ccavenueGateway }
 const DEFAULT_GATEWAY = 'CCAvenue'
@@ -82,6 +87,7 @@ async function initiatePayment({
   baseUrl,
   frontendUrl,
   context = {},
+  orderPlatform = 'web',
 }) {
   const gateway = gateways[gatewayName]
   if (!gateway) throw new AppError('Unsupported payment gateway', 400, 'GATEWAY_UNSUPPORTED')
@@ -161,11 +167,15 @@ async function initiatePayment({
     merchantParams: { p1: orderId, p2: String(productId) },
   })
 
+  const paymentFrom = platformToPaymentFrom(orderPlatform) || PAYMENT_FROM.WEB
+
   const txn = await PaymentTransaction.create({
     userId,
     productId,
     packageId,
     storagefacilitiesId: storageFacilityId || null,
+    paymentType: 1,
+    paymentFrom,
     couponId,
     couponCode: normalizedCoupon,
     discountAmount,
@@ -185,7 +195,7 @@ async function initiatePayment({
   logger.info('payment.initiated', {
     orderId, userId: String(userId), productId: String(productId),
     packageId: String(packageId), storageFacilityId: storageFacilityId ? String(storageFacilityId) : null,
-    amount, couponCode: normalizedCoupon,
+    amount, couponCode: normalizedCoupon, paymentFrom, orderPlatform,
   })
 
   // Log the attempt immediately — so every initiation is on record even if the
@@ -231,6 +241,7 @@ async function initiateCheckoutPayment({
   baseUrl,
   frontendUrl,
   context = {},
+  orderPlatform = 'web',
 }) {
   const gateway = gateways[gatewayName]
   if (!gateway) throw new AppError('Unsupported payment gateway', 400, 'GATEWAY_UNSUPPORTED')
@@ -323,12 +334,14 @@ async function initiateCheckoutPayment({
       : null,
   }
 
+  const paymentFrom = platformToPaymentFrom(orderPlatform) || PAYMENT_FROM.WEB
+
   const txn = await PaymentTransaction.create({
     userId, // payer = buyer, so ownership checks resolve to the buyer
     productId,
     packageId: null,
     paymentType: 2,
-    paymentFrom: 1,
+    paymentFrom,
     sellerId,
     buyerId: userId,
     // couponId ref is the Ads Coupon model; buyer-coupon details live in metadata.
@@ -353,6 +366,7 @@ async function initiateCheckoutPayment({
   logger.info('payment.checkout_initiated', {
     orderId, buyerId: String(userId), sellerId: sellerId ? String(sellerId) : null,
     productId: String(productId), amount, couponCode: couponInfo?.couponCode || null,
+    paymentFrom, orderPlatform,
   })
 
   await writePaymentLog({
@@ -420,7 +434,9 @@ async function processCallback({ gatewayName = DEFAULT_GATEWAY, encResponse, con
   // Always persist the raw audit trail regardless of outcome.
   txn.trackingId = normalized.trackingId || txn.trackingId
   txn.bankRefNo = normalized.bankRefNo || txn.bankRefNo
-  txn.paymentMode = normalized.paymentMode || txn.paymentMode
+  // Persist a normalized payment method label when the gateway supplies one.
+  const incomingMode = normalized.paymentMode || txn.paymentMode
+  txn.paymentMode = normalizePaymentMethod(incomingMode) || incomingMode || txn.paymentMode
   txn.gatewayOrderStatus = normalized.gatewayOrderStatus || txn.gatewayOrderStatus
   txn.gatewayResponse = response
   txn.encResponse = encResponse

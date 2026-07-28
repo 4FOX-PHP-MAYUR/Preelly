@@ -33,6 +33,7 @@ function listItem(product) {
     isSold: product.isSold === true || product.status === 'sold',
     postedAt: product.createdAt,
     adType: product.adType || 'free',
+    productAddType: product.productAddType || 'web',
   }
 }
 

@@ -19,6 +19,8 @@ function DataTable({
   emptyDescription,
   actions = true,
   customActions,
+  /** Optional card renderer for small screens; table remains on md+ */
+  mobileCardRender,
   className = '',
 }) {
   const [q, setQ] = useState('')
@@ -37,14 +39,46 @@ function DataTable({
     ? Math.min(pagination.page * pagination.limit, pagination.total || filtered.length)
     : filtered.length
   const totalCount = pagination?.total ?? filtered.length
+  const hasMobileCards = typeof mobileCardRender === 'function'
 
   const getColumnHeader = (col) => col.title || col.label || col.key
+
+  const renderRowActions = (row) => (
+    <div className="flex items-center justify-end gap-1">
+      {onEdit && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onEdit(row) }}
+          className="admin-table-action text-primary-600 dark:text-primary-400"
+          aria-label="Edit row"
+        >
+          <Edit2 className="h-4 w-4" />
+        </button>
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onDelete(row) }}
+          className="admin-table-action text-red-600 dark:text-red-400"
+          aria-label="Delete row"
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
+      )}
+      {customActions?.(row)}
+      {!onEdit && !onDelete && !customActions && (
+        <button type="button" className="admin-table-action text-slate-400" aria-label="More actions">
+          <MoreHorizontal className="h-4 w-4" />
+        </button>
+      )}
+    </div>
+  )
 
   return (
     <div className={`admin-table-wrapper overflow-hidden ${className}`}>
       {showSearch && (
-        <div className="admin-table-toolbar px-4 py-3 border-b border-slate-200 dark:border-slate-800">
-          <div className="max-w-md">
+        <div className="admin-table-toolbar px-3 sm:px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+          <div className="max-w-md w-full">
             <Input
               icon={Search}
               value={q}
@@ -56,14 +90,55 @@ function DataTable({
         </div>
       )}
 
-      <div className="overflow-x-auto">
+      {/* Mobile / tablet card list */}
+      {hasMobileCards && (
+        <div className="md:hidden">
+          {loading ? (
+            <div className="px-3 py-8">
+              <LoadingSpinner message="Loading data..." size="sm" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="px-3 py-6">
+              <EmptyState title={emptyTitle} description={emptyDescription} />
+            </div>
+          ) : (
+            <ul className="divide-y divide-slate-100 dark:divide-slate-800">
+              {filtered.map((row, rowIndex) => (
+                <li key={row._id || row.id || rowIndex}>
+                  <div
+                    role={onRowClick ? 'button' : undefined}
+                    tabIndex={onRowClick ? 0 : undefined}
+                    onClick={onRowClick ? () => onRowClick(row) : undefined}
+                    onKeyDown={
+                      onRowClick
+                        ? (e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              e.preventDefault()
+                              onRowClick(row)
+                            }
+                          }
+                        : undefined
+                    }
+                    className={`p-3 sm:p-4 ${onRowClick ? 'cursor-pointer active:bg-slate-50 dark:active:bg-slate-800/50' : ''}`}
+                  >
+                    {mobileCardRender(row, { actions: actions ? renderRowActions(row) : null })}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {/* Desktop table (always shown when no mobile cards; md+ when cards exist) */}
+      <div className={`overflow-x-auto ${hasMobileCards ? 'hidden md:block' : ''}`}>
         <table className="admin-table min-w-full">
           <thead>
             <tr>
               {columns.map((c) => (
                 <th
                   key={c.key}
-                  className={`text-left ${c.className || ''}`}
+                  className={`text-left whitespace-nowrap ${c.className || ''}`}
                   style={c.width ? { width: c.width } : undefined}
                 >
                   {getColumnHeader(c)}
@@ -97,40 +172,13 @@ function DataTable({
                   className={onRowClick ? 'cursor-pointer' : ''}
                 >
                   {columns.map((c) => (
-                    <td key={c.key} className={c.cellClassName || ''}>
+                    <td key={c.key} className={`whitespace-nowrap ${c.cellClassName || ''}`}>
                       {c.render ? c.render(row) : row[c.key]}
                     </td>
                   ))}
                   {actions && (
                     <td className="text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {onEdit && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); onEdit(row) }}
-                            className="admin-table-action text-primary-600 dark:text-primary-400"
-                            aria-label="Edit row"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </button>
-                        )}
-                        {onDelete && (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); onDelete(row) }}
-                            className="admin-table-action text-red-600 dark:text-red-400"
-                            aria-label="Delete row"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                        {customActions?.(row)}
-                        {!onEdit && !onDelete && !customActions && (
-                          <button type="button" className="admin-table-action text-slate-400" aria-label="More actions">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
+                      {renderRowActions(row)}
                     </td>
                   )}
                 </tr>
@@ -141,8 +189,8 @@ function DataTable({
       </div>
 
       {pagination && totalCount > 0 && (
-        <div className="admin-table-pagination px-4 py-3 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm">
-          <p className="text-slate-500 dark:text-slate-400">
+        <div className="admin-table-pagination px-3 sm:px-4 py-3 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-sm">
+          <p className="text-slate-500 dark:text-slate-400 text-center sm:text-left">
             Showing <span className="font-medium text-slate-700 dark:text-slate-300">{showingFrom}</span>
             {' – '}
             <span className="font-medium text-slate-700 dark:text-slate-300">{showingTo}</span>

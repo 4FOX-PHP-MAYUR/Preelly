@@ -151,6 +151,12 @@ const ROUTES = [
   ['put', '/api/admin/comments/:id/reject', 'Admin', 'Reject comment', true],
   ['get', '/api/admin/reported-comments', 'Admin', 'Reported comments', true],
   ['put', '/api/admin/reported-comments/comment/:commentId/action', 'Admin', 'Resolve reported comment', true],
+  ['get', '/api/admin/user-reports/stats', 'Admin', 'User report stats', true],
+  ['get', '/api/admin/user-reports/most-reported', 'Admin', 'Most reported users', true],
+  ['get', '/api/admin/user-reports/reasons', 'Admin', 'User report reasons', true],
+  ['get', '/api/admin/user-reports', 'Admin', 'User reports (grouped)', true],
+  ['get', '/api/admin/user-reports/:userId', 'Admin', 'User report detail', true],
+  ['put', '/api/admin/user-reports/:userId/action', 'Admin', 'Resolve user report', true],
 
   // Admin — support
   ['get', '/api/admin/support-unread-count', 'Admin', 'Support unread count', true],

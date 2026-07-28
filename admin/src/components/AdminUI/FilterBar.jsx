@@ -20,9 +20,9 @@ function FilterBar({
 
   return (
     <form onSubmit={handleSubmit} className={`admin-filter-bar ${className}`}>
-      <div className="flex flex-col lg:flex-row gap-3 lg:items-end">
+      <div className="flex flex-col gap-3">
         {onSearchChange !== undefined && (
-          <div className="flex-1 min-w-0">
+          <div className="w-full min-w-0">
             <Input
               icon={Search}
               value={searchValue}
@@ -32,27 +32,37 @@ function FilterBar({
             />
           </div>
         )}
-        {filters.map((filter) => (
-          <div key={filter.key || filter.label} className="w-full lg:w-auto lg:min-w-[160px]">
-            {filter.type === 'select' ? (
-              <Select
-                label={filter.label}
-                value={filter.value}
-                onChange={filter.onChange}
-                options={filter.options}
-              />
-            ) : (
-              filter.render?.()
-            )}
+
+        {filters.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
+            {filters.map((filter) => (
+              <div key={filter.key || filter.label} className="w-full min-w-0">
+                {filter.type === 'select' ? (
+                  <Select
+                    label={filter.label}
+                    value={filter.value}
+                    onChange={filter.onChange}
+                    options={filter.options}
+                  />
+                ) : (
+                  filter.render?.()
+                )}
+              </div>
+            ))}
           </div>
-        ))}
-        <div className="flex flex-wrap gap-2 shrink-0">
+        )}
+
+        <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:items-center">
           {onSearchSubmit && (
-            <Button type="submit" icon={Search} size="md">
+            <Button type="submit" icon={Search} size="md" className="w-full sm:w-auto">
               Search
             </Button>
           )}
-          {actions}
+          {actions && (
+            <div className="flex flex-wrap gap-2 w-full sm:w-auto [&_button]:w-full sm:[&_button]:w-auto">
+              {actions}
+            </div>
+          )}
         </div>
       </div>
     </form>

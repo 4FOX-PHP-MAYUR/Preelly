@@ -7,6 +7,7 @@ const authMiddleware = require('../middleware/auth')
 const validateRequest = require('../middleware/validateRequest')
 const { toPaymentTransactionDto } = require('../dto/paymentTransaction.dto')
 const logger = require('../utils/paymentLogger')
+const { resolveOrderPlatform } = require('../utils/paymentLabels')
 
 function baseUrl(req) {
   return process.env.BASE_URL || `${req.protocol}://${req.get('host')}`
@@ -41,6 +42,7 @@ router.post(
         couponCode: req.body.couponCode || null,
         baseUrl: baseUrl(req),
         frontendUrl: frontendUrl(),
+        orderPlatform: resolveOrderPlatform(req),
         context: {
           ipAddress: req.ip,
           userAgent: req.headers['user-agent'] || null,
@@ -97,6 +99,7 @@ router.post(
         preelly: req.body.preelly || null,
         baseUrl: baseUrl(req),
         frontendUrl: frontendUrl(),
+        orderPlatform: resolveOrderPlatform(req),
         context: {
           ipAddress: req.ip,
           userAgent: req.headers['user-agent'] || null,

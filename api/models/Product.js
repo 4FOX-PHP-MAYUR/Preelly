@@ -111,6 +111,13 @@ const productSchema = new mongoose.Schema(
       enum: ['free', 'basic', 'premium'],
       default: 'free',
     },
+    // Client platform where the listing was posted (auto-detected from X-Platform / User-Agent).
+    productAddType: {
+      type: String,
+      enum: ['web', 'ios', 'android'],
+      default: 'web',
+      index: true,
+    },
     // Derived/config snapshot of what the selected ad tier means.
     // This keeps historical pricing/features even if config changes later.
     adConfig: {

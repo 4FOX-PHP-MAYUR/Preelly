@@ -32,6 +32,7 @@ function listItem(product) {
     status: product.status,
     isSold: product.isSold === true || product.status === 'sold',
     adType: product.adType || 'free',
+    productAddType: product.productAddType || 'web',
     createdAt: product.createdAt,
     updatedAt: product.updatedAt,
     views: product.views || 0,

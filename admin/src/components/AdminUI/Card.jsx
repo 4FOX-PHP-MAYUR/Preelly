@@ -13,10 +13,10 @@ function Card({ title, value, icon: Icon, trend, trendLabel, accent = 'default',
 
   return (
     <div className={`admin-stat-card group ${className}`}>
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
-          <p className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mt-1.5 tabular-nums">
+          <p className="text-xs sm:text-sm font-medium text-slate-500 dark:text-slate-400 truncate">{title}</p>
+          <p className="text-xl sm:text-2xl lg:text-3xl font-bold text-slate-900 dark:text-white mt-1 sm:mt-1.5 tabular-nums break-words">
             {value ?? '—'}
           </p>
           {(trend !== undefined || trendLabel) && (
@@ -31,8 +31,8 @@ function Card({ title, value, icon: Icon, trend, trendLabel, accent = 'default',
           )}
         </div>
         {Icon && (
-          <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${accentClasses}`}>
-            <Icon className="h-5 w-5" aria-hidden="true" />
+          <div className={`h-9 w-9 sm:h-11 sm:w-11 rounded-lg sm:rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105 ${accentClasses}`}>
+            <Icon className="h-4 w-4 sm:h-5 sm:w-5" aria-hidden="true" />
           </div>
         )}
       </div>

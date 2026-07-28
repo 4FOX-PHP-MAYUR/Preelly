@@ -19,7 +19,7 @@ import {
   Pause,
   UserPlus,
 } from 'lucide-react'
-import { buildSpecsLine, formatListingPrice, getProductListingPrice } from '@shared/components/categoryBrowseShared'
+import { formatListingPrice, getProductListingPrice } from '@shared/components/categoryBrowseShared'
 import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
 // Use native <video> for precise sizing/control
 import toast from 'react-hot-toast'
@@ -35,6 +35,14 @@ import ReelShareModal from './ReelShareModal'
 import QuickViewModal from './QuickViewModal'
 import ReelStreamPlayer from './ReelStreamPlayer'
 import useProductVideoViewTracking from '@shared/hooks/useProductVideoViewTracking'
+
+/** Keep only the first `count` words of a title (adds an ellipsis if more were dropped). */
+function shortTitle(text, count = 3) {
+  const words = String(text || '').trim().split(/\s+/).filter(Boolean)
+  if (words.length === 0) return ''
+  const clipped = words.slice(0, count).join(' ')
+  return words.length > count ? `${clipped}…` : clipped
+}
 
 function ProductReelCard({ product, isVisible, embedded = false, onOpenComments = null, onOpenShare = null }) {
   const navigate = useNavigate()
@@ -351,7 +359,11 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
 
   const showPlaybackButton = !product.video || !isPlaying
 
-  const embeddedSecondaryLine = buildSpecsLine(product) || [product.location, product.category?.name].filter(Boolean).join(' · ') || 'Live listing'
+  // Home-feed reel: show only year and kilometers under the title.
+  const embeddedSecondaryLine = [
+    product?.year != null ? String(product.year) : '',
+    product?.mileage != null ? `${Number(product.mileage).toLocaleString()} km` : '',
+  ].filter(Boolean).join(' · ')
 
   const listingStatusBadge = (() => {
     const status = product?.status || 'active'
@@ -505,9 +517,11 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
                       }}
                       className="block text-left text-[18px] leading-tight font-semibold text-white hover:underline whitespace-normal"
                     >
-                      {product.title || 'Product'}
+                      {shortTitle(product.title, 3) || 'Product'}
                     </button>
-                    <p className="mt-1 text-xs text-white/85">{embeddedSecondaryLine}</p>
+                    {embeddedSecondaryLine && (
+                      <p className="mt-1 text-xs text-white/85">{embeddedSecondaryLine}</p>
+                    )}
                   </div>
                   <div className="flex shrink-0 flex-col items-end gap-1.5">
                     <span className="rounded-full bg-black/60 px-3 py-1 text-sm font-bold text-white backdrop-blur-sm">

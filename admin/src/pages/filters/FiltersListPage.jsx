@@ -21,7 +21,7 @@ import {
   AlertCircle,
 } from 'lucide-react'
 
-const LIST_PATH = '/admin/filters'
+const LIST_PATH = '/filters'
 const LIMIT = 200
 
 function adminLoadErrorMessage(err, fallback) {

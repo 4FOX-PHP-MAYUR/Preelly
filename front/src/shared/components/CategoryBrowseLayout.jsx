@@ -40,6 +40,7 @@ function CategoryBrowseLayout({
   filterPanel = null,
   filterPanelOpen = false,
   showMobileAppPromo = false,
+  adminMode = false,
 }) {
   const dispatch = useDispatch()
   const navigate = useNavigate()
@@ -110,6 +111,18 @@ function CategoryBrowseLayout({
     activeCategory: isListingVariant ? 'bg-brand-50 text-brand' : 'bg-primary-50 text-primary-800',
     badge: isListingVariant ? 'bg-brand' : 'bg-primary-600',
     border: isListingVariant ? 'border-[#E8EBF2]' : 'border-slate-200',
+  }
+
+  // Admin review view: drop the customer browse chrome (category sidebar, featured
+  // listings, trending/messages, marketplace top bar) and render just the content
+  // full-width in the same page shell. Keeps the flex column so children using
+  // `flex-1` still fill the height.
+  if (adminMode) {
+    return (
+      <div className={`${useFullViewport ? 'h-[100dvh]' : 'viewport-below-header'} flex flex-col overflow-hidden ${accent.pageBg}`}>
+        {children}
+      </div>
+    )
   }
 
   return (

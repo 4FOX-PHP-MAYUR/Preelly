@@ -7,7 +7,7 @@ import Select from '../../components/AdminUI/Select'
 import FormSection from '../../components/AdminUI/FormSection'
 import toast from 'react-hot-toast'
 
-const LIST_PATH = '/admin/field-types'
+const LIST_PATH = '/field-types'
 
 const emptyForm = {
   fieldValue: '',

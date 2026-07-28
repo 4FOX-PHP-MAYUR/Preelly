@@ -498,6 +498,10 @@ export const chatService = {
   },
   markAsRead: (chatId) => api.put(`/chats/${chatId}/read`),
   deleteChat: (chatId) => api.delete(`/chats/${chatId}`),
+  // Toggle notification mute for this chat (server returns the new muted state).
+  toggleMute: (chatId) => api.put(`/chats/${chatId}/mute`),
+  // Report the other party in a chat (stored for admin review).
+  reportUser: (chatId, payload) => api.post(`/chats/${chatId}/report`, payload),
   deleteMessage: (chatId, messageId) => api.delete(`/chats/${chatId}/messages/${messageId}`),
   saveCallEvent: (chatId, data) => api.post(`/chats/${chatId}/call-event`, data),
 }

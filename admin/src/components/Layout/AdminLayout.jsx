@@ -14,11 +14,11 @@ function AdminLayout({ children }) {
   const user = useSelector(selectUser)
   const [mobileAdminOpen, setMobileAdminOpen] = useState(false)
 
-  const isLoginRoute = location.pathname === '/admin/login'
+  const isLoginRoute = location.pathname === '/login'
 
   const handleLogout = () => {
     dispatch(logout('user-click'))
-    navigate('/admin/login')
+    navigate('/login')
   }
 
   if (isLoginRoute) {

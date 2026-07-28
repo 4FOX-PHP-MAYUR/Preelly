@@ -12,7 +12,7 @@ import toast from 'react-hot-toast'
 import { getMediaUrl } from '@shared/utils/helpers'
 
 const LIMIT = 20
-const LIST_PATH = '/admin/dealers'
+const LIST_PATH = '/dealers'
 
 function DealersListPage() {
   const navigate = useNavigate()

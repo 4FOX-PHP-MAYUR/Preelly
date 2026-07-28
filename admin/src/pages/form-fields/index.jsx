@@ -8,7 +8,7 @@ export default function AdminFormFieldsRoutes() {
       <Route index element={<FormFieldsListPage />} />
       <Route path="new" element={<FormFieldFormPage />} />
       <Route path=":id/edit" element={<FormFieldFormPage />} />
-      <Route path="*" element={<Navigate to="/admin/form-fields" replace />} />
+      <Route path="*" element={<Navigate to="/form-fields" replace />} />
     </Routes>
   )
 }

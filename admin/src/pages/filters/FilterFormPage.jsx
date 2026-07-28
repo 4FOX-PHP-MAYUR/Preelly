@@ -9,7 +9,7 @@ import toast from 'react-hot-toast'
 import { getMediaUrl } from '@shared/utils/helpers'
 import { ChevronRight, ChevronDown, Layers, X } from 'lucide-react'
 
-const LIST_PATH = '/admin/filters'
+const LIST_PATH = '/filters'
 
 const emptyForm = {
   name: '',

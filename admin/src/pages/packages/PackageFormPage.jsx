@@ -10,7 +10,7 @@ import Button from '../../components/AdminUI/Button'
 import { Plus, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-const LIST_PATH = '/admin/packages'
+const LIST_PATH = '/packages'
 
 const PACKAGE_NAME_MIN = 3
 const PACKAGE_NAME_MAX = 100

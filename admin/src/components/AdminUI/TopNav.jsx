@@ -18,7 +18,7 @@ function TopNav({ onMenuClick }) {
 
   const pageMeta = useMemo(() => {
     const pathname = location.pathname
-    if (pathname === '/admin') {
+    if (pathname === '/') {
       const tab = searchParams.get('tab') || 'dashboard'
       return ADMIN_TAB_META[tab] || ADMIN_TAB_META.dashboard
     }
@@ -27,7 +27,7 @@ function TopNav({ onMenuClick }) {
 
   const handleLogout = () => {
     dispatch(logout('user-click'))
-    navigate('/')
+    navigate('/login')
   }
 
   const avatarSrc = user?.avatar ? getMediaUrl(user.avatar) || user.avatar : null

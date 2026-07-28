@@ -10,7 +10,7 @@ export default function AdminCouponsRoutes() {
       <Route path="new" element={<CouponFormPage />} />
       <Route path=":id/edit" element={<CouponFormPage />} />
       <Route path=":id" element={<CouponViewPage />} />
-      <Route path="*" element={<Navigate to="/admin/coupons" replace />} />
+      <Route path="*" element={<Navigate to="/coupons" replace />} />
     </Routes>
   )
 }

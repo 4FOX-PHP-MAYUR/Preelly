@@ -9,7 +9,7 @@ import FormSection from '../../components/AdminUI/FormSection'
 import toast from 'react-hot-toast'
 import { getMediaUrl } from '@shared/utils/helpers'
 
-const LIST_PATH = '/admin/dealers'
+const LIST_PATH = '/dealers'
 
 const emptyForm = {
   dealer_name: '',

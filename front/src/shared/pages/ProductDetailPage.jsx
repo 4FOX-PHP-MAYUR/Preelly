@@ -29,7 +29,7 @@ async function loadSimilarProducts(product) {
   }
 }
 
-function ProductDetailPage() {
+function ProductDetailPage({ adminMode = false }) {
   const { id } = useParams()
   const dispatch = useDispatch()
   const { currentProduct, loading } = useSelector((state) => state.products)
@@ -62,11 +62,13 @@ function ProductDetailPage() {
   }, [currentProduct])
 
   useEffect(() => {
+    // Admin review view hides the featured-listings rail, so skip fetching it.
+    if (adminMode) return
     productService
       .getProducts({ limit: 6, sortBy: 'newest' })
       .then((res) => setFeaturedProducts(res.data?.products || []))
       .catch(() => {})
-  }, [])
+  }, [adminMode])
 
   if (loading && !currentProduct) {
     return <ProductDetailSkeleton />
@@ -74,7 +76,7 @@ function ProductDetailPage() {
 
   if (!currentProduct) {
     return (
-      <CategoryBrowseLayout variant="listing" layoutPreset="detail" showMobileAppPromo showTrending={false} showMessages={false}>
+      <CategoryBrowseLayout variant="listing" layoutPreset="detail" adminMode={adminMode} showMobileAppPromo showTrending={false} showMessages={false}>
         <div className="flex flex-1 items-center justify-center px-4 py-16 text-center">
           <div>
             <h2 className="mb-3 text-2xl font-bold text-slate-900">Product not found</h2>
@@ -89,6 +91,7 @@ function ProductDetailPage() {
     <CategoryBrowseLayout
       variant="listing"
       layoutPreset="detail"
+      adminMode={adminMode}
       activeCategoryId={currentProduct.category?._id}
       featuredProducts={featuredProducts}
       showMobileAppPromo

@@ -13,7 +13,7 @@ import { Plus, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const LIMIT = 20
-const LIST_PATH = '/admin/packages'
+const LIST_PATH = '/packages'
 
 function formatAmount(value) {
   const num = Number(value ?? 0)

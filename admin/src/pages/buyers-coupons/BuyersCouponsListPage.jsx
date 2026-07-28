@@ -13,7 +13,7 @@ import { Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const LIMIT = 20
-const LIST_PATH = '/admin/buyers-coupons'
+const LIST_PATH = '/buyers-coupons'
 
 function formatDiscount(row) {
   if (row.discountType === 'percentage') {

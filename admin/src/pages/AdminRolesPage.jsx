@@ -179,7 +179,7 @@ function AdminRolesPage() {
             icon={Settings}
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/admin/roles/${role._id}/permissions`)
+              navigate(`/roles/${role._id}/permissions`)
             }}
           >
             Permissions

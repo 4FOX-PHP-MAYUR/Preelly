@@ -11,7 +11,7 @@ import { Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const LIMIT = 100
-const LIST_PATH = '/admin/categories'
+const LIST_PATH = '/categories'
 
 function CategoriesListPage() {
   const navigate = useNavigate()

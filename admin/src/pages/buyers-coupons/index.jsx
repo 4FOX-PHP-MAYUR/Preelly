@@ -8,7 +8,7 @@ export default function AdminBuyersCouponsRoutes() {
       <Route index element={<BuyersCouponsListPage />} />
       <Route path="new" element={<BuyerCouponFormPage />} />
       <Route path=":id/edit" element={<BuyerCouponFormPage />} />
-      <Route path="*" element={<Navigate to="/admin/buyers-coupons" replace />} />
+      <Route path="*" element={<Navigate to="/buyers-coupons" replace />} />
     </Routes>
   )
 }

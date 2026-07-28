@@ -9,7 +9,7 @@ import Select from '../../components/AdminUI/Select'
 import Checkbox from '../../components/AdminUI/Checkbox'
 import toast from 'react-hot-toast'
 
-const LIST_PATH = '/admin/storage-facilities'
+const LIST_PATH = '/storage-facilities'
 
 const FACILITY_WEEK_MIN = 3
 const FACILITY_WEEK_MAX = 100

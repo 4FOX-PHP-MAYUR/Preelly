@@ -69,6 +69,13 @@ const chatSchema = new mongoose.Schema(
     unreadForSeller: { type: Number, default: 0 },
     unreadForUser: { type: Number, default: 0 },
     unreadForAdmin: { type: Number, default: 0 },
+    // Users who muted this chat: they still receive messages but no notifications.
+    mutedBy: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+      },
+    ],
   },
   {
     timestamps: true,

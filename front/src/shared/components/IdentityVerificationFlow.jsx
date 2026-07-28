@@ -3,7 +3,7 @@ import { Upload, Loader2, CheckCircle2, Clock, AlertCircle, CreditCard } from 'l
 import { useDispatch, useSelector } from 'react-redux'
 import { selectUser, refreshUser } from '../store/slices/authSlice'
 import { userService } from '../services/api'
-import { getMediaUrl } from '../utils/helpers'
+import { getMediaUrl, compressImageFile } from '../utils/helpers'
 import toast from 'react-hot-toast'
 import {
   VerificationModalShell,
@@ -56,15 +56,24 @@ function UploadStep({ onSubmit, submitting }) {
   const [backFile, setBackFile] = useState(null)
   const [frontPreview, setFrontPreview] = useState(null)
   const [backPreview, setBackPreview] = useState(null)
+  const [processing, setProcessing] = useState(false)
 
-  const handleFile = (side, file) => {
-    const preview = URL.createObjectURL(file)
-    if (side === 'front') {
-      setFrontFile(file)
-      setFrontPreview(preview)
-    } else {
-      setBackFile(file)
-      setBackPreview(preview)
+  const handleFile = async (side, file) => {
+    setProcessing(true)
+    try {
+      // Downscale/compress in the browser so large phone photos don't exceed the
+      // server's per-file upload limit (which surfaces as "File too large").
+      const compressed = await compressImageFile(file)
+      const preview = URL.createObjectURL(compressed)
+      if (side === 'front') {
+        setFrontFile(compressed)
+        setFrontPreview(preview)
+      } else {
+        setBackFile(compressed)
+        setBackPreview(preview)
+      }
+    } finally {
+      setProcessing(false)
     }
   }
 
@@ -99,10 +108,14 @@ function UploadStep({ onSubmit, submitting }) {
       <IdUploadZone label="Emirates ID (Front)" preview={frontPreview} onFileSelect={(f) => handleFile('front', f)} />
       <IdUploadZone label="Emirates ID (Back)" preview={backPreview} onFileSelect={(f) => handleFile('back', f)} />
 
-      <VerificationPrimaryButton onClick={handleSubmit} disabled={submitting}>
+      <VerificationPrimaryButton onClick={handleSubmit} disabled={submitting || processing}>
         {submitting ? (
           <span className="flex items-center justify-center gap-2">
             <Loader2 className="h-4 w-4 animate-spin" /> Submitting…
+          </span>
+        ) : processing ? (
+          <span className="flex items-center justify-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" /> Processing photo…
           </span>
         ) : (
           'Submit for Review'

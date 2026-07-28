@@ -23,7 +23,7 @@ import {
   toDateTimeLocal,
 } from './couponConstants'
 
-const LIST_PATH = '/admin/coupons'
+const LIST_PATH = '/coupons'
 
 const EMPTY_FORM = {
   couponName: '',

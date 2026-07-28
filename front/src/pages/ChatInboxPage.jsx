@@ -2,8 +2,8 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import {
-  ArrowLeft, Bookmark, Briefcase, Building2, Car, Check, CheckCheck,
-  FileText, Image as ImageIcon, LayoutGrid, MessageCircle, Mic, Paperclip, Phone, Play, Plus,
+  ArrowLeft, Ban, Bell, BellOff, Bookmark, Briefcase, Building2, Car, Check, CheckCheck,
+  FileText, Flag, Image as ImageIcon, LayoutGrid, MessageCircle, Mic, MoreVertical, Paperclip, Phone, Play, Plus,
   Search, Send, Settings, Shirt, Smartphone, Sofa, Square, Video, X,
 } from 'lucide-react'
 import { selectUser, selectIsAuthenticated } from '@shared/store/slices/authSlice'
@@ -13,7 +13,7 @@ import MarketplaceTopBar from '../components/Layout/MarketplaceTopBar'
 import MarketplaceLogoBlock from '../components/Layout/MarketplaceLogoBlock'
 import { MARKETPLACE_LOGO_CELL } from '../components/Layout/marketplaceLayoutStyles'
 import SidebarCategoryList from '../components/Layout/SidebarCategoryList'
-import { cartService, productService, checkoutServicePublicService } from '@shared/services/api'
+import { cartService, productService, checkoutServicePublicService, chatService, userService } from '@shared/services/api'
 import { PreellyPayModal, derivePreellyConditions, PREELLY_PAY_CHARGE } from '@shared/components/PreellyPayModal'
 import { useChat } from '@shared/components/Chat/ChatContext'
 import { useCall } from '@shared/components/Call/CallContext'
@@ -628,6 +628,8 @@ export default function ChatInboxPage() {
   const [recordingTime, setRecordingTime] = useState(0)
 
   const bottomRef        = useRef(null)
+  const messagesContainerRef = useRef(null)
+  const scrolledThreadRef = useRef(null)
   const inputRef         = useRef(null)
   const fileRef          = useRef(null)
   const mediaRecorderRef = useRef(null)
@@ -761,10 +763,30 @@ export default function ChatInboxPage() {
     }
   }, [activeThread, threads, loadingThread]) // eslint-disable-line
 
-  // auto scroll
+  // Auto scroll — move only the messages container, never the window.
+  // scrollIntoView bubbles to every scrollable ancestor (including the page),
+  // which is what made the whole page jump on send.
+  // On first open of a thread, jump instantly to the last message; for new
+  // messages that arrive while the thread is open, glide smoothly.
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [activeThread?.messages?.length])
+    const el = messagesContainerRef.current
+    // Skip while the thread is still loading — the container shows a skeleton then,
+    // so scrolling now would target the skeleton, not the real messages. Re-runs
+    // once loadingThread flips to false and the messages are actually rendered.
+    if (!el || !activeThread?.id || loadingThread) return
+    const isNewThread = scrolledThreadRef.current !== activeThread.id
+    // A thread opened from the left list arrives before its messages load — wait
+    // until real messages are present so the first jump lands on the last message.
+    if (isNewThread && realCount(activeThread.messages) === 0) return
+    if (isNewThread) scrolledThreadRef.current = activeThread.id
+    // Two frames so the freshly rendered message list (and its media) is laid out
+    // and scrollHeight is final before we jump.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        el.scrollTo({ top: el.scrollHeight, behavior: isNewThread ? 'auto' : 'smooth' })
+      })
+    })
+  }, [activeThread?.id, activeThread?.messages?.length, loadingThread])
 
   const openThread = useCallback(id => {
     setActiveId(id); setMobileTh(true)
@@ -787,7 +809,7 @@ export default function ChatInboxPage() {
       setText(msg)
       if (files.length > 0) setAttachFiles(files)
       toast.error(err?.response?.data?.message || 'Failed to send message')
-    } finally { setSending(false); inputRef.current?.focus() }
+    } finally { setSending(false); inputRef.current?.focus({ preventScroll: true }) }
   }
 
   const handleKey = e => { if (e.key === 'Enter' && !e.shiftKey && !attachFiles.length) { e.preventDefault(); doSend() } }
@@ -864,6 +886,84 @@ export default function ChatInboxPage() {
     if (!activeThread || !currentUser || activeThread.type === 'support') return false
     return activeThread.buyer?.id && String(activeThread.buyer.id) === String(currentUser._id)
   }, [activeThread, currentUser])
+
+  // ── Thread actions: block / report / mute ──────────────────────────────────
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [muting, setMuting] = useState(false)
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportReason, setReportReason] = useState('')
+  const [reportDetails, setReportDetails] = useState('')
+  const [reportSubmitting, setReportSubmitting] = useState(false)
+  const menuRef = useRef(null)
+
+  // Block/report target only exists for 1:1 product chats (not support/groups).
+  const is1to1 = Boolean(activeThread && !activeThread.isGroup && activeThread.type !== 'support')
+  const otherPartyId = is1to1 ? (otherParty?.id || null) : null
+  const isMuted = Boolean(activeThread?.muted)
+
+  // Close the kebab menu on outside click / Escape.
+  useEffect(() => {
+    if (!menuOpen) return undefined
+    const onDown = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false) }
+    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
+  }, [menuOpen])
+
+  const handleToggleMute = async () => {
+    if (!activeId || muting) return
+    setMenuOpen(false)
+    setMuting(true)
+    try {
+      const res = await chatService.toggleMute(activeId)
+      const muted = Boolean(res?.data?.muted)
+      setActiveThread((prev) => (prev && prev.id === activeId ? { ...prev, muted } : prev))
+      toast.success(muted ? 'Notifications muted' : 'Notifications unmuted')
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to update notifications')
+    } finally {
+      setMuting(false)
+    }
+  }
+
+  const handleBlock = async () => {
+    setMenuOpen(false)
+    if (!otherPartyId) return
+    if (!window.confirm(`Block ${otherParty?.name || 'this user'}? They will no longer be able to follow you.`)) return
+    try {
+      const res = await userService.blockUser(otherPartyId)
+      toast.success(res?.data?.message || 'User blocked')
+      navigate('/chat', { replace: true })
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to block user')
+    }
+  }
+
+  const openReport = () => {
+    setMenuOpen(false)
+    setReportReason('')
+    setReportDetails('')
+    setReportOpen(true)
+  }
+
+  const submitReport = async () => {
+    if (!activeId || !reportReason || reportSubmitting) return
+    setReportSubmitting(true)
+    try {
+      await chatService.reportUser(activeId, {
+        reason: reportReason,
+        details: reportDetails,
+        reportedUserId: otherPartyId || undefined,
+      })
+      toast.success('Report submitted. Our team will review it.')
+      setReportOpen(false)
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to submit report')
+    } finally {
+      setReportSubmitting(false)
+    }
+  }
 
   // Count this thread's product in the buyer's active cart.
   const refreshCartCount = useCallback(async () => {
@@ -1182,11 +1282,64 @@ export default function ChatInboxPage() {
                       )}
                     </button>
                   )}
+
+                  <div className="relative" ref={menuRef}>
+                    <button
+                      type="button"
+                      onClick={() => setMenuOpen((v) => !v)}
+                      aria-haspopup="menu"
+                      aria-expanded={menuOpen}
+                      aria-label="Chat options"
+                      className={`h-9 w-9 rounded-full flex items-center justify-center transition-colors ${menuOpen ? 'bg-purple-50 text-purple-600' : 'text-gray-500 hover:bg-gray-100'}`}
+                    >
+                      <MoreVertical className="h-5 w-5" />
+                    </button>
+
+                    {menuOpen && (
+                      <div
+                        role="menu"
+                        className="absolute right-0 top-11 z-50 w-56 overflow-hidden rounded-2xl border border-gray-100 bg-white py-1.5 shadow-xl"
+                      >
+                        {is1to1 && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={handleBlock}
+                            className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                          >
+                            <Ban className="h-5 w-5 text-purple-600" />
+                            Block
+                          </button>
+                        )}
+                        {is1to1 && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            onClick={openReport}
+                            className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
+                          >
+                            <Flag className="h-5 w-5 text-purple-600" />
+                            Report
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          onClick={handleToggleMute}
+                          disabled={muting}
+                          className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-60"
+                        >
+                          {isMuted ? <Bell className="h-5 w-5 text-purple-600" /> : <BellOff className="h-5 w-5 text-purple-600" />}
+                          {isMuted ? 'Unmute Notifications' : 'Mute Notifications'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
               {/* messages */}
-              <div className="flex-1 overflow-y-auto px-6 py-4 bg-gray-50/60">
+              <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-6 py-4 bg-gray-50/60">
                 {loadingThread ? (
                   <div className="space-y-4 pt-2">
                     {[38, 55, 42, 60, 35].map((w, i) => (
@@ -1276,8 +1429,12 @@ export default function ChatInboxPage() {
                                     <div className={`rounded-2xl px-4 py-2.5 border shadow-sm ${isPreellyApprove(m.text) ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'} ${isSelf ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
                                       <p className={`text-sm font-medium whitespace-pre-wrap break-words ${isPreellyApprove(m.text) ? 'text-green-700' : 'text-red-600'}`}>{m.text}</p>
                                     </div>
-                                  ) : (m.attachments?.length > 0 || m.attachment) ? (() => {
-                                    const atts = m.attachments?.length > 0 ? m.attachments : (m.attachment ? [m.attachment] : [])
+                                  ) : (() => {
+                                    // Only real attachments (with a url) — a text message can carry an empty {} subdoc.
+                                    const atts = (m.attachments?.length > 0 ? m.attachments : (m.attachment ? [m.attachment] : [])).filter((a) => a && a.url)
+                                    return atts.length > 0
+                                  })() ? (() => {
+                                    const atts = (m.attachments?.length > 0 ? m.attachments : (m.attachment ? [m.attachment] : [])).filter((a) => a && a.url)
                                     return (
                                       <div className={`rounded-2xl overflow-hidden border border-gray-200 shadow-sm ${isSelf ? 'rounded-br-sm' : 'rounded-bl-sm'}`}>
                                         <ChatAttachments attachments={atts} isTemp={isTemp} />
@@ -1406,6 +1563,74 @@ export default function ChatInboxPage() {
                     >
                       Okay
                     </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Report user modal */}
+              {reportOpen && (
+                <div
+                  className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 p-4"
+                  onClick={() => !reportSubmitting && setReportOpen(false)}
+                >
+                  <div
+                    className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50">
+                        <Flag className="h-5 w-5 text-red-500" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-bold text-gray-900">Report {otherParty?.name || 'user'}</h2>
+                        <p className="text-xs text-gray-500">Your report is confidential and reviewed by our team.</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 space-y-2">
+                      {['Spam or scam', 'Harassment or abuse', 'Inappropriate content', 'Fraudulent listing', 'Other'].map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => setReportReason(r)}
+                          className={`flex w-full items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm font-medium transition ${
+                            reportReason === r
+                              ? 'border-purple-500 bg-purple-50 text-purple-700'
+                              : 'border-gray-200 text-gray-700 hover:bg-gray-50'
+                          }`}
+                        >
+                          <span className={`h-4 w-4 rounded-full border-2 ${reportReason === r ? 'border-purple-500 bg-purple-500' : 'border-gray-300'}`} />
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+
+                    <textarea
+                      value={reportDetails}
+                      onChange={(e) => setReportDetails(e.target.value)}
+                      placeholder="Add more details (optional)"
+                      rows={3}
+                      className="mt-4 w-full resize-none rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-200 focus:outline-none"
+                    />
+
+                    <div className="mt-5 flex gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setReportOpen(false)}
+                        disabled={reportSubmitting}
+                        className="flex-1 rounded-full border border-gray-200 px-6 py-3 text-sm font-semibold text-gray-700 transition hover:bg-gray-50 disabled:opacity-60"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        onClick={submitReport}
+                        disabled={!reportReason || reportSubmitting}
+                        className="flex-1 rounded-full bg-red-600 px-6 py-3 text-sm font-semibold text-white transition hover:bg-red-700 disabled:opacity-50"
+                      >
+                        {reportSubmitting ? 'Submitting…' : 'Submit report'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )}

@@ -13,7 +13,7 @@ import { Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const LIMIT = 20
-const LIST_PATH = '/admin/emirates'
+const LIST_PATH = '/emirates'
 
 function EmiratesListPage() {
   const navigate = useNavigate()

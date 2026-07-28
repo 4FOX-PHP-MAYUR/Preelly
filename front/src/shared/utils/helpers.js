@@ -85,6 +85,55 @@ export const isIdentityVerified = (user) => {
   return user.identityVerificationStatus === 'approved'
 }
 
+/**
+ * Downscale + re-encode an image File in the browser so uploads stay well under the
+ * server's per-file limit (documents like an Emirates ID don't need full-res photos).
+ * Draws onto a canvas capped at `maxDimension`, then reduces JPEG quality until the
+ * result fits `maxBytes`. Non-image inputs and any failure fall back to the original
+ * File, so callers can always upload something.
+ *
+ * @param {File} file
+ * @param {{ maxDimension?: number, maxBytes?: number, quality?: number }} [opts]
+ * @returns {Promise<File>}
+ */
+export async function compressImageFile(file, opts = {}) {
+  const { maxDimension = 1600, maxBytes = 2 * 1024 * 1024, quality = 0.85 } = opts
+  if (!file || !file.type?.startsWith('image/') || file.type === 'image/gif') return file
+  // Already small enough — skip the re-encode entirely.
+  if (file.size <= maxBytes) return file
+
+  try {
+    const bitmap = await createImageBitmap(file)
+    const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height))
+    const width = Math.round(bitmap.width * scale)
+    const height = Math.round(bitmap.height * scale)
+
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(bitmap, 0, 0, width, height)
+    bitmap.close?.()
+
+    const toBlob = (q) =>
+      new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', q))
+
+    let q = quality
+    let blob = await toBlob(q)
+    // Step quality down (never below 0.5) if the encode is still over the limit.
+    while (blob && blob.size > maxBytes && q > 0.5) {
+      q -= 0.1
+      blob = await toBlob(q)
+    }
+    if (!blob) return file
+
+    const baseName = (file.name || 'upload').replace(/\.[^.]+$/, '')
+    return new File([blob], `${baseName}.jpg`, { type: 'image/jpeg', lastModified: Date.now() })
+  } catch {
+    return file
+  }
+}
+
 // Fisher–Yates shuffle (random order, in place then return copy for immutability)
 export function shuffleArray(arr) {
   if (!Array.isArray(arr) || arr.length <= 1) return [...arr]

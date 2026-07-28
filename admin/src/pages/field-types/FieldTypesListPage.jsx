@@ -11,7 +11,7 @@ import { Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const LIMIT = 20
-const LIST_PATH = '/admin/field-types'
+const LIST_PATH = '/field-types'
 
 function FieldTypesListPage() {
   const navigate = useNavigate()

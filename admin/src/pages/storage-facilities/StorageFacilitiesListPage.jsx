@@ -14,7 +14,7 @@ import { Plus, ImageOff } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const LIMIT = 20
-const LIST_PATH = '/admin/storage-facilities'
+const LIST_PATH = '/storage-facilities'
 
 function formatAmount(value) {
   return Number(value ?? 0).toLocaleString(undefined, {

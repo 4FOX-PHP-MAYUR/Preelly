@@ -8,7 +8,7 @@ export default function AdminEmiratesRoutes() {
       <Route index element={<EmiratesListPage />} />
       <Route path="new" element={<EmirateFormPage />} />
       <Route path=":id/edit" element={<EmirateFormPage />} />
-      <Route path="*" element={<Navigate to="/admin/emirates" replace />} />
+      <Route path="*" element={<Navigate to="/emirates" replace />} />
     </Routes>
   )
 }

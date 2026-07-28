@@ -5,6 +5,7 @@ const Message = require('../models/Message')
 const Product = require('../models/Product')
 const User = require('../models/User')
 const Notification = require('../models/Notification')
+const Report = require('../models/Report')
 const authMiddleware = require('../middleware/auth')
 const { chatUpload } = require('../middleware/upload')
 const path = require('path')
@@ -125,8 +126,10 @@ router.get('/:id', authMiddleware, async (req, res) => {
       .populate('sender', 'name username avatar')
       .sort({ createdAt: 1 })
 
+    const muted = (chat.mutedBy || []).some((id) => id.toString() === userId.toString())
+
     res.json({
-      chat,
+      chat: { ...chat.toObject(), muted },
       messages,
     })
   } catch (error) {
@@ -537,7 +540,10 @@ router.post('/:id/messages', authMiddleware, (req, res, next) => {
     }
 
     // Create an in-app notification for the receiver(s) so it appears in Notifications page too.
-    const notifyRecipients = chat.type === 'group' ? groupRecipients : (otherPartyId ? [otherPartyId] : [])
+    // Recipients who muted this chat still get the message in real time but no notification.
+    const mutedIds = new Set((chat.mutedBy || []).map((id) => id.toString()))
+    const notifyRecipients = (chat.type === 'group' ? groupRecipients : (otherPartyId ? [otherPartyId] : []))
+      .filter((rid) => !mutedIds.has(String(rid)))
     if (notifyRecipients.length > 0) {
       const preview = String(message.text || '').slice(0, 160)
       const title = chat.type === 'group' ? `New message in ${chat.name || 'group'}` : 'New message'
@@ -805,6 +811,98 @@ router.put('/:id/read', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Invalid chat ID' })
     }
     res.status(500).json({ message: 'Error marking messages as read' })
+  }
+})
+
+// Membership check: is `userId` a party to this chat (buyer/seller/support user/group member)?
+function isChatParticipant(chat, userId) {
+  const uid = String(userId)
+  const ids = [chat.buyer, chat.seller, chat.user, ...(chat.participants || [])]
+    .filter(Boolean)
+    .map((x) => (x && x._id ? String(x._id) : String(x)))
+  return ids.includes(uid)
+}
+
+// Resolve the "other party" in a 1:1 (product) chat relative to `userId`.
+function otherPartyOf(chat, userId) {
+  const uid = String(userId)
+  const buyerId = chat.buyer ? String(chat.buyer._id || chat.buyer) : null
+  const sellerId = chat.seller ? String(chat.seller._id || chat.seller) : null
+  if (buyerId && buyerId === uid) return sellerId
+  if (sellerId && sellerId === uid) return buyerId
+  return null
+}
+
+// @route   PUT /api/chats/:id/mute
+// @desc    Toggle notification mute for the current user on this chat
+// @access  Private
+router.put('/:id/mute', authMiddleware, async (req, res) => {
+  try {
+    const chatId = req.params.id
+    const userId = req.user._id
+    const chat = await Chat.findById(chatId)
+    if (!chat) return res.status(404).json({ message: 'Chat not found' })
+    if (!isChatParticipant(chat, userId) && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized' })
+    }
+
+    const uid = String(userId)
+    const already = (chat.mutedBy || []).some((id) => id.toString() === uid)
+    if (already) {
+      chat.mutedBy = chat.mutedBy.filter((id) => id.toString() !== uid)
+    } else {
+      chat.mutedBy = [...(chat.mutedBy || []), userId]
+    }
+    await chat.save()
+
+    res.json({ muted: !already, message: already ? 'Notifications unmuted' : 'Notifications muted' })
+  } catch (error) {
+    console.error('Error toggling chat mute:', error)
+    if (error.name === 'CastError') return res.status(400).json({ message: 'Invalid chat ID' })
+    res.status(500).json({ message: 'Error updating mute setting' })
+  }
+})
+
+// @route   POST /api/chats/:id/report
+// @desc    Report the other party in a chat (stored for admin review)
+// @access  Private
+router.post('/:id/report', authMiddleware, async (req, res) => {
+  try {
+    const chatId = req.params.id
+    const userId = req.user._id
+    const { reason, details, reportedUserId } = req.body || {}
+
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ message: 'A reason is required' })
+    }
+
+    const chat = await Chat.findById(chatId)
+    if (!chat) return res.status(404).json({ message: 'Chat not found' })
+    if (!isChatParticipant(chat, userId)) {
+      return res.status(403).json({ message: 'Not authorized' })
+    }
+
+    const targetId = reportedUserId || otherPartyOf(chat, userId)
+    if (!targetId) {
+      return res.status(400).json({ message: 'Could not determine who to report' })
+    }
+    if (String(targetId) === String(userId)) {
+      return res.status(400).json({ message: 'You cannot report yourself' })
+    }
+
+    const report = await Report.create({
+      reporter: userId,
+      reportedUser: targetId,
+      chat: chatId,
+      reason: String(reason).trim(),
+      details: String(details || '').trim(),
+    })
+
+    res.status(201).json({ message: 'Report submitted', reportId: report._id })
+  } catch (error) {
+    console.error('Error submitting report:', error)
+    if (error.name === 'CastError') return res.status(400).json({ message: 'Invalid chat ID' })
+    res.status(500).json({ message: 'Error submitting report' })
   }
 })
 

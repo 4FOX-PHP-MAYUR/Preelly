@@ -8,7 +8,7 @@ export default function AdminPackagesRoutes() {
       <Route index element={<PackagesListPage />} />
       <Route path="new" element={<PackageFormPage />} />
       <Route path=":id/edit" element={<PackageFormPage />} />
-      <Route path="*" element={<Navigate to="/admin/packages" replace />} />
+      <Route path="*" element={<Navigate to="/packages" replace />} />
     </Routes>
   )
 }

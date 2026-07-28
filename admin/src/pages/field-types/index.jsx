@@ -8,7 +8,7 @@ export default function AdminFieldTypesRoutes() {
       <Route index element={<FieldTypesListPage />} />
       <Route path="new" element={<FieldTypeFormPage />} />
       <Route path=":id/edit" element={<FieldTypeFormPage />} />
-      <Route path="*" element={<Navigate to="/admin/field-types" replace />} />
+      <Route path="*" element={<Navigate to="/field-types" replace />} />
     </Routes>
   )
 }

@@ -8,7 +8,7 @@ export default function AdminDealersRoutes() {
       <Route index element={<DealersListPage />} />
       <Route path="new" element={<DealerFormPage />} />
       <Route path=":id/edit" element={<DealerFormPage />} />
-      <Route path="*" element={<Navigate to="/admin/dealers" replace />} />
+      <Route path="*" element={<Navigate to="/dealers" replace />} />
     </Routes>
   )
 }

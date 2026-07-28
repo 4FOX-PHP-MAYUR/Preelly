@@ -37,14 +37,14 @@ function AdminLoginPage() {
       toast.error('Your session is no longer valid. Please sign in again.', {
         id: 'admin-session-expired',
       })
-      navigate('/admin/login', { replace: true })
+      navigate('/login', { replace: true })
     }
   }, [navigate])
 
   useEffect(() => {
     if (!checkedInitially) {
       if (isAuthenticated && user?.role === 'admin') {
-        navigate('/admin')
+        navigate('/')
       }
       setCheckedInitially(true)
     }
@@ -89,7 +89,7 @@ function AdminLoginPage() {
       }
 
       toast.success('Admin login successful!')
-      navigate('/admin')
+      navigate('/')
     } catch {
       // Error handled by useEffect
     }

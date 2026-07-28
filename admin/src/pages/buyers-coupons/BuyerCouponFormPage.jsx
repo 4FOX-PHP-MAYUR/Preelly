@@ -8,7 +8,7 @@ import Select from '../../components/AdminUI/Select'
 import Textarea from '../../components/AdminUI/Textarea'
 import toast from 'react-hot-toast'
 
-const LIST_PATH = '/admin/buyers-coupons'
+const LIST_PATH = '/buyers-coupons'
 
 const DISCOUNT_TYPE_OPTIONS = [
   { value: 'percentage', label: 'Percentage' },

@@ -42,7 +42,8 @@ function Sidebar({ mobileOpen = false, onMobileClose }) {
         return pathname === '/' && (!currentTab || currentTab === 'dashboard')
       }
       if (item.to) {
-        return pathname === item.to || (item.to !== '/' && pathname.startsWith(item.to))
+        const pathOnly = item.to.split('?')[0]
+        return pathname === pathOnly || (pathOnly !== '/' && pathname.startsWith(pathOnly))
       }
     } catch {
       return location.pathname === item.to

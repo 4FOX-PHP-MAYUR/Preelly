@@ -39,6 +39,7 @@ function ChatThreadPage() {
   const [sending, setSending] = useState(false)
   const fileInputRef = useRef(null)
   const bottomRef = useRef(null)
+  const messagesContainerRef = useRef(null)
 
   const [thread, setThread] = useState(null)
   const [loadingThread, setLoadingThread] = useState(true)
@@ -206,7 +207,11 @@ function ChatThreadPage() {
 
   useEffect(() => {
     if (thread?.messages && thread.messages.length > 0) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      // Scroll only the messages container (not the window) so sending a message
+      // doesn't scroll the whole page. scrollIntoView would bubble to every
+      // scrollable ancestor, including the page itself.
+      const el = messagesContainerRef.current
+      if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
     }
   }, [thread?.messages?.length])
 
@@ -479,7 +484,7 @@ function ChatThreadPage() {
             </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 bg-gradient-to-b from-gray-50/80 via-white to-white">
+        <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 space-y-4 bg-gradient-to-b from-gray-50/80 via-white to-white">
           {(!thread.messages || thread.messages.length === 0 || (thread.messages.length === 1 && thread.messages[0].id === 'last-message')) && (
             <p className="text-sm text-gray-500 text-center">No messages yet. Say hi to start the conversation.</p>
           )}

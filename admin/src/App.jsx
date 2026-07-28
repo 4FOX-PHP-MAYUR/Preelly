@@ -34,8 +34,8 @@ function AdminRoute({ children }) {
   const isAdmin = useSelector(selectIsAdmin)
   const hydrating = useSelector(selectAuthHydrating)
   if (hydrating) return null
-  if (!isAuthenticated) return <Navigate to="/login" />
-  if (!isAdmin) return <Navigate to="/login" />
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (!isAdmin) return <Navigate to="/login" replace />
   return children
 }
 
@@ -62,13 +62,12 @@ function App() {
     <AdminLayout>
       <Suspense fallback={null}>
         <Routes>
-          <Route path="/" element={<Navigate to="/" replace />} />
           <Route path="/login" element={<AdminLoginPage />} />
           <Route
             path="/products/:id"
             element={
               <AdminRoute>
-                <ProductDetailPage />
+                <ProductDetailPage adminMode />
               </AdminRoute>
             }
           />
@@ -200,6 +199,7 @@ function App() {
               </AdminRoute>
             }
           />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Suspense>
     </AdminLayout>

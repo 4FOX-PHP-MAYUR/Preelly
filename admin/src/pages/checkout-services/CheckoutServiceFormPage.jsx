@@ -11,7 +11,7 @@ import Button from '../../components/AdminUI/Button'
 import { Plus, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
-const LIST_PATH = '/admin/checkout-services'
+const LIST_PATH = '/checkout-services'
 
 const SERVICE_NAME_MIN = 2
 const SERVICE_NAME_MAX = 120

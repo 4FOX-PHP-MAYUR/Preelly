@@ -21,7 +21,7 @@ import {
 } from './couponConstants'
 
 const LIMIT = 10
-const LIST_PATH = '/admin/coupons'
+const LIST_PATH = '/coupons'
 
 const EMPTY_FILTERS = {
   search: '',

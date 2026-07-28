@@ -13,7 +13,7 @@ import { Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const LIMIT = 20
-const LIST_PATH = '/admin/checkout-services'
+const LIST_PATH = '/checkout-services'
 
 const PRICE_TYPE_LABEL = {
   FIXED: 'Fixed',

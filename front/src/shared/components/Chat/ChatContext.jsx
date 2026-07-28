@@ -49,6 +49,7 @@ const transformChat = (chat, messages = [], meId = null) => {
       unreadForBuyer: 0,
       unreadForSeller: 0,
       unreadForMe: unread,
+      muted: Boolean(chat.muted),
     }
   }
 
@@ -107,6 +108,7 @@ const transformChat = (chat, messages = [], meId = null) => {
     lastMessage: chat.lastMessage || '',
     unreadForBuyer: chat.unreadForBuyer || 0,
     unreadForSeller: chat.unreadForSeller || 0,
+    muted: Boolean(chat.muted),
   }
 }
 
@@ -123,8 +125,14 @@ const transformMessage = (message) => {
     type: message.type || 'text',
     callMeta: message.callMeta || null,
     text: message.text || '',
-    attachment: message.attachment || null,
-    attachments: message.attachments?.length > 0 ? message.attachments : (message.attachment ? [message.attachment] : []),
+    // A text message serializes with an empty `attachment: {}` subdoc; only treat
+    // an attachment as real when it actually has a url, else a stray file icon shows.
+    attachment: message.attachment?.url ? message.attachment : null,
+    attachments: (() => {
+      const list = (message.attachments || []).filter((a) => a && a.url)
+      if (list.length > 0) return list
+      return message.attachment?.url ? [message.attachment] : []
+    })(),
     createdAt: message.createdAt || new Date().toISOString(),
     read: message.read || false,
     readAt: message.readAt || null,
@@ -177,8 +185,10 @@ export function ChatProvider({ children }) {
           type: message.type || 'text',
           callMeta: message.callMeta || null,
           text: message.text || '',
-          attachment: message.attachment || null,
-          attachments: message.attachments?.length > 0 ? message.attachments : (message.attachment ? [message.attachment] : []),
+          attachment: message.attachment?.url ? message.attachment : null,
+          attachments: (message.attachments || []).filter((a) => a?.url).length
+            ? (message.attachments || []).filter((a) => a?.url)
+            : (message.attachment?.url ? [message.attachment] : []),
           createdAt: message.createdAt || new Date().toISOString(),
           read: message.read || false,
           readAt: message.readAt || null,
@@ -399,8 +409,10 @@ export function ChatProvider({ children }) {
         senderRole: senderRole,
         type: message.type || 'text',
         text: message.text,
-        attachment: message.attachment || null,
-        attachments: message.attachments?.length > 0 ? message.attachments : (message.attachment ? [message.attachment] : []),
+        attachment: message.attachment?.url ? message.attachment : null,
+        attachments: (message.attachments || []).filter((a) => a?.url).length
+          ? (message.attachments || []).filter((a) => a?.url)
+          : (message.attachment?.url ? [message.attachment] : []),
         createdAt: message.createdAt || new Date().toISOString(),
         read: message.read || false,
         readAt: message.readAt || null,

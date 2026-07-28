@@ -6,7 +6,7 @@ import Input from '../../components/AdminUI/Input'
 import Select from '../../components/AdminUI/Select'
 import toast from 'react-hot-toast'
 
-const LIST_PATH = '/admin/emirates'
+const LIST_PATH = '/emirates'
 
 function EmirateFormPage() {
   const { id } = useParams()

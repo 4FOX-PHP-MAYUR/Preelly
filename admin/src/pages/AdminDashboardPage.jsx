@@ -23,10 +23,14 @@ import Card from '../components/AdminUI/Card'
 import AdminPage from '../components/AdminUI/AdminPage'
 import Panel from '../components/AdminUI/Panel'
 import Button from '../components/AdminUI/Button'
+import DataTable from '../components/AdminUI/DataTable'
+import StatusBadge from '../components/AdminUI/StatusBadge'
+import PageHeader from '../components/AdminUI/PageHeader'
 import { EmiratesIdThumbnailPair, EmiratesIdLightbox } from '../components/AdminUI/EmiratesIdPreview'
 import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
 import toast from 'react-hot-toast'
 import { getMediaUrl } from '@shared/utils/helpers'
+import { formatListingPrice } from '@shared/components/categoryBrowseShared'
 import { getSocket } from '@/services/socket'
 import { REJECTION_REASON_CATEGORIES } from '@shared/constants/rejectionReasons'
 
@@ -507,13 +511,105 @@ function AdminDashboardPage() {
     }
   }
 
-  const formatPrice = (price) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-      minimumFractionDigits: 0,
-    }).format(price)
+  const formatPostedDate = (value) => {
+    if (!value) return '—'
+    const d = new Date(value)
+    if (Number.isNaN(d.getTime())) return '—'
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
   }
+
+  // Columns for the All Products table view (matches the list-page design used across admin).
+  const productColumns = [
+    {
+      key: 'product',
+      title: 'Product',
+      render: (p) => (
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex-shrink-0 w-12 h-12 rounded-lg overflow-hidden bg-slate-100 dark:bg-slate-800">
+            {p.video ? (
+              <video src={getMediaUrl(p.video)} className="w-full h-full object-cover" muted playsInline />
+            ) : (
+              <img
+                src={getMediaUrl(p.images?.[0]) || '/placeholder.jpg'}
+                alt={p.title}
+                className="w-full h-full object-cover"
+              />
+            )}
+          </div>
+          <div className="min-w-0">
+            <p className="font-medium text-slate-900 dark:text-white truncate max-w-[240px]">{p.title}</p>
+            <p className="text-xs font-semibold text-primary-600 dark:text-primary-400">{formatListingPrice(p)}</p>
+          </div>
+        </div>
+      ),
+    },
+    { key: 'category', title: 'Category', render: (p) => p.category?.name || '—' },
+    { key: 'seller', title: 'Seller', render: (p) => p.seller?.name || '—' },
+    { key: 'location', title: 'Location', render: (p) => p.location || '—' },
+    { key: 'status', title: 'Status', render: (p) => <StatusBadge status={p.status} /> },
+    { key: 'createdAt', title: 'Posted', render: (p) => formatPostedDate(p.createdAt) },
+  ]
+
+  const openRejectModal = (productId) => {
+    setRejectModalProductId(productId)
+    setSelectedRejectCategories([])
+    setRejectSelectionByCategory({})
+    setRejectCustomReason('')
+  }
+
+  const renderProductActions = (p) => (
+    <>
+      {p.status === 'pending' && (
+        <>
+          <button
+            type="button"
+            onClick={() => handleApprove(p._id)}
+            disabled={processingId === p._id}
+            className="admin-table-action text-emerald-600 dark:text-emerald-400 disabled:opacity-50"
+            title="Approve"
+            aria-label="Approve product"
+          >
+            <CheckCircle className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => openRejectModal(p._id)}
+            disabled={processingId === p._id}
+            className="admin-table-action text-red-600 dark:text-red-400 disabled:opacity-50"
+            title="Reject"
+            aria-label="Reject product"
+          >
+            <XCircle className="h-4 w-4" />
+          </button>
+        </>
+      )}
+      {(p.status === 'active' || p.status === 'inactive') && (
+        <button
+          type="button"
+          onClick={() => handleToggleProductStatus(p._id, p.status)}
+          disabled={processingId === p._id}
+          className={`admin-table-action disabled:opacity-50 ${
+            p.status === 'active'
+              ? 'text-amber-600 dark:text-amber-400'
+              : 'text-emerald-600 dark:text-emerald-400'
+          }`}
+          title={p.status === 'active' ? 'Deactivate' : 'Activate'}
+          aria-label={p.status === 'active' ? 'Deactivate product' : 'Activate product'}
+        >
+          {p.status === 'active' ? <AlertCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => navigate(`/products/${p._id}`)}
+        className="admin-table-action text-slate-500 dark:text-slate-400"
+        title="View"
+        aria-label="View product"
+      >
+        <Eye className="h-4 w-4" />
+      </button>
+    </>
+  )
 
   if (!isAdmin) {
     return null
@@ -939,7 +1035,7 @@ function AdminDashboardPage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => navigate(`/admin/users/${user._id}`)}
+                      onClick={() => navigate(`/users/${user._id}`)}
                       className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center space-x-2 text-sm"
                       aria-label="View user profile"
                     >
@@ -962,7 +1058,7 @@ function AdminDashboardPage() {
                       {user.identityVerificationStatus === 'pending' && (
                         <button
                           type="button"
-                          onClick={() => navigate('/admin/identity-verification')}
+                          onClick={() => navigate('/identity-verification')}
                           className="ml-auto text-xs font-semibold text-blue-600 hover:underline"
                         >
                           Review in Verification →
@@ -1026,7 +1122,7 @@ function AdminDashboardPage() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => navigate(`/admin/chat/${chat._id}?from=contacts`)}
+                        onClick={() => navigate(`/chat/${chat._id}?from=contacts`)}
                         className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center space-x-2"
                         aria-label="Open chat"
                       >
@@ -1119,7 +1215,7 @@ function AdminDashboardPage() {
                       {item.comment?.product?._id && (
                         <button
                           type="button"
-                          onClick={() => navigate(`/admin/products/${item.comment.product._id}`)}
+                          onClick={() => navigate(`/products/${item.comment.product._id}`)}
                           className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center gap-1"
                           aria-label="View product"
                         >
@@ -1145,14 +1241,49 @@ function AdminDashboardPage() {
               <p className="text-sm text-gray-600">Open the dedicated categories page to manage hierarchy and bulk actions.</p>
             </div>
             <div>
-              <button onClick={() => navigate('/admin/categories')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Open Categories</button>
+              <button onClick={() => navigate('/categories')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Open Categories</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Products List (Dashboard = pending, Products = all, Sold) */}
-      {(activeTab === 'dashboard' || activeTab === 'products' || activeTab === 'sold') && (
+      {/* All Products — table view (redesigned to match admin list pages) */}
+      {activeTab === 'products' && (
+        <div className="space-y-4">
+          <PageHeader
+            title="All Products"
+            subtitle={`${productTotal} product${productTotal === 1 ? '' : 's'}${
+              statusFilter !== 'all' ? ` · ${statusFilter}` : ''
+            }`}
+          />
+          <DataTable
+            columns={productColumns}
+            data={allProducts}
+            loading={loading}
+            emptyTitle="No products found"
+            emptyDescription={
+              statusFilter !== 'all'
+                ? `No products with status "${statusFilter}" found.`
+                : 'No products match your search.'
+            }
+            showSearch={false}
+            customActions={renderProductActions}
+            pagination={{
+              page: productPage,
+              limit: PRODUCT_PAGE_LIMIT,
+              total: productTotal,
+              onPageChange: (pg) => {
+                setProductPage(pg)
+                fetchAllProducts(statusFilter, searchQuery, pg)
+              },
+            }}
+            serverSide
+          />
+        </div>
+      )}
+
+      {/* Products List (Dashboard = pending, Sold) */}
+      {(activeTab === 'dashboard' || activeTab === 'sold') && (
         <div className="admin-card bg-white rounded-xl shadow-sm border border-gray-100">
           <div className="p-6 border-b">
             <div className="flex items-center justify-between">
@@ -1241,7 +1372,7 @@ function AdminDashboardPage() {
                           {product.title}
                         </h3>
                         <p className="text-primary-600 font-bold text-lg mb-2">
-                          {formatPrice(product.price)}
+                          {formatListingPrice(product)}
                         </p>
                         <p className="text-sm text-gray-600 mb-2 line-clamp-2">
                           {product.description}
@@ -1348,7 +1479,7 @@ function AdminDashboardPage() {
                         ) : null}
                         <button
                           type="button"
-                          onClick={() => navigate(`/admin/products/${product._id}`)}
+                          onClick={() => navigate(`/products/${product._id}`)}
                           className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center space-x-2"
                           aria-label="View product"
                         >

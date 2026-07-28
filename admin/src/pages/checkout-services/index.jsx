@@ -8,7 +8,7 @@ export default function AdminCheckoutServicesRoutes() {
       <Route index element={<CheckoutServicesListPage />} />
       <Route path="new" element={<CheckoutServiceFormPage />} />
       <Route path=":id/edit" element={<CheckoutServiceFormPage />} />
-      <Route path="*" element={<Navigate to="/admin/checkout-services" replace />} />
+      <Route path="*" element={<Navigate to="/checkout-services" replace />} />
     </Routes>
   )
 }

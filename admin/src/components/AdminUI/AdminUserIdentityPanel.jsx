@@ -96,7 +96,7 @@ export default function AdminUserIdentityPanel({ userId, userName, onStatusChang
       <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-4 border-b bg-gray-50">
         <div className="flex items-center gap-3">
           <Link
-            to="/admin?tab=users"
+            to="/?tab=users"
             className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
           >
             <ArrowLeft className="h-4 w-4" />

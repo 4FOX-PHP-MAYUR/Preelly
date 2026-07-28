@@ -25,7 +25,7 @@ function AdminRolePermissionsPage() {
     } catch (err) {
       console.error(err)
       toast.error('Failed to load permissions')
-      navigate('/admin/roles')
+      navigate('/roles')
     } finally {
       setLoading(false)
     }
@@ -109,7 +109,7 @@ function AdminRolePermissionsPage() {
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => navigate('/admin/roles')}
+          onClick={() => navigate('/roles')}
           className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900 mb-4"
         >
           <ArrowLeft className="h-4 w-4" />

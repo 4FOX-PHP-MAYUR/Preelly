@@ -21,7 +21,7 @@ import {
   formatDiscount,
 } from './couponConstants'
 
-const LIST_PATH = '/admin/coupons'
+const LIST_PATH = '/coupons'
 
 function Field({ label, children }) {
   return (

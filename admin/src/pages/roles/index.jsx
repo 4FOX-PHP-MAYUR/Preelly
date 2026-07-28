@@ -10,7 +10,7 @@ export default function AdminRolesRoutes() {
       <Route path="new" element={<RoleFormPage />} />
       <Route path=":id/edit" element={<RoleFormPage />} />
       <Route path=":id/permissions" element={<AdminRolePermissionsPage />} />
-      <Route path="*" element={<Navigate to="/admin/roles" replace />} />
+      <Route path="*" element={<Navigate to="/roles" replace />} />
     </Routes>
   )
 }

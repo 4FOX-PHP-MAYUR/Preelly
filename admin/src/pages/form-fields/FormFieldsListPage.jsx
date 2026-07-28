@@ -13,7 +13,7 @@ import {
 } from 'lucide-react'
 
 const LIMIT = 20
-const LIST_PATH = '/admin/form-fields'
+const LIST_PATH = '/form-fields'
 
 function FormFieldsListPage() {
   const navigate = useNavigate()

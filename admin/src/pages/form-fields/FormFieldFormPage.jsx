@@ -11,7 +11,7 @@ import Button from '../../components/AdminUI/Button'
 import toast from 'react-hot-toast'
 import { RefreshCw } from 'lucide-react'
 
-const LIST_PATH = '/admin/form-fields'
+const LIST_PATH = '/form-fields'
 
 function toFieldName(title) {
   return String(title || '')

@@ -8,7 +8,7 @@ export default function AdminStorageFacilitiesRoutes() {
       <Route index element={<StorageFacilitiesListPage />} />
       <Route path="new" element={<StorageFacilityFormPage />} />
       <Route path=":id/edit" element={<StorageFacilityFormPage />} />
-      <Route path="*" element={<Navigate to="/admin/storage-facilities" replace />} />
+      <Route path="*" element={<Navigate to="/storage-facilities" replace />} />
     </Routes>
   )
 }

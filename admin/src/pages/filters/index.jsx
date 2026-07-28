@@ -8,7 +8,7 @@ export default function AdminFiltersRoutes() {
       <Route index element={<FiltersListPage />} />
       <Route path="new" element={<FilterFormPage />} />
       <Route path=":id/edit" element={<FilterFormPage />} />
-      <Route path="*" element={<Navigate to="/admin/filters" replace />} />
+      <Route path="*" element={<Navigate to="/filters" replace />} />
     </Routes>
   )
 }

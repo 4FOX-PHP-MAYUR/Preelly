@@ -21,6 +21,7 @@ import {
   BadgePercent,
 } from 'lucide-react'
 
+// App routes are root-relative. Nginx + Vite base=/admin/ mount the app under /admin.
 export const ADMIN_MENU_GROUPS = [
   {
     key: 'overview',
@@ -50,18 +51,18 @@ export const ADMIN_MENU_GROUPS = [
       { key: 'checkout-services', label: 'Checkout Services', to: '/checkout-services', icon: CreditCard },
       { key: 'coupons', label: 'Coupons', to: '/coupons', icon: Ticket },
       { key: 'buyers-coupons', label: 'Buyer Coupons', to: '/buyers-coupons', icon: BadgePercent },
-      { key: 'products', label: 'Products', to: '/admin?tab=products', icon: Box },
-      { key: 'sold', label: 'Sold', to: '/admin?tab=sold', icon: TrendingUp },
+      { key: 'products', label: 'Products', to: '/?tab=products', icon: Box },
+      { key: 'sold', label: 'Sold', to: '/?tab=sold', icon: TrendingUp },
     ],
   },
   {
     key: 'users',
     label: 'Users & Support',
     items: [
-      { key: 'users', label: 'Users', to: '/admin?tab=users', icon: Users },
+      { key: 'users', label: 'Users', to: '/?tab=users', icon: Users },
       { key: 'identity-verification', label: 'Verification', to: '/identity-verification', icon: ShieldCheck },
-      { key: 'contacts', label: 'Contacts', to: '/admin?tab=contacts', icon: MessageCircle },
-      { key: 'reports', label: 'Reports', to: '/admin?tab=comments', icon: FileText },
+      { key: 'contacts', label: 'Contacts', to: '/?tab=contacts', icon: MessageCircle },
+      { key: 'reports', label: 'Reports', to: '/?tab=comments', icon: FileText },
     ],
   },
   {
@@ -91,7 +92,7 @@ export const MENU_PERMISSION_MAP = {
 }
 
 export const ADMIN_ROUTE_META = {
-  '/admin': { title: 'Dashboard', breadcrumbs: [{ label: 'Dashboard' }] },
+  '/': { title: 'Dashboard', breadcrumbs: [{ label: 'Dashboard' }] },
   '/categories': { title: 'Categories', breadcrumbs: [{ label: 'Catalog', to: '/categories' }, { label: 'Categories' }] },
   '/filters': { title: 'Filters', breadcrumbs: [{ label: 'Catalog', to: '/filters' }, { label: 'Filters' }] },
   '/dealers': { title: 'Dealers', breadcrumbs: [{ label: 'Marketplace', to: '/dealers' }, { label: 'Dealers' }] },
@@ -143,7 +144,7 @@ export function resolveAdminRouteMeta(pathname) {
     }
   }
 
-  const newMatch = pathname.match(/^\/admin\/([^/]+)\/new$/)
+  const newMatch = pathname.match(/^\/([^/]+)\/new$/)
   if (newMatch) {
     const config = ADMIN_MODULE_FORM_META[newMatch[1]]
     if (config) {
@@ -158,7 +159,7 @@ export function resolveAdminRouteMeta(pathname) {
     }
   }
 
-  const editMatch = pathname.match(/^\/admin\/([^/]+)\/([^/]+)\/edit$/)
+  const editMatch = pathname.match(/^\/([^/]+)\/([^/]+)\/edit$/)
   if (editMatch) {
     const config = ADMIN_MODULE_FORM_META[editMatch[1]]
     if (config) {

@@ -12,7 +12,7 @@ import {
 import toast from 'react-hot-toast'
 import { Settings, Plus } from 'lucide-react'
 
-const LIST_PATH = '/admin/roles'
+const LIST_PATH = '/roles'
 
 function RolesListPage() {
   const navigate = useNavigate()
@@ -116,7 +116,7 @@ function RolesListPage() {
             icon={Settings}
             onClick={(e) => {
               e.stopPropagation()
-              navigate(`/admin/roles/${role._id}/permissions`)
+              navigate(`/roles/${role._id}/permissions`)
             }}
           >
             Permissions

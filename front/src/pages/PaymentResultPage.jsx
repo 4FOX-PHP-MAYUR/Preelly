@@ -3,6 +3,17 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { CheckCircle2, XCircle, Loader2, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { paymentService } from '@shared/services/api'
+import MarketplaceTopBar from '../components/Layout/MarketplaceTopBar'
+
+// Same top header as the homepage (logo + search + nav), wrapping the page content.
+function PageWithHeader({ children }) {
+  return (
+    <div className="min-h-screen bg-white">
+      <MarketplaceTopBar topBarColSpan="" className="border-b border-slate-200" />
+      {children}
+    </div>
+  )
+}
 
 function money(value, currency = 'AED') {
   return `${currency} ${Number(value ?? 0).toLocaleString('en-AE', {
@@ -86,14 +97,17 @@ function PaymentResultPage({ variant }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-slate-500">
-        <Loader2 className="h-8 w-8 animate-spin" />
-        <p className="text-sm">Confirming your payment…</p>
-      </div>
+      <PageWithHeader>
+        <div className="flex min-h-[60vh] flex-col items-center justify-center gap-3 text-slate-500">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p className="text-sm">Confirming your payment…</p>
+        </div>
+      </PageWithHeader>
     )
   }
 
   return (
+    <PageWithHeader>
     <div className="mx-auto w-full max-w-lg px-4 py-10 sm:py-16">
       <div className="flex flex-col items-center text-center">
         {isSuccess ? (
@@ -189,6 +203,7 @@ function PaymentResultPage({ variant }) {
         )}
       </div>
     </div>
+    </PageWithHeader>
   )
 }
 

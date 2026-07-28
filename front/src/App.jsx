@@ -29,6 +29,11 @@ const DashboardMessagesPage = lazy(() => import('./pages/dashboard/DashboardMess
 const DashboardNotificationsPage = lazy(() => import('./pages/dashboard/DashboardNotificationsPage'))
 const DashboardFollowRequestsPage = lazy(() => import('./pages/dashboard/DashboardFollowRequestsPage'))
 const DashboardSettingsPage = lazy(() => import('./pages/dashboard/DashboardSettingsPage'))
+const DashboardProfilePage = lazy(() => import('./pages/dashboard/DashboardProfilePage'))
+const DashboardBlockedUsersPage = lazy(() => import('./pages/dashboard/DashboardBlockedUsersPage'))
+const DashboardInfoPage = lazy(() => import('./pages/dashboard/DashboardInfoPage'))
+const DashboardDraftsPage = lazy(() => import('./pages/dashboard/DashboardDraftsPage'))
+const DashboardMySearchPage = lazy(() => import('./pages/dashboard/DashboardMySearchPage'))
 const UserProfilePage = lazy(() => import('@shared/pages/UserProfilePage'))
 const FollowersFollowingPage = lazy(() => import('./pages/FollowersFollowingPage'))
 const SearchResultsPage = lazy(() => import('./pages/SearchResultsPage'))
@@ -224,7 +229,63 @@ function App() {
             <Route path="notifications" element={<DashboardNotificationsPage />} />
             <Route path="notifications/follow-requests" element={<DashboardFollowRequestsPage />} />
           </Route>
-          {/* Settings uses its own home-style shell, so it lives outside DashboardLayout. */}
+          {/* Profile/Settings use their own home-style shell, outside DashboardLayout. */}
+          <Route
+            path="/dashboard/profile"
+            element={
+              <PrivateRoute>
+                <DashboardProfilePage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard/drafts"
+            element={
+              <PrivateRoute>
+                <DashboardDraftsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard/my-search"
+            element={
+              <PrivateRoute>
+                <DashboardMySearchPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard/blocked-users"
+            element={
+              <PrivateRoute>
+                <DashboardBlockedUsersPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard/support"
+            element={
+              <PrivateRoute>
+                <DashboardInfoPage pageKey="support" />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard/faq"
+            element={
+              <PrivateRoute>
+                <DashboardInfoPage pageKey="faq" />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard/contact"
+            element={
+              <PrivateRoute>
+                <DashboardInfoPage pageKey="contact" />
+              </PrivateRoute>
+            }
+          />
           <Route
             path="/dashboard/settings"
             element={

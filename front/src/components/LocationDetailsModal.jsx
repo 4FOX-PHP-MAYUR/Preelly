@@ -1,32 +1,13 @@
-import { useState, useEffect, useRef } from 'react'
-import { X, MapPin, Loader2, Navigation, Plus, Check } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Check, Loader2, MapPin, Navigation, Plus } from 'lucide-react'
 import toast from 'react-hot-toast'
+import ModalDialog from './ui/ModalDialog'
+import ToggleSwitch from './Profile/ToggleSwitch'
 
 const PRESET_LABELS = ['Home', 'Office', 'Home 2']
 
-function Toggle({ checked, onChange }) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-none ${
-        checked ? 'bg-indigo-600' : 'bg-gray-200'
-      }`}
-    >
-      <span
-        className={`inline-block h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${
-          checked ? 'translate-x-6' : 'translate-x-1'
-        }`}
-      />
-    </button>
-  )
-}
-
 function StaticMapPreview({ lat, lng }) {
   if (!lat || !lng) return null
-  // Tile-based static map using OpenStreetMap
   const z = 15
   const tileX = Math.floor(((lng + 180) / 360) * Math.pow(2, z))
   const tileY = Math.floor(
@@ -35,38 +16,31 @@ function StaticMapPreview({ lat, lng }) {
   )
   const src = `https://tile.openstreetmap.org/${z}/${tileX}/${tileY}.png`
   return (
-    <div className="relative w-full h-full overflow-hidden">
-      <img
-        src={src}
-        alt="Map preview"
-        className="w-full h-full object-cover opacity-80"
-        crossOrigin="anonymous"
-      />
-      {/* Pin marker centered */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="flex flex-col items-center">
-          <div className="h-8 w-8 rounded-full bg-indigo-600 border-4 border-white shadow-lg flex items-center justify-center">
-            <MapPin className="h-4 w-4 text-white" />
-          </div>
-          <div className="w-0.5 h-3 bg-indigo-600 mt-0.5" />
+    <div className="relative h-full w-full overflow-hidden">
+      <img src={src} alt="Map preview" className="h-full w-full object-cover opacity-90" crossOrigin="anonymous" />
+      <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full border-4 border-white bg-brand shadow-lg">
+          <MapPin className="h-4 w-4 text-white" />
         </div>
       </div>
     </div>
   )
 }
 
+const fieldClass =
+  'w-full rounded-[12px] border border-transparent bg-[#F3F6FF] px-4 py-3.5 text-sm text-slate-800 placeholder:text-slate-400 outline-none transition duration-200 focus:border-brand/30 focus:ring-2 focus:ring-brand/10'
+
 export default function LocationDetailsModal({ onClose, onSave, initialData }) {
   const isEditing = Boolean(initialData?._id)
-
   const [city, setCity] = useState(initialData?.city || '')
   const [building, setBuilding] = useState(initialData?.building || '')
   const [apartment, setApartment] = useState(initialData?.apartment || '')
   const [label, setLabel] = useState(initialData?.label || 'Home')
   const [customLabel, setCustomLabel] = useState('')
   const [showCustomInput, setShowCustomInput] = useState(
-    initialData?.label && !PRESET_LABELS.includes(initialData.label)
+    Boolean(initialData?.label && !PRESET_LABELS.includes(initialData.label))
   )
-  const [isDefault, setIsDefault] = useState(initialData?.isDefault || false)
+  const [isDefault, setIsDefault] = useState(Boolean(initialData?.isDefault))
   const [coords, setCoords] = useState(
     initialData?.coordinates?.coordinates
       ? { lng: initialData.coordinates.coordinates[0], lat: initialData.coordinates.coordinates[1] }
@@ -74,12 +48,11 @@ export default function LocationDetailsModal({ onClose, onSave, initialData }) {
   )
   const [locating, setLocating] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [errors, setErrors] = useState({})
   const customInputRef = useRef(null)
 
   useEffect(() => {
-    if (showCustomInput && customInputRef.current) {
-      customInputRef.current.focus()
-    }
+    if (showCustomInput) customInputRef.current?.focus()
   }, [showCustomInput])
 
   const handleDetectLocation = () => {
@@ -102,53 +75,36 @@ export default function LocationDetailsModal({ onClose, onSave, initialData }) {
           const cityVal =
             addr.city || addr.town || addr.village || addr.county || addr.state || ''
           const countryVal = addr.country ? `, ${addr.country}` : ''
-          const buildingVal =
-            addr.road
-              ? `${addr.road}${addr.suburb ? `, ${addr.suburb}` : ''}${addr.city_district ? `, ${addr.city_district}` : ''}`
-              : data.display_name?.split(',').slice(0, 3).join(',') || ''
-          if (cityVal && !city) setCity(`${cityVal}${countryVal}`)
-          if (buildingVal && !building) setBuilding(buildingVal)
+          const buildingVal = addr.road
+            ? `${addr.road}${addr.suburb ? `, ${addr.suburb}` : ''}${addr.city_district ? `, ${addr.city_district}` : ''}`
+            : data.display_name?.split(',').slice(0, 3).join(',') || ''
+          if (cityVal) setCity(`${cityVal}${countryVal}`)
+          if (buildingVal) setBuilding(buildingVal)
         } catch {
-          // ignore geocoding failure — coordinates are still set
+          /* coordinates still set */
         }
         setLocating(false)
       },
       (err) => {
-        const msg =
+        toast.error(
           err.code === 1
             ? 'Location permission denied. Please allow location access.'
             : 'Could not determine your location.'
-        toast.error(msg)
+        )
         setLocating(false)
       },
       { timeout: 10000 }
     )
   }
 
-  const handleLabelSelect = (l) => {
-    setLabel(l)
-    setShowCustomInput(false)
-    setCustomLabel('')
-  }
-
-  const handleAddCustomLabel = () => {
-    setShowCustomInput(true)
-    setLabel('')
-  }
-
-  const handleCustomLabelConfirm = () => {
-    const val = customLabel.trim()
-    if (!val) return
-    setLabel(val)
-    setShowCustomInput(false)
-  }
-
   const handleSave = async () => {
-    if (!city.trim() && !building.trim()) {
-      toast.error('Please enter at least a city or address')
-      return
-    }
+    const nextErrors = {}
+    if (!city.trim() && !building.trim()) nextErrors.city = 'Enter an area or building'
     const activeLabel = showCustomInput ? customLabel.trim() || 'Custom' : label || 'Home'
+    if (!activeLabel) nextErrors.label = 'Choose a label'
+    setErrors(nextErrors)
+    if (Object.keys(nextErrors).length) return
+
     setSaving(true)
     try {
       await onSave({
@@ -168,161 +124,160 @@ export default function LocationDetailsModal({ onClose, onSave, initialData }) {
   }
 
   return (
-    /* Backdrop */
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 backdrop-blur-sm p-0 sm:p-4">
-      <div className="relative w-full sm:max-w-sm bg-white rounded-t-3xl sm:rounded-3xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-5 pt-5 pb-3 shrink-0">
-          <h2 className="text-base font-bold text-gray-900">Location Details</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded-full text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition"
-          >
-            <X className="h-5 w-5" />
-          </button>
+    <ModalDialog
+      open
+      onClose={onClose}
+      title="Location Details"
+      maxWidthClass="sm:max-w-sm"
+      footer={
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="w-full rounded-full bg-brand py-3.5 text-sm font-bold text-white shadow-sm transition duration-200 hover:bg-brand-700 disabled:opacity-60"
+        >
+          {saving ? 'Saving…' : isEditing ? 'Update Location' : 'Add Location'}
+        </button>
+      }
+    >
+      <div className="space-y-4">
+        <div className="overflow-hidden rounded-[16px] border border-[#E5E7EB]">
+          <div className="px-4 pb-1 pt-3">
+            <p className="text-sm font-bold text-slate-900">Pinned location</p>
+            <p className="mt-0.5 text-xs text-slate-400">
+              {coords ? 'Location pinned successfully' : 'Click on the map to select or edit your location'}
+            </p>
+          </div>
+          <div className="relative mt-2 h-44 bg-[#E8E4D4]">
+            {coords ? (
+              <StaticMapPreview lat={coords.lat} lng={coords.lng} />
+            ) : (
+              <div className="absolute inset-0 bg-gradient-to-br from-[#EEE8C8] to-[#D9D0A8]" />
+            )}
+            <button
+              type="button"
+              onClick={handleDetectLocation}
+              disabled={locating}
+              className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full border border-[#E5E7EB] bg-white px-4 py-2 text-sm font-semibold text-brand shadow-lg transition duration-200 hover:bg-brand-50 disabled:opacity-70"
+            >
+              {locating ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Navigation className="h-4 w-4" />
+              )}
+              {locating ? 'Detecting…' : coords ? 'Update Map' : 'Show Map'}
+            </button>
+          </div>
         </div>
 
-        <div className="overflow-y-auto flex-1 px-5 pb-5 space-y-4">
-          {/* Map preview section */}
-          <div className="rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="px-4 pt-3 pb-1">
-              <p className="text-xs font-bold text-gray-800">Pinned location</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">
-                {coords ? 'Location pinned successfully' : 'Click on the map to select or edit your location'}
-              </p>
-            </div>
-            {/* Map area */}
-            <div className="relative h-44 bg-[#e8e0c8] mt-2">
-              {coords ? (
-                <StaticMapPreview lat={coords.lat} lng={coords.lng} />
-              ) : (
-                /* Placeholder map background */
-                <div className="absolute inset-0 bg-gradient-to-br from-[#eee8c8] to-[#d9d0a8]">
-                  {/* Fake road lines */}
-                  <svg className="absolute inset-0 w-full h-full opacity-30" viewBox="0 0 400 180">
-                    <path d="M0 90 Q100 60 200 90 T400 90" stroke="#bba" strokeWidth="8" fill="none" />
-                    <path d="M0 120 Q150 100 300 130 T400 110" stroke="#bba" strokeWidth="5" fill="none" />
-                    <path d="M120 0 L100 180" stroke="#bba" strokeWidth="6" fill="none" />
-                    <path d="M280 0 Q290 90 270 180" stroke="#bba" strokeWidth="4" fill="none" />
-                  </svg>
-                </div>
-              )}
-              {/* Show Map / Detect button overlay */}
-              <button
-                type="button"
-                onClick={handleDetectLocation}
-                disabled={locating}
-                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center gap-2 bg-white rounded-full px-4 py-2 text-sm font-semibold text-gray-800 shadow-lg border border-gray-200 hover:bg-gray-50 transition"
-              >
-                {locating ? (
-                  <Loader2 className="h-4 w-4 text-indigo-600 animate-spin" />
-                ) : (
-                  <div className="h-5 w-5 rounded-full bg-indigo-600 flex items-center justify-center shrink-0">
-                    <Navigation className="h-3 w-3 text-white" />
-                  </div>
-                )}
-                {locating ? 'Detecting…' : coords ? 'Re-detect Location' : 'Show Map'}
-              </button>
-            </div>
-          </div>
-
-          {/* Address fields */}
+        <div>
           <input
             type="text"
             value={city}
             onChange={(e) => setCity(e.target.value)}
-            placeholder="City / Area (e.g. Business Bay, Dubai)"
-            className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition"
+            placeholder="Business Bay (Dubai)"
+            className={fieldClass}
+            aria-label="Area"
           />
-          <input
-            type="text"
-            value={building}
-            onChange={(e) => setBuilding(e.target.value)}
-            placeholder="Building / Street name"
-            className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition"
-          />
-          <input
-            type="text"
-            value={apartment}
-            onChange={(e) => setApartment(e.target.value)}
-            placeholder="Enter Appartment or Villa Number"
-            className="w-full rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-800 placeholder-gray-400 focus:border-indigo-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-100 transition"
-          />
+          {errors.city ? <p className="mt-1 text-xs text-red-500">{errors.city}</p> : null}
+        </div>
+        <input
+          type="text"
+          value={building}
+          onChange={(e) => setBuilding(e.target.value)}
+          placeholder="Building name"
+          className={fieldClass}
+          aria-label="Building name"
+        />
+        <input
+          type="text"
+          value={apartment}
+          onChange={(e) => setApartment(e.target.value)}
+          placeholder="Enter Appartment or Villa Number"
+          className={fieldClass}
+          aria-label="Apartment or villa number"
+        />
 
-          {/* Label selector */}
-          <div>
-            <p className="text-sm font-bold text-gray-900 mb-2">
-              Choose how you want to label<br />your location{' '}
-              <span className="text-red-500">*</span>
-            </p>
-            <div className="flex flex-wrap items-center gap-2">
-              {PRESET_LABELS.map((l) => (
+        <div>
+          <p className="mb-2 text-sm font-bold text-slate-900">
+            Choose how you want to label your location <span className="text-red-500">*</span>
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            {PRESET_LABELS.map((l) => {
+              const active = label === l && !showCustomInput
+              return (
                 <button
                   key={l}
                   type="button"
-                  onClick={() => handleLabelSelect(l)}
-                  className={`px-4 py-1.5 rounded-full text-sm font-medium border transition ${
-                    label === l && !showCustomInput
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-white text-gray-700 border-gray-200 hover:border-indigo-300'
+                  onClick={() => {
+                    setLabel(l)
+                    setShowCustomInput(false)
+                    setCustomLabel('')
+                  }}
+                  className={`rounded-full border px-4 py-1.5 text-sm font-medium transition duration-200 ${
+                    active
+                      ? 'border-brand bg-brand-50 text-brand'
+                      : 'border-[#E5E7EB] bg-white text-slate-800 hover:border-brand/40'
                   }`}
                 >
                   {l}
                 </button>
-              ))}
-              {/* Custom label input or button */}
-              {showCustomInput ? (
-                <div className="flex items-center gap-1">
-                  <input
-                    ref={customInputRef}
-                    type="text"
-                    value={customLabel}
-                    onChange={(e) => setCustomLabel(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleCustomLabelConfirm()}
-                    placeholder="Custom label"
-                    className="w-28 rounded-full border border-indigo-300 px-3 py-1.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-100"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleCustomLabelConfirm}
-                    className="h-7 w-7 rounded-full bg-indigo-600 flex items-center justify-center text-white shrink-0"
-                  >
-                    <Check className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-              ) : (
+              )
+            })}
+            {showCustomInput ? (
+              <div className="flex items-center gap-1">
+                <input
+                  ref={customInputRef}
+                  type="text"
+                  value={customLabel}
+                  onChange={(e) => setCustomLabel(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const val = customLabel.trim()
+                      if (!val) return
+                      setLabel(val)
+                      setShowCustomInput(false)
+                    }
+                  }}
+                  placeholder="Custom label"
+                  className="w-28 rounded-full border border-brand/40 px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-brand/15"
+                />
                 <button
                   type="button"
-                  onClick={handleAddCustomLabel}
-                  className="flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-800 transition"
+                  onClick={() => {
+                    const val = customLabel.trim()
+                    if (!val) return
+                    setLabel(val)
+                    setShowCustomInput(false)
+                  }}
+                  className="flex h-7 w-7 items-center justify-center rounded-full bg-brand text-white"
+                  aria-label="Confirm custom label"
                 >
-                  <Plus className="h-4 w-4" />
-                  Add Custom Label
+                  <Check className="h-3.5 w-3.5" />
                 </button>
-              )}
-            </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCustomInput(true)
+                  setLabel('')
+                }}
+                className="flex items-center gap-1 rounded-full border border-dashed border-brand px-3 py-1.5 text-sm font-medium text-brand transition duration-200 hover:bg-brand-50"
+              >
+                <Plus className="h-4 w-4" />
+                Add Custom Label
+              </button>
+            )}
           </div>
-
-          {/* Set as default */}
-          <div className="flex items-center gap-3">
-            <Toggle checked={isDefault} onChange={setIsDefault} />
-            <span className="text-sm font-medium text-gray-700">Set as default</span>
-          </div>
+          {errors.label ? <p className="mt-1 text-xs text-red-500">{errors.label}</p> : null}
         </div>
 
-        {/* Footer button */}
-        <div className="px-5 pb-5 pt-2 shrink-0">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={saving}
-            className="w-full py-3.5 rounded-2xl bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold disabled:opacity-60 transition shadow-md"
-          >
-            {saving ? 'Saving…' : isEditing ? 'Update Location' : 'Add Location'}
-          </button>
+        <div className="flex items-center gap-3">
+          <ToggleSwitch checked={isDefault} onChange={setIsDefault} label="Set as default" />
+          <span className="text-sm font-medium text-slate-800">Set as default</span>
         </div>
       </div>
-    </div>
+    </ModalDialog>
   )
 }

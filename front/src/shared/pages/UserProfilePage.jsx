@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import {
   BadgeCheck,
+  Ban,
   Bookmark,
   FilePlus,
   Heart,
@@ -24,6 +25,10 @@ import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
 import ListingVideoPreview from '@shared/components/Video/ListingVideoPreview'
 import ProductCard from '../../components/Listing/ProductCard'
 import ProfileReelsViewer from '@shared/components/Profile/ProfileReelsViewer'
+import ReviewRatingModal from '../../components/Profile/ReviewRatingModal'
+import BlockFlow from '../../components/Block/BlockFlow'
+import UnblockConfirmModal from '../../components/Block/UnblockConfirmModal'
+import MoreOptionsModal from '../../components/Chat/MoreOptionsModal'
 import { productHasVideo } from '@shared/utils/videoHelpers'
 
 function formatCompact(n) {
@@ -74,17 +79,22 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
   const [profileUser, setProfileUser] = useState(null)
   const [products, setProducts] = useState([])
   const [followStatus, setFollowStatus] = useState('none')
+  const [blockedByMe, setBlockedByMe] = useState(false)
   const [loading, setLoading] = useState(true)
   const [followersCount, setFollowersCount] = useState(0)
   const [followingCount, setFollowingCount] = useState(0)
   const [showOtpVerification, setShowOtpVerification] = useState(false)
   const [showIdentityVerification, setShowIdentityVerification] = useState(false)
+  const [showReviews, setShowReviews] = useState(false)
   const [activeReelsIndex, setActiveReelsIndex] = useState(null)
   const [stats, setStats] = useState({ totalProducts: 0, totalViews: 0, totalLikes: 0 })
   // Own-profile content tabs: My Listings / Saved / Liked.
   const [activeTab, setActiveTab] = useState('listings')
   const [savedItems, setSavedItems] = useState([])
   const [likedItems, setLikedItems] = useState([])
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [showBlockFlow, setShowBlockFlow] = useState(false)
+  const [showUnblock, setShowUnblock] = useState(false)
 
   // Self mode (/my-profile) has no route param — resolve to the signed-in user's id.
   const id = selfMode ? (currentUser?._id || '') : params.id
@@ -126,9 +136,13 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
           try {
             const statusRes = await userService.getFollowStatus(id)
             setFollowStatus(statusRes.data.status || 'none')
+            setBlockedByMe(Boolean(statusRes.data.blockedByMe))
           } catch {
             setFollowStatus('none')
+            setBlockedByMe(false)
           }
+        } else {
+          setBlockedByMe(false)
         }
       } catch (error) {
         console.error('Error fetching user profile:', error)
@@ -222,6 +236,10 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
     if (!isAuthenticated) {
       toast.error('Please login to send messages')
       navigate('/login')
+      return
+    }
+    if (blockedByMe) {
+      toast.error('Unblock this account to message them')
       return
     }
     if (isOwnProfile) {
@@ -378,11 +396,16 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
             </div>
 
             {hasRating && (
-              <div className="mt-1 flex items-center gap-1 text-sm text-amber-500">
+              <button
+                type="button"
+                onClick={() => setShowReviews(true)}
+                className="mt-1 flex items-center gap-1 text-sm text-amber-500 transition duration-200 hover:opacity-80"
+                aria-label="View reviews and ratings"
+              >
                 <Star className="h-4 w-4 fill-amber-400 stroke-amber-500" />
                 <span className="font-semibold">{rating}</span>
                 <span className="text-gray-400">| {ratingCount} rating</span>
-              </div>
+              </button>
             )}
 
             <div className="mt-2 flex flex-wrap items-center gap-x-6 gap-y-1 text-sm">
@@ -417,7 +440,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
                 {isOwnProfile ? (
                   <>
                     <Link
-                      to="/dashboard/settings"
+                      to="/dashboard/profile"
                       className="flex items-center gap-1.5 rounded-full bg-primary-50 px-5 py-2 text-sm font-semibold text-primary-700 transition hover:bg-primary-100"
                     >
                       <Pencil className="h-3.5 w-3.5" />
@@ -434,7 +457,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
                   </>
                 ) : (
                   <>
-                    {isAuthenticated && (
+                    {isAuthenticated && !blockedByMe && (
                       <button
                         type="button"
                         onClick={handleFollow}
@@ -449,6 +472,15 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
                         {followStatus === 'active' ? 'Following' : followStatus === 'pending' ? 'Requested' : 'Follow'}
                       </button>
                     )}
+                    {blockedByMe ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowUnblock(true)}
+                        className="rounded-full bg-primary-600 px-5 py-2 text-sm font-semibold text-white transition hover:bg-primary-700"
+                      >
+                        Unblock
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={handleMessage}
@@ -459,14 +491,16 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
                     </button>
                   </>
                 )}
-                <button
-                  type="button"
-                  onClick={() => toast('More options coming soon')}
-                  className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-primary-700 transition hover:bg-primary-100"
-                  aria-label="More options"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                </button>
+                {!isOwnProfile && isAuthenticated ? (
+                  <button
+                    type="button"
+                    onClick={() => setMoreOpen(true)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-primary-700 transition hover:bg-primary-100"
+                    aria-label="More options"
+                  >
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                ) : null}
               </div>
             )}
           </div>
@@ -509,7 +543,19 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
         </div>
       )}
 
-      {/* Listings & videos */}
+      {/* Listings & videos — or blocked empty state */}
+      {blockedByMe && !isOwnProfile ? (
+        <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-slate-100">
+            <Ban className="h-10 w-10 text-slate-300" strokeWidth={1.75} />
+          </div>
+          <h2 className="mt-5 text-xl font-bold text-[#2E2E7E]">You&apos;ve blocked this account</h2>
+          <p className="mt-3 max-w-md text-sm leading-relaxed text-slate-500">
+            Unblock this account to see their photos and videos. When you unblock them, they&apos;ll also be able to find
+            your profile, see your content and message you again.
+          </p>
+        </div>
+      ) : (
       <div className="overflow-hidden">
         {displayProducts.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 text-gray-400">
@@ -538,6 +584,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
           </div>
         )}
       </div>
+      )}
     </div>
   )
 
@@ -578,6 +625,58 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
           onClose={() => setActiveReelsIndex(null)}
         />
       )}
+
+      <ReviewRatingModal
+        open={showReviews}
+        onClose={() => setShowReviews(false)}
+        user={profileUser}
+        reviews={Array.isArray(profileUser?.reviews) ? profileUser.reviews : []}
+      />
+
+      <MoreOptionsModal
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        options={
+          blockedByMe
+            ? [
+                {
+                  id: 'unblock',
+                  label: 'Unblock',
+                  icon: Ban,
+                  onClick: () => {
+                    setMoreOpen(false)
+                    setShowUnblock(true)
+                  },
+                },
+              ]
+            : [
+                {
+                  id: 'block',
+                  label: 'Block',
+                  icon: Ban,
+                  danger: true,
+                  onClick: () => {
+                    setMoreOpen(false)
+                    setShowBlockFlow(true)
+                  },
+                },
+              ]
+        }
+      />
+
+      <BlockFlow
+        open={showBlockFlow}
+        user={profileUser}
+        onClose={() => setShowBlockFlow(false)}
+        onBlocked={() => setBlockedByMe(true)}
+      />
+
+      <UnblockConfirmModal
+        open={showUnblock}
+        user={profileUser}
+        onClose={() => setShowUnblock(false)}
+        onUnblocked={() => setBlockedByMe(false)}
+      />
     </>
   )
 }

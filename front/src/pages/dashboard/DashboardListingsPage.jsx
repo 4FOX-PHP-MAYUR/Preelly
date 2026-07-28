@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { CheckCircle, Edit3, Filter, Loader2, Search, Tag, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { productService, userService } from '@shared/services/api'
@@ -41,13 +41,14 @@ function StatusPill({ status, moderationStatus }) {
 }
 
 export default function DashboardListingsPage() {
+  const [searchParams] = useSearchParams()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [items, setItems] = useState([])
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
   const [q, setQ] = useState('')
-  const [status, setStatus] = useState('')
+  const [status, setStatus] = useState(() => searchParams.get('status') || '')
   const [busyId, setBusyId] = useState(null)
 
   const fetchListings = async (nextPage = page, { silent } = { silent: false }) => {
@@ -66,9 +67,14 @@ export default function DashboardListingsPage() {
   }
 
   useEffect(() => {
+    const fromUrl = searchParams.get('status') || ''
+    setStatus(fromUrl)
+  }, [searchParams])
+
+  useEffect(() => {
     fetchListings(1)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [status])
 
   const onSearch = (e) => {
     e.preventDefault()

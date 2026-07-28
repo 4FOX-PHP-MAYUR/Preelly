@@ -5,13 +5,15 @@ import { fetchProducts, clearProducts } from '@shared/store/slices/productSlice'
 import { fetchRootCategories } from '@shared/store/slices/categorySlice'
 import { fetchFeedShell } from '@shared/store/slices/feedSlice'
 import { selectIsAuthenticated } from '@shared/store/slices/authSlice'
-import { categoryService, productService } from '@shared/services/api'
+import { categoryService, productService, userService } from '@shared/services/api'
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
 import ListingToolbar from '../components/Listing/ListingToolbar'
 import ProductGrid from '../components/Listing/ProductGrid'
 import SearchFilterPanel from '../components/Listing/SearchFilterPanel'
 import PriceFilterPanel from '../components/Listing/PriceFilterPanel'
 import useFilterPanelSlide from '../hooks/useFilterPanelSlide'
+import toast from 'react-hot-toast'
+import { BookmarkPlus } from 'lucide-react'
 
 function resolveCategoryFromQuery(query, rootCategories) {
   const q = String(query || '').trim().toLowerCase()
@@ -56,6 +58,7 @@ function SearchResultsPage() {
   const [sortBy, setSortBy] = useState(searchParams.get('sortBy') || 'newest')
   const [showMobileFilters, setShowMobileFilters] = useState(false)
   const [panelType, setPanelType] = useState(null)
+  const [savingSearch, setSavingSearch] = useState(false)
   const {
     open: rightPanelOpen,
     closing: rightPanelClosing,
@@ -271,6 +274,56 @@ function SearchResultsPage() {
       ? 'Loading listings…'
       : `${products.length} result${products.length !== 1 ? 's' : ''} found`
 
+  const handleSaveSearch = async () => {
+    if (!isAuthenticated) {
+      navigate('/login')
+      return
+    }
+    if (!searchQuery && !categoryId) {
+      toast.error('Run a search before saving')
+      return
+    }
+    setSavingSearch(true)
+    try {
+      const catName = categoryForUi?.name || searchQuery || 'Search'
+      const pathNames = []
+      if (matchedCategory?.name) pathNames.push(matchedCategory.name)
+      else if (selectedCategory?.name) pathNames.push(selectedCategory.name)
+      if (subcategoryId && selectedCategory?.children) {
+        const sub = (selectedCategory.children || []).find((c) => String(c._id) === String(subcategoryId))
+        if (sub?.name) pathNames.push(sub.name)
+      }
+
+      const tags = []
+      tags.push(city ? city.toUpperCase() : 'ALL CITIES')
+      if (minPrice || maxPrice) tags.push(`PRICE: ${minPrice || '0'}–${maxPrice || '∞'}`)
+
+      const qs = searchParams.toString()
+      await userService.addSavedSearch({
+        title: `My ${catName} Search`,
+        categoryPath: pathNames.length ? pathNames : [catName],
+        categoryId: categoryId || null,
+        subcategoryId: subcategoryId || null,
+        query: searchQuery,
+        filters: {
+          location: city,
+          minPrice,
+          maxPrice,
+          sortBy,
+          tags,
+        },
+        searchUrl: qs ? `/search?${qs}` : '/search',
+        notifyEnabled: true,
+      })
+      toast.success('Search saved')
+      navigate('/dashboard/my-search')
+    } catch (err) {
+      toast.error(err?.response?.data?.message || 'Failed to save search')
+    } finally {
+      setSavingSearch(false)
+    }
+  }
+
   const showAdvancedFilters = Boolean(categoryId)
   const quickFilterLabels = showAdvancedFilters ? ['Region', 'Price'] : []
   const gridColumns = rightPanelVisible && showAdvancedFilters ? 2 : 3
@@ -334,18 +387,31 @@ function SearchResultsPage() {
               </h1>
               <p className="mt-1 text-sm text-[#64748B]">{listingCountLabel}</p>
             </div>
-            <ListingToolbar
-              sortBy={sortBy}
-              onSortChange={(value) => {
-                setSortBy(value)
-                syncUrl({ sortBy: value })
-              }}
-              onOpenFilters={handleOpenFilters}
-              onQuickFilterClick={handleQuickFilter}
-              quickFilters={quickFilterLabels}
-              filtersOpen={panelType === 'advanced' && rightPanelOpen && showAdvancedFilters}
-              activeQuickFilter={panelType === 'price' && rightPanelOpen ? 'Price' : null}
-            />
+            <div className="flex flex-wrap items-center gap-3">
+              {(searchQuery || categoryId) ? (
+                <button
+                  type="button"
+                  onClick={handleSaveSearch}
+                  disabled={savingSearch}
+                  className="inline-flex items-center gap-2 rounded-full border border-brand/20 bg-brand-50 px-4 py-2.5 text-sm font-semibold text-brand transition duration-200 hover:bg-brand-100 disabled:opacity-60"
+                >
+                  <BookmarkPlus className="h-4 w-4" />
+                  {savingSearch ? 'Saving…' : 'Save search'}
+                </button>
+              ) : null}
+              <ListingToolbar
+                sortBy={sortBy}
+                onSortChange={(value) => {
+                  setSortBy(value)
+                  syncUrl({ sortBy: value })
+                }}
+                onOpenFilters={handleOpenFilters}
+                onQuickFilterClick={handleQuickFilter}
+                quickFilters={quickFilterLabels}
+                filtersOpen={panelType === 'advanced' && rightPanelOpen && showAdvancedFilters}
+                activeQuickFilter={panelType === 'price' && rightPanelOpen ? 'Price' : null}
+              />
+            </div>
           </div>
 
           {!searchQuery && !categoryId ? (

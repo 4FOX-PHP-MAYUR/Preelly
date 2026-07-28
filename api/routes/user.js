@@ -1,17 +1,55 @@
 const express = require('express')
 const router = express.Router()
+const crypto = require('crypto')
 const authMiddleware = require('../middleware/auth')
 const multer = require('multer')
 const path = require('path')
 const fs = require('fs')
+const { body, validationResult } = require('express-validator')
 const Product = require('../models/Product')
 const User = require('../models/User')
 const Follow = require('../models/Follow')
 const Order = require('../models/Order')
 const Notification = require('../models/Notification')
+const EmailOtp = require('../models/EmailOtp')
+const { sendEmail } = require('../utils/mailer')
 const { isSuperAdminRole, buildFullPermissionSet } = require('../config/adminPermissions')
 const { getPermissionMapForRole } = require('../services/adminPermissionService')
 const validateObjectId = require('../middleware/validateObjectId')
+
+const CHANGE_EMAIL_PURPOSE = 'change_email'
+const OTP_LENGTH = Number(process.env.EMAIL_OTP_LENGTH || 6)
+const OTP_TTL_SECONDS = Number(process.env.EMAIL_OTP_TTL_SECONDS || 600)
+const OTP_MAX_ATTEMPTS = Number(process.env.EMAIL_OTP_MAX_ATTEMPTS || 5)
+const OTP_LOCK_SECONDS = Number(process.env.EMAIL_OTP_LOCK_SECONDS || 900)
+
+const normalizeEmail = (value) => String(value || '').trim().toLowerCase()
+const generateOtpCode = () => {
+  const min = 10 ** (OTP_LENGTH - 1)
+  const max = 10 ** OTP_LENGTH - 1
+  return String(Math.floor(min + Math.random() * (max - min + 1)))
+}
+const hashOtp = (otpCode) => crypto.createHash('sha256').update(String(otpCode)).digest('hex')
+
+const sendChangeEmailOtp = async (email) => {
+  const code = generateOtpCode()
+  const otpHash = hashOtp(code)
+  const expiresAt = new Date(Date.now() + OTP_TTL_SECONDS * 1000)
+
+  await EmailOtp.findOneAndUpdate(
+    { email, purpose: CHANGE_EMAIL_PURPOSE },
+    { otpHash, expiresAt, attempts: 0, lockedUntil: null },
+    { upsert: true, returnDocument: 'after' }
+  )
+
+  const minutes = Math.ceil(OTP_TTL_SECONDS / 60)
+  await sendEmail({
+    to: email,
+    subject: 'Your Preelly email change code',
+    text: `Your verification code is: ${code}\n\nUse this code to confirm your new email address. It expires in ${minutes} minutes.`,
+    html: `<p>Your verification code is:</p><h2 style="margin: 0 0 12px 0;">${code}</h2><p>Use this code to confirm your new email address. It expires in ${minutes} minutes.</p>`,
+  })
+}
 
 const avatarDir = path.join(__dirname, '..', 'uploads', 'avatars')
 const identityDir = path.join(__dirname, '..', 'uploads', 'identity')
@@ -597,6 +635,10 @@ router.put('/profile', authMiddleware, async (req, res) => {
       if (!allowedGenders.includes(gender)) return res.status(400).json({ message: 'Invalid gender' })
       user.gender = gender
     }
+    if (req.body?.genderCustom !== undefined) {
+      const custom = req.body.genderCustom == null ? '' : String(req.body.genderCustom).trim()
+      user.genderCustom = custom || null
+    }
     if (dob != null && String(dob).trim()) {
       const d = new Date(String(dob))
       if (Number.isNaN(d.getTime())) return res.status(400).json({ message: 'Invalid date of birth' })
@@ -634,6 +676,123 @@ router.put('/profile', authMiddleware, async (req, res) => {
     res.status(500).json({ message: 'Error updating profile' })
   }
 })
+
+// @route   POST /api/user/change-email/request
+// @desc    Send OTP to a new email address for email change
+// @access  Private
+router.post(
+  '/change-email/request',
+  authMiddleware,
+  [body('email').isEmail().withMessage('Please enter a valid email')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req)
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg })
+      }
+
+      const newEmail = normalizeEmail(req.body.email)
+      const user = await User.findById(req.user._id)
+      if (!user) return res.status(404).json({ message: 'User not found' })
+
+      if (normalizeEmail(user.email) === newEmail) {
+        return res.status(400).json({ message: 'Enter an email that is different from your current one' })
+      }
+
+      const existing = await User.findOne({ email: newEmail, _id: { $ne: user._id } })
+      if (existing) {
+        return res.status(400).json({ message: 'This email is already linked to another account' })
+      }
+
+      await sendChangeEmailOtp(newEmail)
+      return res.status(200).json({
+        message: 'Verification code sent',
+        email: newEmail,
+        otpLength: OTP_LENGTH,
+      })
+    } catch (error) {
+      console.error('change-email request error:', error)
+      res.status(500).json({ message: 'Server error while sending verification code' })
+    }
+  }
+)
+
+// @route   POST /api/user/change-email/verify
+// @desc    Verify OTP and update the authenticated user's email
+// @access  Private
+router.post(
+  '/change-email/verify',
+  authMiddleware,
+  [
+    body('email').isEmail().withMessage('Please enter a valid email'),
+    body('otp')
+      .trim()
+      .isLength({ min: OTP_LENGTH, max: OTP_LENGTH })
+      .withMessage('Invalid OTP length'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req)
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg })
+      }
+
+      const newEmail = normalizeEmail(req.body.email)
+      const otp = String(req.body.otp || '').trim()
+      const user = await User.findById(req.user._id)
+      if (!user) return res.status(404).json({ message: 'User not found' })
+
+      if (normalizeEmail(user.email) === newEmail) {
+        return res.status(400).json({ message: 'Enter an email that is different from your current one' })
+      }
+
+      const existing = await User.findOne({ email: newEmail, _id: { $ne: user._id } })
+      if (existing) {
+        return res.status(400).json({ message: 'This email is already linked to another account' })
+      }
+
+      const record = await EmailOtp.findOne({ email: newEmail, purpose: CHANGE_EMAIL_PURPOSE }).select('+otpHash')
+      if (!record) return res.status(400).json({ message: 'Invalid or expired verification code' })
+
+      const now = Date.now()
+      if (record.lockedUntil && record.lockedUntil.getTime() > now) {
+        return res.status(429).json({ message: 'Too many attempts. Try again later.' })
+      }
+      if (record.expiresAt.getTime() < now) {
+        await EmailOtp.deleteOne({ _id: record._id })
+        return res.status(400).json({ message: 'Invalid or expired verification code' })
+      }
+
+      const isMatch = hashOtp(otp) === record.otpHash
+      if (!isMatch) {
+        record.attempts = (record.attempts || 0) + 1
+        if (record.attempts >= OTP_MAX_ATTEMPTS) {
+          record.lockedUntil = new Date(now + OTP_LOCK_SECONDS * 1000)
+        }
+        await record.save()
+        return res.status(400).json({ message: 'Invalid or expired verification code' })
+      }
+
+      await EmailOtp.deleteOne({ _id: record._id })
+
+      user.email = newEmail
+      user.isEmailVerified = true
+      await user.save()
+
+      return res.status(200).json({
+        message: 'Email updated successfully',
+        email: user.email,
+        isEmailVerified: true,
+      })
+    } catch (error) {
+      console.error('change-email verify error:', error)
+      if (error.code === 11000) {
+        return res.status(400).json({ message: 'This email is already linked to another account' })
+      }
+      res.status(500).json({ message: 'Server error while updating email' })
+    }
+  }
+)
 
 // @route   POST /api/user/change-password
 // @access  Private
@@ -753,9 +912,12 @@ router.get('/search', authMiddleware, async (req, res) => {
     const users = await User.find({
       _id: { $ne: req.user._id },
       status: 'active',
-      name: { $regex: safe, $options: 'i' },
+      $or: [
+        { name: { $regex: safe, $options: 'i' } },
+        { displayName: { $regex: safe, $options: 'i' } },
+      ],
     })
-      .select('name avatar isVerified')
+      .select('name displayName avatar isVerified role')
       .sort({ name: 1 })
       .limit(limit)
       .lean()
@@ -882,6 +1044,436 @@ router.delete('/locations/:locId', authMiddleware, async (req, res) => {
     console.error('Error deleting location:', error)
     if (error.name === 'CastError') return res.status(400).json({ message: 'Invalid location ID' })
     res.status(500).json({ message: 'Error deleting location' })
+  }
+})
+
+// ─── Bank Accounts ───────────────────────────────────────────────────────────
+
+function sanitizeBankPayload(body = {}) {
+  return {
+    bankName: String(body.bankName || '').trim(),
+    accountNumber: String(body.accountNumber || '').replace(/\s+/g, '').trim(),
+    iban: String(body.iban || '').replace(/\s+/g, '').trim().toUpperCase(),
+    swift: String(body.swift || '').replace(/\s+/g, '').trim().toUpperCase(),
+    branchName: String(body.branchName || '').trim(),
+    isPrimary: Boolean(body.isPrimary),
+  }
+}
+
+router.get('/bank-accounts', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('bankAccounts').lean()
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    res.json({ bankAccounts: user.bankAccounts || [] })
+  } catch (error) {
+    console.error('Error fetching bank accounts:', error)
+    res.status(500).json({ message: 'Error fetching bank accounts' })
+  }
+})
+
+router.post('/bank-accounts', authMiddleware, async (req, res) => {
+  try {
+    const payload = sanitizeBankPayload(req.body)
+    if (!payload.bankName) return res.status(400).json({ message: 'Bank name is required' })
+    if (!payload.accountNumber || payload.accountNumber.length < 4) {
+      return res.status(400).json({ message: 'Enter a valid account number' })
+    }
+
+    const user = await User.findById(req.user._id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    if (!user.bankAccounts) user.bankAccounts = []
+
+    if (payload.isPrimary || user.bankAccounts.length === 0) {
+      user.bankAccounts.forEach((a) => { a.isPrimary = false })
+      payload.isPrimary = true
+    }
+
+    user.bankAccounts.push(payload)
+    await user.save()
+    const saved = user.bankAccounts[user.bankAccounts.length - 1]
+    res.status(201).json({ bankAccount: saved })
+  } catch (error) {
+    console.error('Error adding bank account:', error)
+    res.status(500).json({ message: 'Error adding bank account' })
+  }
+})
+
+router.put('/bank-accounts/:accountId', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+
+    const account = user.bankAccounts?.id(req.params.accountId)
+    if (!account) return res.status(404).json({ message: 'Bank account not found' })
+
+    const payload = sanitizeBankPayload({ ...account.toObject(), ...req.body })
+    if (!payload.bankName) return res.status(400).json({ message: 'Bank name is required' })
+    if (!payload.accountNumber || payload.accountNumber.length < 4) {
+      return res.status(400).json({ message: 'Enter a valid account number' })
+    }
+
+    if (payload.isPrimary) {
+      user.bankAccounts.forEach((a) => { a.isPrimary = false })
+    }
+
+    account.bankName = payload.bankName
+    account.accountNumber = payload.accountNumber
+    account.iban = payload.iban
+    account.swift = payload.swift
+    account.branchName = payload.branchName
+    if (req.body.isPrimary !== undefined) account.isPrimary = Boolean(req.body.isPrimary)
+
+    await user.save()
+    res.json({ bankAccount: account })
+  } catch (error) {
+    console.error('Error updating bank account:', error)
+    if (error.name === 'CastError') return res.status(400).json({ message: 'Invalid bank account ID' })
+    res.status(500).json({ message: 'Error updating bank account' })
+  }
+})
+
+router.delete('/bank-accounts/:accountId', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+
+    const account = user.bankAccounts?.id(req.params.accountId)
+    if (!account) return res.status(404).json({ message: 'Bank account not found' })
+
+    const wasPrimary = account.isPrimary
+    account.deleteOne()
+    if (wasPrimary && user.bankAccounts.length > 0) {
+      user.bankAccounts[0].isPrimary = true
+    }
+    await user.save()
+    res.json({ message: 'Bank account deleted' })
+  } catch (error) {
+    console.error('Error deleting bank account:', error)
+    if (error.name === 'CastError') return res.status(400).json({ message: 'Invalid bank account ID' })
+    res.status(500).json({ message: 'Error deleting bank account' })
+  }
+})
+
+// ─── Saved Cards (metadata only — never store full PAN/CVV) ──────────────────
+
+function detectCardBrand(digits) {
+  if (/^4/.test(digits)) return 'Visa'
+  if (/^(5[1-5]|2[2-7])/.test(digits)) return 'Mastercard'
+  if (/^3[47]/.test(digits)) return 'American Express'
+  if (/^6(?:011|5)/.test(digits)) return 'Discover'
+  return 'Card'
+}
+
+function sanitizeCardPayload(body = {}, { requireNumber = false } = {}) {
+  const rawNumber = String(body.cardNumber || '').replace(/\D/g, '')
+  const last4FromBody = String(body.last4 || '').replace(/\D/g, '').slice(-4)
+  const last4 = rawNumber ? rawNumber.slice(-4) : last4FromBody
+  const brand = String(body.brand || '').trim() || (rawNumber ? detectCardBrand(rawNumber) : 'Card')
+  let expiry = String(body.expiry || '').trim()
+  if (expiry) {
+    const m = expiry.match(/^(\d{1,2})\s*[\/\-]?\s*(\d{2}|\d{4})$/)
+    if (m) {
+      const mm = String(m[1]).padStart(2, '0')
+      const yy = String(m[2]).slice(-2)
+      expiry = `${mm}/${yy}`
+    }
+  }
+  return {
+    brand,
+    last4,
+    expiry,
+    holderName: String(body.holderName || '').trim(),
+    nickname: String(body.nickname || '').trim(),
+    isPrimary: Boolean(body.isPrimary),
+    _rawNumber: rawNumber,
+    _requireNumber: requireNumber,
+  }
+}
+
+router.get('/saved-cards', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('savedCards').lean()
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    res.json({ savedCards: user.savedCards || [] })
+  } catch (error) {
+    console.error('Error fetching saved cards:', error)
+    res.status(500).json({ message: 'Error fetching saved cards' })
+  }
+})
+
+router.post('/saved-cards', authMiddleware, async (req, res) => {
+  try {
+    const payload = sanitizeCardPayload(req.body, { requireNumber: true })
+    if (!payload._rawNumber || payload._rawNumber.length < 12 || payload._rawNumber.length > 19) {
+      return res.status(400).json({ message: 'Enter a valid card number' })
+    }
+    if (!/^\d{4}$/.test(payload.last4)) {
+      return res.status(400).json({ message: 'Invalid card number' })
+    }
+    if (payload.expiry && !/^\d{2}\/\d{2}$/.test(payload.expiry)) {
+      return res.status(400).json({ message: 'Expiry must be MM/YY' })
+    }
+
+    const user = await User.findById(req.user._id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    if (!user.savedCards) user.savedCards = []
+
+    if (payload.isPrimary || user.savedCards.length === 0) {
+      user.savedCards.forEach((c) => { c.isPrimary = false })
+      payload.isPrimary = true
+    }
+
+    user.savedCards.push({
+      brand: payload.brand,
+      last4: payload.last4,
+      expiry: payload.expiry,
+      holderName: payload.holderName,
+      nickname: payload.nickname || `${payload.brand} Card`,
+      isPrimary: payload.isPrimary,
+    })
+    await user.save()
+    const saved = user.savedCards[user.savedCards.length - 1]
+    res.status(201).json({ savedCard: saved })
+  } catch (error) {
+    console.error('Error adding saved card:', error)
+    res.status(500).json({ message: 'Error adding saved card' })
+  }
+})
+
+router.put('/saved-cards/:cardId', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+
+    const card = user.savedCards?.id(req.params.cardId)
+    if (!card) return res.status(404).json({ message: 'Saved card not found' })
+
+    const payload = sanitizeCardPayload({
+      brand: card.brand,
+      last4: card.last4,
+      expiry: card.expiry,
+      holderName: card.holderName,
+      nickname: card.nickname,
+      isPrimary: card.isPrimary,
+      ...req.body,
+    })
+
+    if (payload._rawNumber) {
+      if (payload._rawNumber.length < 12 || payload._rawNumber.length > 19) {
+        return res.status(400).json({ message: 'Enter a valid card number' })
+      }
+      card.last4 = payload.last4
+      card.brand = payload.brand
+    }
+    if (payload.expiry && !/^\d{2}\/\d{2}$/.test(payload.expiry)) {
+      return res.status(400).json({ message: 'Expiry must be MM/YY' })
+    }
+    if (req.body.expiry !== undefined) card.expiry = payload.expiry
+    if (req.body.holderName !== undefined) card.holderName = payload.holderName
+    if (req.body.nickname !== undefined) card.nickname = payload.nickname
+    if (req.body.brand !== undefined && !payload._rawNumber) card.brand = payload.brand
+
+    if (payload.isPrimary) {
+      user.savedCards.forEach((c) => { c.isPrimary = false })
+      card.isPrimary = true
+    } else if (req.body.isPrimary !== undefined) {
+      card.isPrimary = Boolean(req.body.isPrimary)
+    }
+
+    await user.save()
+    res.json({ savedCard: card })
+  } catch (error) {
+    console.error('Error updating saved card:', error)
+    if (error.name === 'CastError') return res.status(400).json({ message: 'Invalid card ID' })
+    res.status(500).json({ message: 'Error updating saved card' })
+  }
+})
+
+router.delete('/saved-cards/:cardId', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+
+    const card = user.savedCards?.id(req.params.cardId)
+    if (!card) return res.status(404).json({ message: 'Saved card not found' })
+
+    const wasPrimary = card.isPrimary
+    card.deleteOne()
+    if (wasPrimary && user.savedCards.length > 0) {
+      user.savedCards[0].isPrimary = true
+    }
+    await user.save()
+    res.json({ message: 'Saved card deleted' })
+  } catch (error) {
+    console.error('Error deleting saved card:', error)
+    if (error.name === 'CastError') return res.status(400).json({ message: 'Invalid card ID' })
+    res.status(500).json({ message: 'Error deleting saved card' })
+  }
+})
+
+// ─── Saved Searches ──────────────────────────────────────────────────────────
+
+const SavedSearch = require('../models/SavedSearch')
+
+function buildProductMatchFromSavedSearch(doc) {
+  const match = { status: 'active' }
+  if (doc.categoryId) match.category = doc.categoryId
+  if (doc.subcategoryId) match.subcategory = doc.subcategoryId
+  if (doc.filters?.location) {
+    const loc = String(doc.filters.location).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    match.$and = match.$and || []
+    match.$and.push({
+      $or: [
+        { location: new RegExp(loc, 'i') },
+        { city: new RegExp(loc, 'i') },
+        { area: new RegExp(loc, 'i') },
+      ],
+    })
+  }
+  const min = doc.filters?.minPrice !== '' && doc.filters?.minPrice != null ? Number(doc.filters.minPrice) : null
+  const max = doc.filters?.maxPrice !== '' && doc.filters?.maxPrice != null ? Number(doc.filters.maxPrice) : null
+  if ((min != null && !Number.isNaN(min)) || (max != null && !Number.isNaN(max))) {
+    match.price = {}
+    if (min != null && !Number.isNaN(min)) match.price.$gte = min
+    if (max != null && !Number.isNaN(max)) match.price.$lte = max
+  }
+  if (doc.query) {
+    match.$or = [
+      { title: new RegExp(String(doc.query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
+      { description: new RegExp(String(doc.query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
+    ]
+  }
+  return match
+}
+
+async function enrichSavedSearch(doc) {
+  const plain = doc.toObject ? doc.toObject() : { ...doc }
+  const match = buildProductMatchFromSavedSearch(plain)
+  const since = plain.lastViewedAt || plain.createdAt || new Date(0)
+
+  const [totalMatches, newAdsCount, previewProducts] = await Promise.all([
+    Product.countDocuments(match),
+    Product.countDocuments({ ...match, createdAt: { $gt: since } }),
+    Product.find(match)
+      .sort({ createdAt: -1 })
+      .limit(4)
+      .select('images title price currency')
+      .lean(),
+  ])
+
+  return {
+    ...plain,
+    matchCount: totalMatches,
+    newAdsCount,
+    previewImages: (previewProducts || [])
+      .map((p) => (Array.isArray(p.images) && p.images[0] ? p.images[0] : null))
+      .filter(Boolean),
+  }
+}
+
+router.get('/saved-searches', authMiddleware, async (req, res) => {
+  try {
+    const docs = await SavedSearch.find({ userId: req.user._id }).sort({ updatedAt: -1 }).lean()
+    const enriched = await Promise.all(docs.map((d) => enrichSavedSearch(d)))
+
+    const tabsMap = new Map()
+    enriched.forEach((s) => {
+      const root = s.categoryPath?.[0] || 'Other'
+      tabsMap.set(root, (tabsMap.get(root) || 0) + 1)
+    })
+    const tabs = [
+      { key: 'all', label: 'All', count: enriched.length },
+      ...Array.from(tabsMap.entries()).map(([label, count]) => ({
+        key: label.toLowerCase().replace(/\s+/g, '-'),
+        label,
+        count,
+      })),
+    ]
+
+    res.json({ savedSearches: enriched, tabs })
+  } catch (error) {
+    console.error('Error fetching saved searches:', error)
+    res.status(500).json({ message: 'Error fetching saved searches' })
+  }
+})
+
+router.post('/saved-searches', authMiddleware, async (req, res) => {
+  try {
+    const {
+      title,
+      categoryPath,
+      categoryId,
+      subcategoryId,
+      query,
+      filters,
+      searchUrl,
+      notifyEnabled,
+    } = req.body || {}
+
+    const trimmedTitle = String(title || '').trim()
+    if (!trimmedTitle) return res.status(400).json({ message: 'Title is required' })
+
+    const doc = await SavedSearch.create({
+      userId: req.user._id,
+      title: trimmedTitle.slice(0, 120),
+      categoryPath: Array.isArray(categoryPath) ? categoryPath.map((s) => String(s).trim()).filter(Boolean) : [],
+      categoryId: categoryId || null,
+      subcategoryId: subcategoryId || null,
+      query: String(query || '').trim().slice(0, 300),
+      filters: {
+        location: String(filters?.location || '').trim(),
+        minPrice: filters?.minPrice != null ? String(filters.minPrice) : '',
+        maxPrice: filters?.maxPrice != null ? String(filters.maxPrice) : '',
+        sortBy: String(filters?.sortBy || 'newest'),
+        tags: Array.isArray(filters?.tags) ? filters.tags.map(String).slice(0, 12) : [],
+        extra: filters?.extra && typeof filters.extra === 'object' ? filters.extra : {},
+      },
+      searchUrl: String(searchUrl || '/search').slice(0, 2000),
+      notifyEnabled: notifyEnabled !== false,
+      lastViewedAt: new Date(),
+    })
+
+    const enriched = await enrichSavedSearch(doc)
+    res.status(201).json({ savedSearch: enriched })
+  } catch (error) {
+    console.error('Error saving search:', error)
+    res.status(500).json({ message: 'Error saving search' })
+  }
+})
+
+router.put('/saved-searches/:id', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const doc = await SavedSearch.findOne({ _id: req.params.id, userId: req.user._id })
+    if (!doc) return res.status(404).json({ message: 'Saved search not found' })
+
+    if (req.body.title != null) doc.title = String(req.body.title).trim().slice(0, 120) || doc.title
+    if (req.body.notifyEnabled !== undefined) doc.notifyEnabled = Boolean(req.body.notifyEnabled)
+    if (req.body.markViewed) doc.lastViewedAt = new Date()
+    if (req.body.filters && typeof req.body.filters === 'object') {
+      doc.filters = {
+        ...doc.filters.toObject?.() || doc.filters,
+        ...req.body.filters,
+      }
+    }
+    if (req.body.searchUrl != null) doc.searchUrl = String(req.body.searchUrl).slice(0, 2000)
+    await doc.save()
+
+    const enriched = await enrichSavedSearch(doc)
+    res.json({ savedSearch: enriched })
+  } catch (error) {
+    console.error('Error updating saved search:', error)
+    res.status(500).json({ message: 'Error updating saved search' })
+  }
+})
+
+router.delete('/saved-searches/:id', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const doc = await SavedSearch.findOneAndDelete({ _id: req.params.id, userId: req.user._id })
+    if (!doc) return res.status(404).json({ message: 'Saved search not found' })
+    res.json({ message: 'Saved search deleted' })
+  } catch (error) {
+    console.error('Error deleting saved search:', error)
+    res.status(500).json({ message: 'Error deleting saved search' })
   }
 })
 

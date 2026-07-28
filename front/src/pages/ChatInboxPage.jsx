@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import {
-  ArrowLeft, Ban, Bell, BellOff, Bookmark, Briefcase, Building2, Car, Check, CheckCheck,
+  ArrowLeft, Ban, Bookmark, Briefcase, Building2, Car, Check, CheckCheck,
   FileText, Flag, Image as ImageIcon, LayoutGrid, MessageCircle, Mic, MoreVertical, Paperclip, Phone, Play, Plus,
   Search, Send, Settings, Shirt, Smartphone, Sofa, Square, Video, X,
 } from 'lucide-react'
@@ -13,6 +13,9 @@ import MarketplaceTopBar from '../components/Layout/MarketplaceTopBar'
 import MarketplaceLogoBlock from '../components/Layout/MarketplaceLogoBlock'
 import { MARKETPLACE_LOGO_CELL } from '../components/Layout/marketplaceLayoutStyles'
 import SidebarCategoryList from '../components/Layout/SidebarCategoryList'
+import MoreOptionsModal, { buildChatMoreOptions } from '../components/Chat/MoreOptionsModal'
+import BlockFlow from '../components/Block/BlockFlow'
+import UnblockConfirmModal from '../components/Block/UnblockConfirmModal'
 import { cartService, productService, checkoutServicePublicService, chatService, userService } from '@shared/services/api'
 import { PreellyPayModal, derivePreellyConditions, PREELLY_PAY_CHARGE } from '@shared/components/PreellyPayModal'
 import { useChat } from '@shared/components/Chat/ChatContext'
@@ -901,13 +904,14 @@ export default function ChatInboxPage() {
   const [reportReason, setReportReason] = useState('')
   const [reportDetails, setReportDetails] = useState('')
   const [reportSubmitting, setReportSubmitting] = useState(false)
-  const menuRef = useRef(null)
 
   // Block/report target only exists for 1:1 product chats (not support/groups).
   const is1to1 = Boolean(activeThread && !activeThread.isGroup && activeThread.type !== 'support')
   const otherPartyId = is1to1 ? (otherParty?.id || null) : null
   const isMuted = Boolean(activeThread?.muted)
   const [blocking, setBlocking] = useState(false)
+  const [showBlockFlow, setShowBlockFlow] = useState(false)
+  const [showUnblockConfirm, setShowUnblockConfirm] = useState(false)
 
   // A blocked thread is read-only for both sides; the copy differs by who blocked whom.
   const blockedByMe = Boolean(is1to1 && activeThread?.blockedByMe)
@@ -923,19 +927,19 @@ export default function ChatInboxPage() {
         subtitle: "You can't send messages in this chat.",
       }
 
-  // Close the kebab menu on outside click / Escape.
-  useEffect(() => {
-    if (!menuOpen) return undefined
-    const onDown = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false) }
-    const onKey = (e) => { if (e.key === 'Escape') setMenuOpen(false) }
-    document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey) }
-  }, [menuOpen])
+  const blockTargetUser = useMemo(() => {
+    if (!otherPartyId) return null
+    return {
+      _id: otherPartyId,
+      name: otherParty?.name,
+      displayName: otherParty?.name,
+      avatar: otherParty?.avatar,
+      role: otherParty?.role,
+    }
+  }, [otherPartyId, otherParty])
 
   const handleToggleMute = async () => {
     if (!activeId || muting) return
-    setMenuOpen(false)
     setMuting(true)
     try {
       const res = await chatService.toggleMute(activeId)
@@ -949,34 +953,43 @@ export default function ChatInboxPage() {
     }
   }
 
-  // Block/unblock is the same toggle endpoint. Blocking locks the thread in place
-  // (rather than navigating away) so the "You've blocked this account" state shows.
-  const handleToggleBlock = async () => {
-    setMenuOpen(false)
-    if (!otherPartyId || blocking) return
-    if (!blockedByMe && !window.confirm(
-      `Block ${otherParty?.name || 'this user'}? You won't be able to message each other and they can no longer follow you.`
-    )) return
-    setBlocking(true)
-    try {
-      const res = await userService.blockUser(otherPartyId)
-      const blocked = Boolean(res?.data?.blocked)
-      setActiveThread((prev) => (prev && prev.id === activeId ? { ...prev, blockedByMe: blocked } : prev))
-      toast.success(res?.data?.message || (blocked ? 'User blocked' : 'User unblocked'))
-      refreshChats()
-    } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to update block status')
-    } finally {
-      setBlocking(false)
+  const openBlockOrUnblock = () => {
+    if (!otherPartyId || blocking) return false
+    if (blockedByMe) {
+      setShowUnblockConfirm(true)
+      return true
     }
+    setShowBlockFlow(true)
+    return true
+  }
+
+  const applyBlockedState = (blocked) => {
+    setActiveThread((prev) => (prev && prev.id === activeId ? { ...prev, blockedByMe: blocked } : prev))
+    refreshChats()
   }
 
   const openReport = () => {
-    setMenuOpen(false)
     setReportReason('')
     setReportDetails('')
     setReportOpen(true)
   }
+
+  const moreOptions = useMemo(
+    () =>
+      buildChatMoreOptions({
+        is1to1,
+        blockedByMe,
+        blocking,
+        muting,
+        isMuted,
+        onBlock: openBlockOrUnblock,
+        onReport: openReport,
+        onMute: handleToggleMute,
+      }),
+    // Handlers close over latest thread/user state; rebuild when those change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [is1to1, blockedByMe, blocking, muting, isMuted, activeId, otherPartyId, otherParty?.name]
+  )
 
   const submitReport = async () => {
     if (!activeId || !reportReason || reportSubmitting) return
@@ -1316,59 +1329,16 @@ export default function ChatInboxPage() {
                     </button>
                   )}
 
-                  <div className="relative" ref={menuRef}>
-                    <button
-                      type="button"
-                      onClick={() => setMenuOpen((v) => !v)}
-                      aria-haspopup="menu"
-                      aria-expanded={menuOpen}
-                      aria-label="Chat options"
-                      className={`h-9 w-9 rounded-full flex items-center justify-center transition-colors ${menuOpen ? 'bg-purple-50 text-purple-600' : 'text-gray-500 hover:bg-gray-100'}`}
-                    >
-                      <MoreVertical className="h-5 w-5" />
-                    </button>
-
-                    {menuOpen && (
-                      <div
-                        role="menu"
-                        className="absolute right-0 top-11 z-50 w-56 overflow-hidden rounded-2xl border border-gray-100 bg-white py-1.5 shadow-xl"
-                      >
-                        {is1to1 && (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={handleToggleBlock}
-                            disabled={blocking}
-                            className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-60"
-                          >
-                            <Ban className="h-5 w-5 text-purple-600" />
-                            {blockedByMe ? 'Unblock' : 'Block'}
-                          </button>
-                        )}
-                        {is1to1 && (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            onClick={openReport}
-                            className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50"
-                          >
-                            <Flag className="h-5 w-5 text-purple-600" />
-                            Report
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={handleToggleMute}
-                          disabled={muting}
-                          className="flex w-full items-center gap-3 px-4 py-3 text-sm font-medium text-gray-800 hover:bg-gray-50 disabled:opacity-60"
-                        >
-                          {isMuted ? <Bell className="h-5 w-5 text-purple-600" /> : <BellOff className="h-5 w-5 text-purple-600" />}
-                          {isMuted ? 'Unmute Notifications' : 'Mute Notifications'}
-                        </button>
-                      </div>
-                    )}
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setMenuOpen(true)}
+                    aria-haspopup="dialog"
+                    aria-expanded={menuOpen}
+                    aria-label="Chat options"
+                    className={`h-9 w-9 rounded-full flex items-center justify-center transition-colors duration-200 ${menuOpen ? 'bg-brand-50 text-brand' : 'text-gray-500 hover:bg-gray-100'}`}
+                  >
+                    <MoreVertical className="h-5 w-5" />
+                  </button>
                 </div>
               </div>
 
@@ -1601,6 +1571,26 @@ export default function ChatInboxPage() {
                 </div>
               )}
 
+              <MoreOptionsModal
+                open={menuOpen}
+                onClose={() => setMenuOpen(false)}
+                options={moreOptions}
+              />
+
+              <BlockFlow
+                open={showBlockFlow}
+                user={blockTargetUser}
+                onClose={() => setShowBlockFlow(false)}
+                onBlocked={() => applyBlockedState(true)}
+              />
+
+              <UnblockConfirmModal
+                open={showUnblockConfirm}
+                user={blockTargetUser}
+                onClose={() => setShowUnblockConfirm(false)}
+                onUnblocked={() => applyBlockedState(false)}
+              />
+
               {/* Report user modal */}
               {reportOpen && (
                 <div
@@ -1693,11 +1683,11 @@ export default function ChatInboxPage() {
                     {blockedByMe && (
                       <button
                         type="button"
-                        onClick={handleToggleBlock}
+                        onClick={() => setShowUnblockConfirm(true)}
                         disabled={blocking}
                         className="mt-4 rounded-full border border-gray-200 px-5 py-2 text-sm font-semibold text-[#25246E] transition-colors hover:bg-gray-50 disabled:opacity-60"
                       >
-                        {blocking ? 'Unblocking…' : 'Unblock'}
+                        Unblock
                       </button>
                     )}
                   </div>

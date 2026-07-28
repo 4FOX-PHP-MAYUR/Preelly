@@ -261,11 +261,22 @@ router.get('/user/:id/follow-status', authMiddleware, validateObjectId('id'), as
     const followingId = req.params.id
 
     if (followerId.toString() === followingId) {
-      return res.json({ status: 'self' })
+      return res.json({ status: 'self', blockedByMe: false, blockedMe: false })
     }
 
-    const record = await Follow.findOne({ follower: followerId, following: followingId })
-    res.json({ status: record ? record.status : 'none' })
+    const [record, blockedByMeRec, blockedMeRec] = await Promise.all([
+      Follow.findOne({ follower: followerId, following: followingId }),
+      // I blocked them: follower=them, following=me, status=blocked
+      Follow.findOne({ follower: followingId, following: followerId, status: 'blocked' }).select('_id'),
+      // They blocked me: follower=me, following=them, status=blocked
+      Follow.findOne({ follower: followerId, following: followingId, status: 'blocked' }).select('_id'),
+    ])
+
+    res.json({
+      status: record ? record.status : 'none',
+      blockedByMe: Boolean(blockedByMeRec),
+      blockedMe: Boolean(blockedMeRec),
+    })
   } catch (error) {
     res.status(500).json({ message: 'Error fetching follow status' })
   }
@@ -428,6 +439,39 @@ router.post('/user/:id/follow/reject', authMiddleware, validateObjectId('id'), a
   }
 })
 
+// @route   GET /api/user/blocked
+// @desc    List users the current user has blocked
+// @access  Private
+router.get('/user/blocked', authMiddleware, async (req, res) => {
+  try {
+    const records = await Follow.find({ following: req.user._id, status: 'blocked' })
+      .populate('follower', 'name displayName avatar email phone isVerified')
+      .sort({ blockedAt: -1 })
+      .lean()
+
+    const blockedUsers = records
+      .map((r) => {
+        if (!r.follower) return null
+        return {
+          _id: r.follower._id,
+          name: r.follower.name,
+          displayName: r.follower.displayName,
+          avatar: r.follower.avatar,
+          email: r.follower.email,
+          phone: r.follower.phone,
+          isVerified: r.follower.isVerified,
+          blockedAt: r.blockedAt || null,
+        }
+      })
+      .filter(Boolean)
+
+    res.json({ blockedUsers, count: blockedUsers.length })
+  } catch (error) {
+    console.error('Error fetching blocked users:', error)
+    res.status(500).json({ message: 'Error fetching blocked users' })
+  }
+})
+
 // @route   POST /api/user/:id/block
 // @desc    Block/Unblock a user — blocked user cannot follow you
 // @access  Private
@@ -435,6 +479,7 @@ router.post('/user/:id/block', authMiddleware, validateObjectId('id'), async (re
   try {
     const blockerId = req.user._id
     const targetId = req.params.id
+    const action = String(req.body?.action || '').trim().toLowerCase() // 'block' | 'unblock' | ''
 
     if (blockerId.toString() === targetId) {
       return res.status(400).json({ message: 'Cannot block yourself' })
@@ -448,11 +493,18 @@ router.post('/user/:id/block', authMiddleware, validateObjectId('id'), async (re
     // The block record lives as: follower=targetId, following=blockerId, status=blocked
     // meaning: targetId is blocked from following blockerId
     const existing = await Follow.findOne({ follower: targetId, following: blockerId })
+    const currentlyBlocked = existing && existing.status === 'blocked'
 
-    if (existing && existing.status === 'blocked') {
-      // unblock — remove the record
+    if (action === 'unblock' || (currentlyBlocked && action !== 'block')) {
+      if (!currentlyBlocked) {
+        return res.json({ blocked: false, message: 'User is not blocked' })
+      }
       await existing.deleteOne()
       return res.json({ blocked: false, message: 'User unblocked' })
+    }
+
+    if (currentlyBlocked) {
+      return res.json({ blocked: true, message: 'User already blocked' })
     }
 
     if (existing) {

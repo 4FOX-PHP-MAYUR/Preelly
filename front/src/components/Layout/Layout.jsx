@@ -26,16 +26,24 @@ function Layout({ children }) {
     location.pathname === '/post-ad/select-package' ||
     location.pathname === '/post-ad/storage' ||
     location.pathname.startsWith('/post-ad/payment')
-  // Settings and the self profile render their own full-height home-style shell
+  // Settings/profile edit and the self profile render their own full-height home-style shell
   // (with the home header) — no app chrome/footer.
-  const isDashboardSettings = location.pathname === '/dashboard/settings'
+  const isSettingsShell =
+    location.pathname === '/dashboard/settings' ||
+    location.pathname === '/dashboard/profile' ||
+    location.pathname === '/dashboard/blocked-users' ||
+    location.pathname === '/dashboard/support' ||
+    location.pathname === '/dashboard/faq' ||
+    location.pathname === '/dashboard/contact' ||
+    location.pathname === '/dashboard/drafts' ||
+    location.pathname === '/dashboard/my-search'
   const isMyProfile = location.pathname === '/my-profile'
 
   return (
-    <div className={`min-h-screen ${isReelsPage ? 'bg-black' : isHomePage || isChatPage || isProductDetailPage || isSearchPage || isCategoryProductsPage || isDashboardSettings ? 'bg-white' : isCategoryBrowsePage || isUserProfilePage ? 'bg-[#f7f8fa]' : isAuthRoute ? 'bg-[#f6f7fb]' : isPostAdFlow ? 'bg-white' : 'bg-gray-50'}`}>
+    <div className={`min-h-screen ${isReelsPage ? 'bg-black' : isHomePage || isChatPage || isProductDetailPage || isSearchPage || isCategoryProductsPage || isSettingsShell ? 'bg-white' : isCategoryBrowsePage || isUserProfilePage ? 'bg-[#f7f8fa]' : isAuthRoute ? 'bg-[#f6f7fb]' : isPostAdFlow ? 'bg-white' : 'bg-gray-50'}`}>
       <Header />
       <main className={isPostAdFlow || isSearchPage || isCategoryProductsPage ? 'overflow-x-hidden min-w-0' : 'min-w-0'}>{children}</main>
-      {!isSearchPage && !isCategoryProductsPage && !isDashboardSettings && !isMyProfile ? <Footer /> : null}
+      {!isSearchPage && !isCategoryProductsPage && !isSettingsShell && !isMyProfile ? <Footer /> : null}
     </div>
   )
 }

@@ -8,43 +8,82 @@ import toast from 'react-hot-toast'
 import {
   VerificationModalShell,
   VerificationIntroBody,
-  VerificationMethodCard,
   VerificationPrimaryButton,
   VerificationOutlineButton,
   VERIFY_BLUE,
 } from './verification/VerificationModalShared'
 
-function IdUploadZone({ label, preview, onFileSelect }) {
+function IdUploadZone({ label, preview, onFileSelect, onDelete, onRetake }) {
   const inputRef = useRef(null)
+  const [dragging, setDragging] = useState(false)
+
+  const pick = (file) => {
+    if (!file) return
+    onFileSelect(file)
+  }
 
   return (
-    <div className="space-y-2">
-      <p className="text-[14px] font-semibold text-gray-800">{label}</p>
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        className="w-full rounded-2xl border-2 border-dashed p-4 flex flex-col items-center gap-2 min-h-[120px] justify-center transition hover:opacity-90"
-        style={{ borderColor: '#C7D7FF', backgroundColor: '#FAFBFF' }}
-      >
-        {preview ? (
-          <img src={preview} alt={label} className="max-h-24 rounded-lg object-contain" />
-        ) : (
-          <>
-            <div className="h-10 w-10 rounded-full flex items-center justify-center" style={{ backgroundColor: '#EEF4FF' }}>
-              <Upload className="h-5 w-5" style={{ color: VERIFY_BLUE }} />
-            </div>
-            <span className="text-xs text-gray-500">Tap to upload photo</span>
-          </>
-        )}
-      </button>
+    <div
+      onDragOver={(e) => {
+        e.preventDefault()
+        setDragging(true)
+      }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={(e) => {
+        e.preventDefault()
+        setDragging(false)
+        pick(e.dataTransfer.files?.[0])
+      }}
+      className={`relative overflow-hidden rounded-[16px] border-2 border-dashed transition duration-200 ${
+        dragging ? 'border-brand bg-brand-50' : 'border-[#B8C7FF] bg-white'
+      }`}
+    >
+      {preview ? (
+        <div className="flex flex-col items-center px-4 pb-4 pt-3">
+          <p className="mb-2 text-sm font-medium text-slate-500">{label}</p>
+          <img src={preview} alt={label} className="max-h-36 w-full rounded-xl object-contain" />
+          <div className="mt-3 flex items-center gap-6">
+            <button
+              type="button"
+              onClick={onDelete}
+              className="text-sm font-semibold text-red-500 transition duration-200 hover:text-red-600"
+            >
+              Delete
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onRetake?.()
+                inputRef.current?.click()
+              }}
+              className="text-sm font-semibold text-brand transition duration-200 hover:text-brand-700"
+            >
+              Retake
+            </button>
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="flex min-h-[150px] w-full flex-col items-center justify-center gap-2 px-4 py-8"
+        >
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-brand-50 text-brand">
+            <Upload className="h-6 w-6" />
+          </div>
+          <span className="text-sm font-semibold text-slate-700">{label}</span>
+          <span className="text-xs text-slate-400">Click here to upload or open camera</span>
+        </button>
+      )}
       <input
         ref={inputRef}
         type="file"
-        accept="image/*"
+        accept="image/jpeg,image/jpg,image/png"
+        capture="environment"
         className="hidden"
         onChange={(e) => {
-          const file = e.target.files?.[0]
-          if (file) onFileSelect(file)
+          pick(e.target.files?.[0])
+          e.target.value = ''
         }}
       />
     </div>
@@ -59,16 +98,26 @@ function UploadStep({ onSubmit, submitting }) {
   const [processing, setProcessing] = useState(false)
 
   const handleFile = async (side, file) => {
+    if (!file) return
+    const okType = ['image/jpeg', 'image/jpg', 'image/png'].includes(file.type)
+    if (!okType) {
+      toast.error('Only JPG, JPEG, or PNG images are allowed')
+      return
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      toast.error('Image must be under 8MB')
+      return
+    }
     setProcessing(true)
     try {
-      // Downscale/compress in the browser so large phone photos don't exceed the
-      // server's per-file upload limit (which surfaces as "File too large").
       const compressed = await compressImageFile(file)
       const preview = URL.createObjectURL(compressed)
       if (side === 'front') {
+        if (frontPreview) URL.revokeObjectURL(frontPreview)
         setFrontFile(compressed)
         setFrontPreview(preview)
       } else {
+        if (backPreview) URL.revokeObjectURL(backPreview)
         setBackFile(compressed)
         setBackPreview(preview)
       }
@@ -86,27 +135,31 @@ function UploadStep({ onSubmit, submitting }) {
   }
 
   return (
-    <div className="px-6 pb-7 pt-2 space-y-4">
-      <div
-        className="rounded-xl border-2 border-dashed p-4"
-        style={{ borderColor: '#C7D7FF', backgroundColor: '#EEF4FF' }}
-      >
-        <p className="text-[14px] font-bold text-gray-900 mb-1">Please select an option</p>
-        <p className="text-[12px] text-gray-500 leading-relaxed">
-          Upload clear photos of your Emirates ID (front and back). Our admin team will review your documents.
-        </p>
-      </div>
+    <div className="space-y-4 px-6 pb-7 pt-1">
+      <h3 className="text-base font-bold text-slate-900">Upload Your Emirates Id</h3>
 
-      <VerificationMethodCard
-        icon={CreditCard}
-        title="Verify via Emirates ID"
-        description="Upload front and back photos of your Emirates ID for identity verification."
-        selected
-        onClick={() => {}}
+      <IdUploadZone
+        label="Front copy"
+        preview={frontPreview}
+        onFileSelect={(f) => handleFile('front', f)}
+        onDelete={() => {
+          if (frontPreview) URL.revokeObjectURL(frontPreview)
+          setFrontFile(null)
+          setFrontPreview(null)
+        }}
+        onRetake={() => {}}
       />
-
-      <IdUploadZone label="Emirates ID (Front)" preview={frontPreview} onFileSelect={(f) => handleFile('front', f)} />
-      <IdUploadZone label="Emirates ID (Back)" preview={backPreview} onFileSelect={(f) => handleFile('back', f)} />
+      <IdUploadZone
+        label="Back Copy"
+        preview={backPreview}
+        onFileSelect={(f) => handleFile('back', f)}
+        onDelete={() => {
+          if (backPreview) URL.revokeObjectURL(backPreview)
+          setBackFile(null)
+          setBackPreview(null)
+        }}
+        onRetake={() => {}}
+      />
 
       <VerificationPrimaryButton onClick={handleSubmit} disabled={submitting || processing}>
         {submitting ? (
@@ -118,7 +171,7 @@ function UploadStep({ onSubmit, submitting }) {
             <Loader2 className="h-4 w-4 animate-spin" /> Processing photo…
           </span>
         ) : (
-          'Submit for Review'
+          'Submit'
         )}
       </VerificationPrimaryButton>
     </div>
@@ -219,7 +272,7 @@ export default function IdentityVerificationFlow({ onClose }) {
 
   const TITLES = {
     intro: 'Get Verified On Preelly',
-    upload: 'Verify Your Identity',
+    upload: 'Get Verified',
     pending: 'Identity Review Pending',
     rejected: 'Verification Rejected',
     success: 'Identity Verified',

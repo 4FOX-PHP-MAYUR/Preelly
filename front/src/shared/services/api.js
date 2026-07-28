@@ -388,9 +388,13 @@ export const userService = {
     if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
     return api.post(`/user/${userId}/follow/reject`)
   },
-  blockUser: (userId) => {
+  blockUser: (userId, data = {}) => {
     if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
-    return api.post(`/user/${userId}/block`)
+    return api.post(`/user/${userId}/block`, data)
+  },
+  unblockUser: (userId) => {
+    if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
+    return api.post(`/user/${userId}/block`, { action: 'unblock' })
   },
   getUserProfile: (userId) => {
     if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
@@ -403,6 +407,8 @@ export const userService = {
       ...(options.useCookieSession ? { __skipBearer: true } : {}),
     }),
   updateProfile: (data) => api.put('/user/profile', data),
+  requestEmailChange: (email) => api.post('/user/change-email/request', { email }),
+  verifyEmailChange: ({ email, otp }) => api.post('/user/change-email/verify', { email, otp }),
   completeBasicProfile: (formData) =>
     api.post('/user/profile', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
@@ -428,6 +434,19 @@ export const userService = {
   addLocation: (data) => api.post('/user/locations', data),
   updateLocation: (locId, data) => api.put(`/user/locations/${locId}`, data),
   deleteLocation: (locId) => api.delete(`/user/locations/${locId}`),
+  getBankAccounts: () => api.get('/user/bank-accounts'),
+  addBankAccount: (data) => api.post('/user/bank-accounts', data),
+  updateBankAccount: (accountId, data) => api.put(`/user/bank-accounts/${accountId}`, data),
+  deleteBankAccount: (accountId) => api.delete(`/user/bank-accounts/${accountId}`),
+  getSavedCards: () => api.get('/user/saved-cards'),
+  addSavedCard: (data) => api.post('/user/saved-cards', data),
+  updateSavedCard: (cardId, data) => api.put(`/user/saved-cards/${cardId}`, data),
+  deleteSavedCard: (cardId) => api.delete(`/user/saved-cards/${cardId}`),
+  getSavedSearches: () => api.get('/user/saved-searches'),
+  addSavedSearch: (data) => api.post('/user/saved-searches', data),
+  updateSavedSearch: (id, data) => api.put(`/user/saved-searches/${id}`, data),
+  deleteSavedSearch: (id) => api.delete(`/user/saved-searches/${id}`),
+  getBlockedUsers: () => api.get('/user/blocked'),
   getIdentityVerification: () => api.get('/user/identity-verification'),
   submitIdentityVerification: (formData) =>
     api.post('/user/identity-verification', formData, {

@@ -92,9 +92,17 @@ function Header() {
     location.pathname === '/verify-email-otp' ||
     location.pathname === '/verify-phone-otp'
 
-  // Settings and the self profile render their own home-style header, so suppress
+  // Settings/profile edit and the self profile render their own home-style header, so suppress
   // the app header on those routes.
-  const isDashboardSettings = location.pathname === '/dashboard/settings'
+  const isDashboardSettings =
+    location.pathname === '/dashboard/settings' ||
+    location.pathname === '/dashboard/profile' ||
+    location.pathname === '/dashboard/blocked-users' ||
+    location.pathname === '/dashboard/support' ||
+    location.pathname === '/dashboard/faq' ||
+    location.pathname === '/dashboard/contact' ||
+    location.pathname === '/dashboard/drafts' ||
+    location.pathname === '/dashboard/my-search'
   const isMyProfile = location.pathname === '/my-profile'
   const isCartPage = location.pathname === '/cart'
   const isPostAdFlow =

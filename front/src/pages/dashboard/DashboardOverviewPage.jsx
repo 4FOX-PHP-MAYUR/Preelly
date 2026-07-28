@@ -269,7 +269,7 @@ export default function DashboardOverviewPage() {
             {/* Action buttons */}
             <div className="flex flex-wrap items-center justify-center gap-2 mb-4">
               <Link
-                to="/dashboard/settings"
+                to="/dashboard/profile"
                 className="flex items-center gap-1.5 rounded-full bg-primary-600 hover:bg-primary-700 text-white px-4 sm:px-5 py-2 text-sm font-semibold transition"
               >
                 <Pencil className="h-3.5 w-3.5" />

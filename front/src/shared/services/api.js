@@ -396,6 +396,10 @@ export const userService = {
     if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
     return api.post(`/user/${userId}/block`, { action: 'unblock' })
   },
+  reportUser: (userId, data) => {
+    if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
+    return api.post(`/user/${userId}/report`, data)
+  },
   getUserProfile: (userId) => {
     if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
     return api.get(`/user/${userId}/profile`)

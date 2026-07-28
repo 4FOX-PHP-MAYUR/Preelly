@@ -6,6 +6,7 @@ import {
   Ban,
   Bookmark,
   FilePlus,
+  Flag,
   Heart,
   MessageCircle,
   MoreHorizontal,
@@ -27,6 +28,7 @@ import ProductCard from '../../components/Listing/ProductCard'
 import ProfileReelsViewer from '@shared/components/Profile/ProfileReelsViewer'
 import ReviewRatingModal from '../../components/Profile/ReviewRatingModal'
 import BlockFlow from '../../components/Block/BlockFlow'
+import ReportUserFlow from '../../components/Block/ReportUserFlow'
 import UnblockConfirmModal from '../../components/Block/UnblockConfirmModal'
 import MoreOptionsModal from '../../components/Chat/MoreOptionsModal'
 import { productHasVideo } from '@shared/utils/videoHelpers'
@@ -94,6 +96,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
   const [likedItems, setLikedItems] = useState([])
   const [moreOpen, setMoreOpen] = useState(false)
   const [showBlockFlow, setShowBlockFlow] = useState(false)
+  const [showReportFlow, setShowReportFlow] = useState(false)
   const [showUnblock, setShowUnblock] = useState(false)
 
   // Self mode (/my-profile) has no route param — resolve to the signed-in user's id.
@@ -636,32 +639,36 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
       <MoreOptionsModal
         open={moreOpen}
         onClose={() => setMoreOpen(false)}
-        options={
+        options={[
           blockedByMe
-            ? [
-                {
-                  id: 'unblock',
-                  label: 'Unblock',
-                  icon: Ban,
-                  onClick: () => {
-                    setMoreOpen(false)
-                    setShowUnblock(true)
-                  },
+            ? {
+                id: 'unblock',
+                label: 'Unblock',
+                icon: Ban,
+                onClick: () => {
+                  setMoreOpen(false)
+                  setShowUnblock(true)
                 },
-              ]
-            : [
-                {
-                  id: 'block',
-                  label: 'Block',
-                  icon: Ban,
-                  danger: true,
-                  onClick: () => {
-                    setMoreOpen(false)
-                    setShowBlockFlow(true)
-                  },
+              }
+            : {
+                id: 'block',
+                label: 'Block',
+                icon: Ban,
+                onClick: () => {
+                  setMoreOpen(false)
+                  setShowBlockFlow(true)
                 },
-              ]
-        }
+              },
+          {
+            id: 'report',
+            label: 'Report',
+            icon: Flag,
+            onClick: () => {
+              setMoreOpen(false)
+              setShowReportFlow(true)
+            },
+          },
+        ]}
       />
 
       <BlockFlow
@@ -669,6 +676,12 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
         user={profileUser}
         onClose={() => setShowBlockFlow(false)}
         onBlocked={() => setBlockedByMe(true)}
+      />
+
+      <ReportUserFlow
+        open={showReportFlow}
+        user={profileUser}
+        onClose={() => setShowReportFlow(false)}
       />
 
       <UnblockConfirmModal

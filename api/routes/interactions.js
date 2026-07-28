@@ -6,6 +6,7 @@ const Follow = require('../models/Follow')
 const Notification = require('../models/Notification')
 const Comment = require('../models/Comment')
 const CommentReport = require('../models/CommentReport')
+const Report = require('../models/Report')
 const ProductView = require('../models/ProductView')
 const authMiddleware = require('../middleware/auth')
 const validateObjectId = require('../middleware/validateObjectId')
@@ -529,6 +530,45 @@ router.post('/user/:id/block', authMiddleware, validateObjectId('id'), async (re
       return res.status(400).json({ message: 'Invalid user ID' })
     }
     res.status(500).json({ message: 'Error toggling block' })
+  }
+})
+
+// @route   POST /api/user/:id/report
+// @desc    Report another user (from profile). Stored for admin review.
+// @access  Private
+router.post('/user/:id/report', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const reporterId = req.user._id
+    const reportedUserId = req.params.id
+    const { reason, details } = req.body || {}
+
+    if (String(reporterId) === String(reportedUserId)) {
+      return res.status(400).json({ message: 'You cannot report yourself' })
+    }
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ message: 'A reason is required' })
+    }
+
+    const targetExists = await User.exists({ _id: reportedUserId })
+    if (!targetExists) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    const report = await Report.create({
+      reporter: reporterId,
+      reportedUser: reportedUserId,
+      chat: null,
+      reason: String(reason).trim().slice(0, 500),
+      details: String(details || '').trim().slice(0, 2000),
+    })
+
+    res.status(201).json({ message: 'Report submitted', reportId: report._id })
+  } catch (error) {
+    console.error('Error submitting user report:', error)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid user ID' })
+    }
+    res.status(500).json({ message: 'Error submitting report' })
   }
 })
 

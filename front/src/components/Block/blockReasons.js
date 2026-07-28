@@ -1,5 +1,24 @@
-/** Multi-step block reasons (Report-style), adapted for blocking accounts. */
-export const BLOCK_REASON_TREE = [
+/** Shared display helpers for block / report flows. */
+export function displayNameOf(user) {
+  if (!user) return 'User'
+  return user.displayName || user.name || 'User'
+}
+
+export function usernameOf(user) {
+  if (!user) return ''
+  const raw = user.username || user.instagramUsername || user.email?.split?.('@')?.[0] || ''
+  return String(raw).replace(/^@/, '')
+}
+
+export function roleLabelOf(user) {
+  if (!user?.role) return 'Member'
+  if (user.role === 'admin' || user.role === 'super_admin') return 'Admin'
+  if (user.role === 'dealer' || user.role === 'seller') return 'Dealer'
+  return 'Member'
+}
+
+/** Multi-step report reasons for reporting another user (not ads / not block). */
+export const REPORT_REASON_TREE = [
   {
     id: 'scam',
     label: 'Scam, fraud or impersonation',
@@ -27,13 +46,12 @@ export const BLOCK_REASON_TREE = [
     ],
   },
   {
-    id: 'harassment',
-    label: 'Bullying or unwanted contact',
+    id: 'political',
+    label: 'Unauthorized political ad',
     prompt: 'Which best describes the problem?',
     children: [
-      { id: 'harassment', label: 'Harassment or bullying' },
-      { id: 'spam_contact', label: 'Spam or unwanted messages' },
-      { id: 'threats', label: 'Threats or intimidation' },
+      { id: 'unauthorized_political', label: 'Unauthorized political content' },
+      { id: 'misleading_political', label: 'Misleading political claims' },
     ],
   },
   {
@@ -61,8 +79,18 @@ export const BLOCK_REASON_TREE = [
     prompt: 'Which best describes the problem?',
     children: [
       { id: 'hate', label: 'Hate speech or discrimination' },
-      { id: 'violence', label: 'Violent threats or content' },
+      { id: 'violence_threats', label: 'Violent threats or content' },
       { id: 'exploitation', label: 'Exploitation' },
+    ],
+  },
+  {
+    id: 'harassment',
+    label: 'Bullying or unwanted contact',
+    prompt: 'Which best describes the problem?',
+    children: [
+      { id: 'harassment', label: 'Harassment or bullying' },
+      { id: 'spam_contact', label: 'Spam or unwanted messages' },
+      { id: 'threats', label: 'Threats or intimidation' },
     ],
   },
   {
@@ -73,6 +101,15 @@ export const BLOCK_REASON_TREE = [
       { id: 'copyright', label: 'Copyright infringement' },
       { id: 'trademark', label: 'Trademark infringement' },
       { id: 'counterfeit', label: 'Counterfeit goods' },
+    ],
+  },
+  {
+    id: 'self_harm',
+    label: 'Suicide or self-harm',
+    prompt: 'Which best describes the problem?',
+    children: [
+      { id: 'self_harm_content', label: 'Self-harm content' },
+      { id: 'suicide_content', label: 'Suicide-related content' },
     ],
   },
   {
@@ -93,37 +130,10 @@ export const BLOCK_REASON_TREE = [
       { id: 'child_safety', label: 'Child safety concern' },
     ],
   },
-  {
-    id: 'other',
-    label: 'Something else',
-    prompt: 'Which best describes the problem?',
-    children: [
-      { id: 'privacy', label: 'Privacy concern' },
-      { id: 'other_reason', label: 'Other' },
-    ],
-  },
 ]
 
-export const BLOCK_REVIEW_QUESTIONS = [
-  'Why are you blocking this account?',
+export const REPORT_REVIEW_QUESTIONS = [
+  'Why are you reporting this user?',
   'Which best describes the problem?',
-  'What kind of issue is this?',
+  'What kind of fraud or scam?',
 ]
-
-export function displayNameOf(user) {
-  if (!user) return 'User'
-  return user.displayName || user.name || 'User'
-}
-
-export function usernameOf(user) {
-  if (!user) return ''
-  const raw = user.username || user.instagramUsername || user.email?.split?.('@')?.[0] || ''
-  return String(raw).replace(/^@/, '')
-}
-
-export function roleLabelOf(user) {
-  if (!user?.role) return 'Member'
-  if (user.role === 'admin' || user.role === 'super_admin') return 'Admin'
-  if (user.role === 'dealer' || user.role === 'seller') return 'Dealer'
-  return 'Member'
-}

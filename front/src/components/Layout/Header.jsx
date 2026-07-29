@@ -104,7 +104,10 @@ function Header() {
     location.pathname === '/dashboard/drafts' ||
     location.pathname === '/dashboard/my-search' ||
     location.pathname === '/dashboard/archives'
+  // Both /my-profile and /user/:id render UserProfilePage, which brings its own
+  // top bar via CategoryBrowseLayout — this header would be a second one.
   const isMyProfile = location.pathname === '/my-profile'
+  const isUserProfilePage = /^\/user\/[^/]+$/.test(location.pathname)
   const isCartPage = location.pathname === '/cart'
   const isPostAdFlow =
     location.pathname === '/post-ad' ||
@@ -125,7 +128,7 @@ function Header() {
 
   return (
     <>
-      {isAuthRoute || isHomePage || isSearchPage || isCategoryProductsPage || isProductDetailPage || isChatPage || isDashboardSettings || isMyProfile || isCartPage ? null : isPostAdFlow ? (
+      {isAuthRoute || isHomePage || isSearchPage || isCategoryProductsPage || isProductDetailPage || isChatPage || isDashboardSettings || isMyProfile || isUserProfilePage || isCartPage ? null : isPostAdFlow ? (
         <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
           <div className="w-full px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
             {/* Tagline is part of the logo artwork — do not add a text one. */}

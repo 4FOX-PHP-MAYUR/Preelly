@@ -414,25 +414,6 @@ export default function ProfilePostModal({
             )}
           </div>
 
-          {isOwnProfile ? (
-            <div className="flex items-center justify-between gap-3 border-t border-[#E5E7EB] px-4 py-3">
-              <button
-                type="button"
-                onClick={() => handleComingSoon('View insights')}
-                className="text-sm font-semibold text-brand transition hover:text-brand-700"
-              >
-                View insights
-              </button>
-              <button
-                type="button"
-                onClick={() => handleComingSoon('Boost post')}
-                className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"
-              >
-                Boost post
-              </button>
-            </div>
-          ) : null}
-
           <div className="border-t border-[#E5E7EB] px-3 py-2">
             <div className="flex items-center gap-1">
               <button

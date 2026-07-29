@@ -532,7 +532,8 @@ export const chatService = {
 }
 
 export const cartService = {
-  getCart: () => api.get('/cart'),
+  /** @param {{ cartStatus?: 'ACTIVE'|'CHECKOUT'|'PURCHASED'|'ABANDONED' }} [params] defaults to ACTIVE */
+  getCart: (params) => api.get('/cart', params ? { params } : undefined),
   // Add the product of a chat to the buyer's cart when an offer is accepted.
   addFromOffer: (chatId, amount) => api.post('/cart/from-offer', { chatId, amount }),
   // Persist seller-approved Preelly inspection conditions onto the buyer's cart.

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import {
   ArrowLeft, Ban, Bookmark, Briefcase, Building2, Car, Check, CheckCheck,
@@ -25,7 +25,7 @@ import { getMediaUrl } from '@shared/utils/helpers'
 import toast from 'react-hot-toast'
 
 // ─────────────────────────────────────────────────────────────────────────────
-const TABS = ['All', 'Buying', 'Selling', 'Unread']
+const TABS = ['All', 'Cart', 'Buying', 'Selling', 'Unread']
 
 const QUICK_REPLIES = [
   'Hello',
@@ -593,6 +593,11 @@ function ChatSidebar({ chatUnread }) {
 export default function ChatInboxPage() {
   const navigate        = useNavigate()
   const { threadId: urlId } = useParams()
+  const [urlSearchParams, setUrlSearchParams] = useSearchParams()
+  // `?tab=Cart` deep-links straight into a tab (e.g. "My Cart" in the dashboard).
+  const urlTab = TABS.find(
+    (t) => t.toLowerCase() === String(urlSearchParams.get('tab') || '').toLowerCase(),
+  )
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const currentUser     = useSelector(selectUser)
   const {
@@ -617,7 +622,23 @@ export default function ChatInboxPage() {
   const [preellyConditionsList, setPreellyConditionsList] = useState([])
   const [preellyCharge, setPreellyCharge] = useState(PREELLY_PAY_CHARGE)
   const [search,  setSearch]  = useState('')
-  const [tab,     setTab]     = useState('All')
+  const [tab,     setTab]     = useState(urlTab || 'All')
+  // Product ids in the buyer's completed (PURCHASED) carts — drives the Cart tab.
+  const [purchasedProductIds, setPurchasedProductIds] = useState(() => new Set())
+
+  /** Switch tab and mirror it in the URL so refreshing keeps the same view. */
+  const selectTab = useCallback((next) => {
+    setTab(next)
+    setUrlSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev)
+        if (next === 'All') params.delete('tab')
+        else params.set('tab', next)
+        return params
+      },
+      { replace: true },
+    )
+  }, [setUrlSearchParams])
   const [text,    setText]    = useState('')
   const [sending, setSending] = useState(false)
   const [mobileTh, setMobileTh] = useState(!!urlId)
@@ -706,6 +727,10 @@ export default function ChatInboxPage() {
   useEffect(() => {
     if (urlId && urlId !== activeId) { setActiveId(urlId); setMobileTh(true) }
   }, [urlId]) // eslint-disable-line
+
+  useEffect(() => {
+    if (urlTab && urlTab !== tab) setTab(urlTab)
+  }, [urlTab]) // eslint-disable-line
 
   // load thread
   useEffect(() => {
@@ -872,8 +897,12 @@ export default function ChatInboxPage() {
     if (tab === 'Buying'  && (isGroup || !isBuyer)) return false
     if (tab === 'Selling' && (isGroup || isBuyer))  return false
     if (tab === 'Unread'  && unread === 0) return false
+    // Cart: product threads the user has bought (cart row reached PURCHASED).
+    if (tab === 'Cart' && (isGroup || !t.productId || !purchasedProductIds.has(String(t.productId)))) {
+      return false
+    }
     return true
-  }), [threads, search, tab, currentUser?._id])
+  }), [threads, search, tab, currentUser?._id, purchasedProductIds])
 
   const otherParty = useMemo(() => {
     if (!activeThread || !currentUser) return null
@@ -1026,6 +1055,29 @@ export default function ChatInboxPage() {
   }, [isBuyer, activeThread?.productId])
 
   useEffect(() => { refreshCartCount() }, [refreshCartCount])
+
+  // The Cart tab lists threads whose product the user has bought — i.e. a cart
+  // row that reached cartStatus PURCHASED. Loaded once per visit (and whenever
+  // the tab is opened) rather than per-thread, since it filters the whole list.
+  useEffect(() => {
+    if (tab !== 'Cart') return undefined
+    let cancelled = false
+    cartService
+      .getCart({ cartStatus: 'PURCHASED' })
+      .then((res) => {
+        if (cancelled) return
+        const items = res?.data?.data || []
+        setPurchasedProductIds(
+          new Set(items.map((it) => String(it.productId?._id || it.productId)).filter(Boolean)),
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setPurchasedProductIds(new Set())
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [tab])
 
   // An offer card is locked (grayed, no further action) only once a RESPONSE
   // action — accept, reject, or a counter offer — follows it in the thread. The
@@ -1240,7 +1292,7 @@ export default function ChatInboxPage() {
             {/* tabs */}
             <div className="flex border-b border-gray-100 px-1">
               {TABS.map(t => (
-                <button key={t} onClick={() => setTab(t)}
+                <button key={t} onClick={() => selectTab(t)}
                   className={`flex-1 py-2.5 text-xs font-semibold transition-colors relative ${
                     tab === t ? 'text-purple-600' : 'text-gray-500 hover:text-gray-700'
                   }`}>

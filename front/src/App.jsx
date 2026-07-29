@@ -40,7 +40,6 @@ const SearchResultsPage = lazy(() => import('./pages/SearchResultsPage'))
 const CategorySearchPage = lazy(() => import('./pages/CategorySearchPage'))
 const CategoryProductsPage = lazy(() => import('./pages/CategoryProductsPage'))
 const ChatInboxPage = lazy(() => import('./pages/ChatInboxPage'))
-const CartCheckoutPage = lazy(() => import('./pages/CartCheckoutPage'))
 const VerifyEmailOtpPage = lazy(() => import('./pages/VerifyEmailOtpPage'))
 const VerifyPhoneOtpPage = lazy(() => import('./pages/VerifyPhoneOtpPage'))
 const CompleteMobilePage = lazy(() => import('./pages/CompleteMobilePage'))
@@ -159,14 +158,6 @@ function App() {
             element={
               <PrivateRoute>
                 <ChatInboxPage />
-              </PrivateRoute>
-            }
-          />
-          <Route
-            path="/cart"
-            element={
-              <PrivateRoute>
-                <CartCheckoutPage />
               </PrivateRoute>
             }
           />

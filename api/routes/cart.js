@@ -188,13 +188,18 @@ router.post('/preelly-not-interested', authMiddleware, async (req, res) => {
 })
 
 // @route   GET /api/cart
-// @desc    List the current user's active cart items (as buyer)
+// @desc    List the current user's cart items (as buyer). Defaults to the ACTIVE
+//          cart; `?cartStatus=PURCHASED` (or any valid status) narrows to another
+//          stage — used by the chat inbox's Cart tab.
 // @access  Private
 router.get('/', authMiddleware, async (req, res) => {
   try {
+    const requestedStatus = String(req.query.cartStatus || req.query.status || '').trim().toUpperCase()
+    const cartStatus = Cart.CART_STATUSES.includes(requestedStatus) ? requestedStatus : 'ACTIVE'
+
     const items = await Cart.find({
       userId: req.user._id,
-      cartStatus: 'ACTIVE',
+      cartStatus,
       deletedAt: null,
     })
       .populate({

@@ -74,7 +74,8 @@ const QUICK_TILES = [
   { label: 'My Ads', icon: FileText, to: '/my-profile' },
   { label: 'My Search', icon: Search, to: '/dashboard/my-search' },
   { label: 'My Bookings', icon: CalendarCheck, to: '/dashboard/orders' },
-  { label: 'My Cart', icon: ShoppingCart, to: '/cart' },
+  // The standalone cart page is gone — purchases now live in the chat inbox's Cart tab.
+  { label: 'My Cart', icon: ShoppingCart, to: '/chat?tab=Cart' },
   { label: 'My Drafts', icon: Files, to: '/dashboard/drafts' },
   { label: 'My Archives', icon: Archive, to: '/dashboard/listings?status=inactive' },
 ]

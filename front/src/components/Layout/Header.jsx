@@ -79,9 +79,10 @@ function Header() {
 
   const isHomePage = location.pathname === '/'
   const isSearchPage = location.pathname.startsWith('/search')
-  const isCategoryProductsPage =
-    /^\/categories\/[^/]+\/products/.test(location.pathname) ||
-    /^\/categories\/[^/]+\/subcategory\/[^/]+/.test(location.pathname)
+  // Every /categories/* route (browse categories, subcategories, product
+  // listings) renders through CategoryBrowseLayout, which brings its own top
+  // bar (logo + sidebar) — this header would be a second one on top of it.
+  const isCategoryProductsPage = /^\/categories(\/|$)/.test(location.pathname)
   const isProductDetailPage = /^\/products\/[^/]+$/.test(location.pathname)
   const isChatPage = location.pathname.startsWith('/chat')
   const isReelsPage = location.pathname === '/reels'

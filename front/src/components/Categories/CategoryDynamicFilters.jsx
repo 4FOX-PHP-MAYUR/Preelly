@@ -64,6 +64,7 @@ function CategoryDynamicFilters({
       filterValues={filterValues}
       onFilterIdsChange={onChange}
       onFilterValuesChange={onFilterValuesChange}
+      enableShowMore
     />
   )
 

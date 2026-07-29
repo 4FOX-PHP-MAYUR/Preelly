@@ -119,8 +119,11 @@ function AdvancedFilterPanel({
   categoryId,
   subcategoryFilterId,
   filterChildCategoryId,
+  categoryPath = [],
   selectedFilterIds = [],
+  filterValues = {},
   onFilterIdsChange,
+  onFilterValuesChange,
   onApply,
   onReset,
 }) {
@@ -350,8 +353,11 @@ function AdvancedFilterPanel({
           categoryId={categoryId}
           subcategoryId={subcategoryFilterId}
           childCategoryId={filterChildCategoryId}
+          categoryPath={categoryPath}
           selectedFilterIds={selectedFilterIds}
+          filterValues={filterValues}
           onChange={onFilterIdsChange}
+          onFilterValuesChange={onFilterValuesChange}
           variant="flat"
         />
         </>

@@ -25,6 +25,14 @@ import {
   buildCityFilterOptions,
   resolveCityNameById,
 } from '@shared/utils/buildCityFilterOptions'
+import {
+  FILTER_IDS_PARAM,
+  FILTER_VALUES_PARAM,
+  CATEGORY_PATH_PARAM,
+  parseListingSearchParams,
+  serializeFilterValues,
+  serializeIdList,
+} from '@shared/utils/categorySearchParams'
 
 function CategoryProductsPage() {
   const { categoryId, subcategoryId: routeSubcategoryId } = useParams()
@@ -95,9 +103,22 @@ function CategoryProductsPage() {
   const [keywords, setKeywords] = useState('')
   const [activeChip, setActiveChip] = useState('all')
   const [selectedFilterIds, setSelectedFilterIds] = useState([])
+  // Free-form values of text/number/date filters, keyed by filter id.
+  const [filterValues, setFilterValues] = useState({})
+  // Full category hierarchy (root → leaf) behind this listing.
+  const [categoryPath, setCategoryPath] = useState([])
 
   const filterChildCategoryId =
     selectedHierarchy.trim || selectedHierarchy.model || selectedHierarchy.brand || ''
+
+  // The route id is the deepest category the user picked (the search page links
+  // straight to the leaf), but listings store `product.category` as the ROOT of
+  // the hierarchy. So queries, facets and the subcategory chips are scoped to
+  // the root of `categoryPath`, while the deeper levels are matched through
+  // `categoryPathIds` / brandId / modelId / trimId.
+  const rootCategoryId = categoryPath[0] || categoryId
+  // Stable identity: this feeds the product query's dependency list.
+  const deepCategoryPathIds = useMemo(() => categoryPath.slice(1), [categoryPath])
 
   const isVehicleCategory =
     selectedCategory && isVehicleCategoryName(selectedCategory.name)
@@ -210,13 +231,15 @@ function CategoryProductsPage() {
     }
   }, [categoryId])
 
+  // Subcategory chips always list the root's children, so a listing opened on a
+  // deep leaf still shows (and highlights) the level the user picked.
   useEffect(() => {
-    if (!categoryId) return
+    if (!rootCategoryId) return
     let cancelled = false
 
     const run = async () => {
       try {
-        const res = await categoryService.getCategoryChildren(categoryId)
+        const res = await categoryService.getCategoryChildren(rootCategoryId)
         if (cancelled) return
         setSubcategories(Array.isArray(res.data) ? res.data : [])
       } catch (err) {
@@ -230,28 +253,35 @@ function CategoryProductsPage() {
     return () => {
       cancelled = true
     }
-  }, [categoryId])
+  }, [rootCategoryId])
 
   useEffect(() => {
     isFirstMakeModelRef.current = true
   }, [categoryId])
 
   const location = useLocation()
+
+  // The URL is the single source of truth for the whole selection: every filter
+  // change is written back to it (see patchUrl), and this effect reads it back.
+  // That keeps a search built on /search intact, survives a refresh, and makes
+  // the listing shareable.
   useEffect(() => {
     // Prefer subcategory from query string, then route param (if present).
     // This covers both navigation styles: /categories/:id/products?subcategoryId=...
     // and /categories/:id/subcategory/:subcategoryId -> routed with useParams.
     const q = new URLSearchParams(location.search || '')
+    const { categoryPath: pathFromUrl, filterIds, filterValues: valuesFromUrl } =
+      parseListingSearchParams(location.search, categoryId)
     const subFromQuery = q.get('subcategoryId') || ''
     const brandFromQuery = q.get('brandId') || ''
     const modelFromQuery = q.get('modelId') || ''
     const trimFromQuery = q.get('trimId') || ''
-    const chosen = subFromQuery || routeSubcategoryId || ''
+    const chosen = subFromQuery || routeSubcategoryId || pathFromUrl[1] || ''
     setSelectedHierarchy({
       subcategory: chosen,
-      brand: brandFromQuery,
-      model: modelFromQuery,
-      trim: trimFromQuery,
+      brand: brandFromQuery || pathFromUrl[2] || '',
+      model: modelFromQuery || pathFromUrl[3] || '',
+      trim: trimFromQuery || pathFromUrl[4] || '',
     })
 
     // Restore label-based filters if present (used for API filtering).
@@ -261,17 +291,59 @@ function CategoryProductsPage() {
       trim: q.get('trim') || '',
     })
     setCityId(q.get('cityId') || '')
+
+    // Keep the previous array/object when nothing actually changed — these feed
+    // the product query, and a fresh identity would trigger a duplicate fetch on
+    // every unrelated URL patch (sort, price, …).
+    setCategoryPath((prev) => (prev.join(',') === pathFromUrl.join(',') ? prev : pathFromUrl))
+    setSelectedFilterIds((prev) =>
+      serializeIdList(prev) === serializeIdList(filterIds) ? prev : filterIds,
+    )
+    setFilterValues((prev) =>
+      serializeFilterValues(prev) === serializeFilterValues(valuesFromUrl) ? prev : valuesFromUrl,
+    )
+    setKeywords(q.get('q') || '')
+    setCondition(q.get('condition') || '')
+    setTransmission(q.get('transmission') || '')
+    setFuelType(q.get('fuelType') || '')
+    setBedrooms(q.get('bedrooms') || '')
+    setSortBy(q.get('sortBy') || 'newest')
+    const minP = q.get('minPrice')
+    const maxP = q.get('maxPrice')
+    setPriceRangeSelect(minP || maxP ? `${minP || 0}-${maxP || ''}` : '')
   }, [categoryId, location.search, routeSubcategoryId])
 
   useEffect(() => {
-    setSelectedFilterIds([])
     setApiParentId('')
-    setBedrooms('')
-  }, [categoryId, subcategoryFilterId, filterChildCategoryId])
-
-  useEffect(() => {
-    setCityId('')
   }, [categoryId])
+
+  // Read at call time rather than closed over, so debounced patches (keywords)
+  // never write back a stale query string.
+  const locationSearchRef = useRef(location.search)
+  locationSearchRef.current = location.search
+
+  /**
+   * Write filter state back into the URL (replace, so filtering doesn't stack
+   * history entries). Empty values are removed so the URL only carries what the
+   * user actually selected.
+   */
+  const patchUrl = useCallback(
+    (patch) => {
+      const q = new URLSearchParams(locationSearchRef.current || '')
+      Object.entries(patch).forEach(([key, value]) => {
+        if (value === '' || value == null) q.delete(key)
+        else q.set(key, String(value))
+      })
+      navigate(
+        {
+          pathname: `/categories/${categoryId}/products`,
+          search: q.toString() ? `?${q.toString()}` : '',
+        },
+        { replace: true },
+      )
+    },
+    [navigate, categoryId],
+  )
 
   // NOTE: removed automatic URL sync to avoid navigation loops that could trigger
   // repeated fetches. Subcategory is read from either query string or route param.
@@ -303,29 +375,41 @@ function CategoryProductsPage() {
       if (trimLabel) q.set('trim', trimLabel)
       else q.delete('trim')
 
+      // Changing the hierarchy changes which filters apply, so the previous
+      // filter selection is dropped and the path is rewritten from the root.
+      q.delete(FILTER_IDS_PARAM)
+      q.delete(FILTER_VALUES_PARAM)
+      const nextPath = [rootCategoryId, next, b, m, t].filter(Boolean)
+      if (nextPath.length > 1) q.set(CATEGORY_PATH_PARAM, serializeIdList(nextPath))
+      else q.delete(CATEGORY_PATH_PARAM)
+
+      // The URL always points at the deepest selected category, matching how the
+      // search page links into this page.
       navigate(
         {
-          pathname: `/categories/${categoryId}/products`,
+          pathname: `/categories/${nextPath[nextPath.length - 1] || rootCategoryId}/products`,
           search: q.toString() ? `?${q.toString()}` : '',
         },
         { replace: true },
       )
     },
-    [navigate, location.search, categoryId],
+    [navigate, location.search, rootCategoryId],
   )
 
   // When user selects Bicycles, clear car-only filters so they don't affect results
   useEffect(() => {
-    if (isBicycleSubcategory) {
+    if (isBicycleSubcategory && (transmission || fuelType)) {
       setTransmission('')
       setFuelType('')
+      patchUrl({ transmission: '', fuelType: '' })
     }
-  }, [selectedHierarchy.subcategory, isBicycleSubcategory])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedHierarchy.subcategory, isBicycleSubcategory, transmission, fuelType])
 
   useEffect(() => {
     const fetchPriceRange = async () => {
       try {
-        const response = await productService.getPriceRange(categoryId)
+        const response = await productService.getPriceRange(rootCategoryId)
         const { minPrice, maxPrice } = response.data
         setPriceRange({ min: minPrice, max: maxPrice })
       } catch (e) {
@@ -333,16 +417,16 @@ function CategoryProductsPage() {
       }
     }
     fetchPriceRange()
-  }, [categoryId])
+  }, [rootCategoryId])
 
   useEffect(() => {
-    if (!categoryId) return
+    if (!rootCategoryId) return
     let cancelled = false
 
     const run = async () => {
       try {
         const res = await productService.getFacets({
-          categoryId,
+          categoryId: rootCategoryId,
           subcategoryId: subcategoryFilterId || undefined,
         })
         if (cancelled) return
@@ -363,14 +447,16 @@ function CategoryProductsPage() {
     return () => {
       cancelled = true
     }
-  }, [categoryId, subcategoryFilterId])
+  }, [rootCategoryId, subcategoryFilterId])
 
   const fetchWithFilters = useCallback(
     (pageNum = 1, append = false) => {
-      if (!categoryId) return
+      if (!rootCategoryId) return
       if (!append) dispatch(clearProducts())
 
-      const params = { page: pageNum, limit: 20, categoryId, sortBy }
+      const params = { page: pageNum, limit: 20, categoryId: rootCategoryId, sortBy }
+      // Levels below the root (unlimited depth) are matched on product.categoryPath.
+      if (deepCategoryPathIds.length) params.categoryPathIds = deepCategoryPathIds.join(',')
       if (subcategoryFilterId && subcategoryFilterId.trim()) params.subcategoryId = subcategoryFilterId.trim()
       if (cityId && String(cityId).trim()) {
         params.cityId = String(cityId).trim()
@@ -418,7 +504,8 @@ function CategoryProductsPage() {
       dispatch(fetchProducts(params))
     },
     [
-      categoryId,
+      rootCategoryId,
+      deepCategoryPathIds,
       subcategoryFilterId,
       cityId,
       selectedCityName,
@@ -451,10 +538,10 @@ function CategoryProductsPage() {
   // Include hierarchy IDs: URL hydration runs in a separate effect; without these deps the first fetch
   // can run before brand/model/trim IDs exist and return the wrong product set (e.g. any BMW).
   useEffect(() => {
-    if (!categoryId) return
+    if (!rootCategoryId) return
     fetchWithFilters(1, false)
   }, [
-    categoryId,
+    rootCategoryId,
     subcategoryFilterId,
     cityId,
     priceRangeSelect,
@@ -502,7 +589,10 @@ function CategoryProductsPage() {
       return
     }
     if (keywordsDebounceRef.current) clearTimeout(keywordsDebounceRef.current)
-    keywordsDebounceRef.current = setTimeout(() => fetchWithFilters(1, false), 400)
+    keywordsDebounceRef.current = setTimeout(() => {
+      patchUrl({ q: keywords })
+      fetchWithFilters(1, false)
+    }, 400)
     return () => {
       if (keywordsDebounceRef.current) clearTimeout(keywordsDebounceRef.current)
     }
@@ -564,18 +654,74 @@ function CategoryProductsPage() {
     (nextCityId) => {
       const id = String(nextCityId || '').trim()
       setCityId(id)
-      const q = new URLSearchParams(location.search || '')
-      if (id) q.set('cityId', id)
-      else q.delete('cityId')
-      navigate(
-        {
-          pathname: `/categories/${categoryId}/products`,
-          search: q.toString() ? `?${q.toString()}` : '',
-        },
-        { replace: true },
-      )
+      patchUrl({ cityId: id })
     },
-    [navigate, location.search, categoryId],
+    [patchUrl],
+  )
+
+  const handleFilterIdsChange = useCallback(
+    (nextIds) => {
+      setSelectedFilterIds(nextIds)
+      patchUrl({ [FILTER_IDS_PARAM]: serializeIdList(nextIds) })
+    },
+    [patchUrl],
+  )
+
+  const handleFilterValuesChange = useCallback(
+    (nextValues) => {
+      setFilterValues(nextValues)
+      patchUrl({ [FILTER_VALUES_PARAM]: serializeFilterValues(nextValues) })
+    },
+    [patchUrl],
+  )
+
+  const handleConditionChange = useCallback(
+    (value) => {
+      setCondition(value)
+      patchUrl({ condition: value })
+    },
+    [patchUrl],
+  )
+
+  const handleTransmissionChange = useCallback(
+    (value) => {
+      setTransmission(value)
+      patchUrl({ transmission: value })
+    },
+    [patchUrl],
+  )
+
+  const handleFuelTypeChange = useCallback(
+    (value) => {
+      setFuelType(value)
+      patchUrl({ fuelType: value })
+    },
+    [patchUrl],
+  )
+
+  const handleBedroomsChange = useCallback(
+    (value) => {
+      setBedrooms(value)
+      patchUrl({ bedrooms: value })
+    },
+    [patchUrl],
+  )
+
+  const handleSortChange = useCallback(
+    (value) => {
+      setSortBy(value)
+      patchUrl({ sortBy: value === 'newest' ? '' : value })
+    },
+    [patchUrl],
+  )
+
+  // Keywords are debounced into the query below; the URL is updated with them
+  // so a refresh keeps the typed text.
+  const handleKeywordsChange = useCallback(
+    (value) => {
+      setKeywords(value)
+    },
+    [],
   )
 
   const handleSubcategoryChange = (id) => {
@@ -647,9 +793,10 @@ function CategoryProductsPage() {
   const handlePriceApply = useCallback(
     (lo, hi) => {
       setPriceRangeSelect(`${lo}-${hi}`)
+      patchUrl({ minPrice: lo, maxPrice: hi })
       fetchWithFilters(1, false)
     },
-    [fetchWithFilters],
+    [fetchWithFilters, patchUrl],
   )
 
   const handlePriceRangeChange = (lo, hi) => {
@@ -666,7 +813,7 @@ function CategoryProductsPage() {
 
   const handleCategorySelect = (id) => {
     const next = String(id || '').trim()
-    if (!next || next === String(categoryId)) return
+    if (!next || next === String(rootCategoryId)) return
     navigate(`/categories/${next}/products`)
   }
 
@@ -679,6 +826,7 @@ function CategoryProductsPage() {
     setFuelType('')
     setKeywords('')
     setSelectedFilterIds([])
+    setFilterValues({})
     setApiParentId('')
     setBedrooms('')
     setPriceRangeSelect('')
@@ -687,11 +835,17 @@ function CategoryProductsPage() {
     setYearSel(null)
     setKms('')
     setShowMobileFilters(false)
+    // Drop every filter from the URL too, so a refresh doesn't bring them back.
+    navigate({ pathname: `/categories/${rootCategoryId}/products`, search: '' }, { replace: true })
     fetchWithFilters(1, false)
   }
 
   const applyAdvancedFilters = () => {
     setShowMobileFilters(false)
+    // Persist the values that are only tracked locally while the user drags /
+    // types, so Apply makes the whole panel state survive a refresh.
+    const [minP, maxP] = priceRangeSelect ? priceRangeSelect.split('-') : ['', '']
+    patchUrl({ minPrice: minP, maxPrice: maxP, q: keywords })
     fetchWithFilters(1, false)
   }
 
@@ -753,7 +907,7 @@ function CategoryProductsPage() {
       isClassifiedsCategory,
       isBicycleSubcategory,
       rootCategories,
-      activeCategoryId: categoryId,
+      activeCategoryId: rootCategoryId,
       subcategories,
       subcategoryId: subcategoryFilterId,
       makeModel,
@@ -776,10 +930,12 @@ function CategoryProductsPage() {
       fuelType,
       keywords,
       bedrooms,
-      categoryId,
+      categoryId: rootCategoryId,
       subcategoryFilterId,
       filterChildCategoryId,
+      categoryPath,
       selectedFilterIds,
+      filterValues,
     }),
     [
       isVehicleCategory,
@@ -787,7 +943,7 @@ function CategoryProductsPage() {
       isClassifiedsCategory,
       isBicycleSubcategory,
       rootCategories,
-      categoryId,
+      rootCategoryId,
       subcategories,
       subcategoryFilterId,
       makeModel,
@@ -810,7 +966,9 @@ function CategoryProductsPage() {
       keywords,
       bedrooms,
       filterChildCategoryId,
+      categoryPath,
       selectedFilterIds,
+      filterValues,
     ],
   )
 
@@ -823,12 +981,13 @@ function CategoryProductsPage() {
     onPriceRangeChange: handlePriceRangeChange,
     onYearRangeChange: handleYearRangeChange,
     onKmsRangeChange: handleKmsRangeChange,
-    onConditionChange: setCondition,
-    onTransmissionChange: setTransmission,
-    onFuelTypeChange: setFuelType,
-    onKeywordsChange: setKeywords,
-    onBedroomsChange: setBedrooms,
-    onFilterIdsChange: setSelectedFilterIds,
+    onConditionChange: handleConditionChange,
+    onTransmissionChange: handleTransmissionChange,
+    onFuelTypeChange: handleFuelTypeChange,
+    onKeywordsChange: handleKeywordsChange,
+    onBedroomsChange: handleBedroomsChange,
+    onFilterIdsChange: handleFilterIdsChange,
+    onFilterValuesChange: handleFilterValuesChange,
     onApply: applyAdvancedFilters,
     onReset: clearAdvancedFilters,
   }
@@ -860,7 +1019,7 @@ function CategoryProductsPage() {
 
   return (
     <CategoryBrowseLayout
-      activeCategoryId={categoryId}
+      activeCategoryId={rootCategoryId}
       variant="listing"
       layoutPreset="marketplace"
       filterPanel={filterPanel}
@@ -877,7 +1036,7 @@ function CategoryProductsPage() {
             </div>
             <ListingToolbar
               sortBy={sortBy}
-              onSortChange={setSortBy}
+              onSortChange={handleSortChange}
               onOpenFilters={handleOpenFilters}
               onQuickFilterClick={handleQuickFilter}
               quickFilters={quickFilterLabels}

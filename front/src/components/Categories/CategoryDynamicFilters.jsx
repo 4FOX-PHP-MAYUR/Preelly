@@ -1,76 +1,35 @@
-import { useEffect, useMemo, useState } from 'react'
 import { Loader2 } from 'lucide-react'
-import { categoryService } from '@shared/services/api'
-import { buildCategoryFilterGroups } from '@shared/utils/buildCategoryFilterGroups'
+import CategoryFilterFields from '@shared/components/CategoryFilterFields'
+import useCategoryFilterFields from '@shared/hooks/useCategoryFilterFields'
 
+/**
+ * Admin-configured filters for the selected category, rendered by field type.
+ *
+ * Both the filter sidebar and the hierarchical search page (/search) load the
+ * same fields through useCategoryFilterFields, so a search built on /search is
+ * reflected here exactly — same fields, same selections.
+ */
 function CategoryDynamicFilters({
   categoryId,
   subcategoryId = '',
   childCategoryId = '',
+  /** Full hierarchy (root → leaf); falls back to the level props when absent. */
+  categoryPath,
   selectedFilterIds = [],
+  filterValues = {},
   onChange,
+  onFilterValuesChange,
   variant = 'default',
 }) {
   const isFlat = variant === 'flat'
-  const [filters, setFilters] = useState([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const path =
+    Array.isArray(categoryPath) && categoryPath.length
+      ? categoryPath
+      : [categoryId, subcategoryId, childCategoryId].filter(Boolean)
 
-  const scopeKey = [categoryId, subcategoryId, childCategoryId].filter(Boolean).join('>')
+  const { fields, loading, error } = useCategoryFilterFields(path)
 
-  useEffect(() => {
-    if (!categoryId) {
-      setFilters([])
-      setError('')
-      return undefined
-    }
-
-    let cancelled = false
-    setLoading(true)
-    setError('')
-
-    const levels = {
-      categoryId,
-      ...(subcategoryId ? { subcategoryId } : {}),
-      ...(childCategoryId ? { childCategoryId } : {}),
-    }
-
-    categoryService
-      .getCategoryFilters(levels)
-      .then((res) => {
-        if (cancelled) return
-        const list = Array.isArray(res?.data?.filters) ? res.data.filters : []
-        setFilters(list)
-        setError('')
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setFilters([])
-        setError(err?.response?.data?.message || 'Failed to load filters')
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [categoryId, subcategoryId, childCategoryId, scopeKey])
-
-  const groups = useMemo(() => buildCategoryFilterGroups(filters), [filters])
-
-  const selectedSet = useMemo(() => new Set((selectedFilterIds || []).map(String)), [selectedFilterIds])
-
-  const toggleFilterId = (filterId) => {
-    if (!filterId || !onChange) return
-    const id = String(filterId)
-    const next = new Set(selectedSet)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    onChange([...next])
-  }
-
-  if (!categoryId) return null
+  if (!categoryId && !path.length) return null
 
   if (loading) {
     return (
@@ -89,7 +48,7 @@ function CategoryDynamicFilters({
     )
   }
 
-  if (!groups.length) {
+  if (!fields.length) {
     if (isFlat) return null
     return (
       <p className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
@@ -98,75 +57,27 @@ function CategoryDynamicFilters({
     )
   }
 
-  if (isFlat) {
-    return (
-      <>
-        {groups.map((group) => (
-          <div
-            key={String(group.root._id)}
-            className="border-b border-[#E8EBF2] py-4 last:border-b-0"
-          >
-            <p className="mb-3 text-sm font-semibold text-[#0F172A]">{group.root.name}</p>
-            <div className="flex flex-wrap gap-2">
-              {group.options.map((opt) => {
-                const id = opt.filterId || opt.value
-                const active = selectedSet.has(String(id))
-                return (
-                  <button
-                    key={`${group.root._id}-${opt.value}`}
-                    type="button"
-                    onClick={() => toggleFilterId(id)}
-                    className={`rounded-full px-3.5 py-2 text-sm font-medium transition ${
-                      active
-                        ? 'bg-brand text-white shadow-sm shadow-brand/25'
-                        : 'bg-white text-[#64748B] ring-1 ring-[#E4E7EF] hover:text-brand hover:ring-brand/30'
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        ))}
-      </>
-    )
-  }
+  const filterFields = (
+    <CategoryFilterFields
+      fields={fields}
+      selectedFilterIds={selectedFilterIds}
+      filterValues={filterValues}
+      onFilterIdsChange={onChange}
+      onFilterValuesChange={onFilterValuesChange}
+    />
+  )
+
+  if (isFlat) return filterFields
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-3">
       <div>
         <h3 className="text-sm font-semibold text-slate-900">Category filters</h3>
         <p className="mt-1 text-xs text-slate-500">
           Filters from admin, scoped to your category and subcategory selection.
         </p>
       </div>
-
-      {groups.map((group) => (
-        <div key={String(group.root._id)} className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
-          <p className="mb-3 text-sm font-semibold text-slate-800">{group.root.name}</p>
-          <div className="flex flex-wrap gap-2">
-            {group.options.map((opt) => {
-              const id = opt.filterId || opt.value
-              const active = selectedSet.has(String(id))
-              return (
-                <button
-                  key={`${group.root._id}-${opt.value}`}
-                  type="button"
-                  onClick={() => toggleFilterId(id)}
-                  className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${
-                    active
-                      ? 'bg-brand text-white shadow-sm shadow-brand/25'
-                      : 'bg-white text-[#64748B] ring-1 ring-[#E4E7EF] hover:text-brand hover:ring-brand/30'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              )
-            })}
-          </div>
-        </div>
-      ))}
+      {filterFields}
     </div>
   )
 }

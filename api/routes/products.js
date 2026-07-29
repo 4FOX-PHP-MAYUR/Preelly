@@ -755,6 +755,33 @@ router.get('/', async (req, res) => {
       return docs.map((d) => d._id)
     }
 
+    // Generic category hierarchy: `categoryPathIds` carries every level below the
+    // root (comma separated, root → leaf) so an arbitrarily deep selection made on
+    // the search page filters correctly, without needing a query param per level.
+    // Every level must match (AND), but a level matches through any of the shapes
+    // products use — `categoryPath` membership, or `category`/`subcategory`
+    // pointing at that level or one of its descendants.
+    const categoryPathIdsParam =
+      req.query.categoryPathIds ?? req.query.category_path_ids ?? req.query.categoryPath ?? null
+    const categoryPathIds = parseObjectIdList(categoryPathIdsParam).filter((id) =>
+      mongoose.Types.ObjectId.isValid(String(id)),
+    )
+    if (categoryPathIds.length) {
+      query.$and = query.$and || []
+      for (const id of categoryPathIds) {
+        const levelObjId = new mongoose.Types.ObjectId(String(id))
+        const levelScopeIds = await expandCategoryScope(id)
+        const levelScope = levelScopeIds.length ? { $in: levelScopeIds } : levelObjId
+        query.$and.push({
+          $or: [
+            { categoryPath: levelObjId },
+            { category: levelScope },
+            { subcategory: levelScope },
+          ],
+        })
+      }
+    }
+
     // Vehicle hierarchy: brandId / modelId / trimId are Category tree IDs (see PostAd categoryPath).
     // When any ID is present, require exact categoryPath membership (AND) — do not OR-match
     // "any BMW in tree" or title text, or wrong models (e.g. X7) appear for 2-Series filters.

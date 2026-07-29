@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useRef } from 'react'
-import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import Layout from './components/Layout/Layout'
 import { useSyncRouteApiScope } from '@shared/hooks/useSyncRouteApiScope'
@@ -37,6 +37,7 @@ const DashboardMySearchPage = lazy(() => import('./pages/dashboard/DashboardMySe
 const UserProfilePage = lazy(() => import('@shared/pages/UserProfilePage'))
 const FollowersFollowingPage = lazy(() => import('./pages/FollowersFollowingPage'))
 const SearchResultsPage = lazy(() => import('./pages/SearchResultsPage'))
+const CategorySearchPage = lazy(() => import('./pages/CategorySearchPage'))
 const CategoryProductsPage = lazy(() => import('./pages/CategoryProductsPage'))
 const ChatInboxPage = lazy(() => import('./pages/ChatInboxPage'))
 const CartCheckoutPage = lazy(() => import('./pages/CartCheckoutPage'))
@@ -71,6 +72,18 @@ function PrivateRoute({ children }) {
   if (!hasSession) return <Navigate to={isSellerIntent ? '/login?target=seller' : '/login'} replace />
 
   return children
+}
+
+/**
+ * /search serves two flows: the keyword/category results view (reached from the
+ * search bar, saved searches, …) and — with no query at all — the hierarchical
+ * category search builder.
+ */
+function SearchRoute() {
+  const [searchParams] = useSearchParams()
+  const hasResultsQuery =
+    Boolean((searchParams.get('q') || '').trim()) || Boolean(searchParams.get('category'))
+  return hasResultsQuery ? <SearchResultsPage /> : <CategorySearchPage />
 }
 
 // /signup has been removed — send visitors to /login, preserving any query (e.g. ?target=seller).
@@ -108,7 +121,7 @@ function App() {
           <Route path="/categories/:categoryId/subcategory/:subcategoryId" element={<CategoryProductsPage />} />
           <Route path="/categories/:categoryId/products" element={<CategoryProductsPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
-          <Route path="/search" element={<SearchResultsPage />} />
+          <Route path="/search" element={<SearchRoute />} />
           <Route path="/login" element={<LoginPage />} />
           {/* Signup is unified into /login (auto-detects new vs. existing users). */}
           <Route path="/signup" element={<SignupRedirect />} />

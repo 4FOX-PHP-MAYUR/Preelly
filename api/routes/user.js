@@ -12,6 +12,8 @@ const Follow = require('../models/Follow')
 const Order = require('../models/Order')
 const Notification = require('../models/Notification')
 const EmailOtp = require('../models/EmailOtp')
+const BankAccount = require('../models/BankAccount')
+const SavedCard = require('../models/SavedCard')
 const { sendEmail } = require('../utils/mailer')
 const { isSuperAdminRole, buildFullPermissionSet } = require('../config/adminPermissions')
 const { getPermissionMapForRole } = require('../services/adminPermissionService')
@@ -1047,7 +1049,7 @@ router.delete('/locations/:locId', authMiddleware, async (req, res) => {
   }
 })
 
-// ─── Bank Accounts ───────────────────────────────────────────────────────────
+// ─── Bank Accounts (separate collection, keyed by userId) ────────────────────
 
 function sanitizeBankPayload(body = {}) {
   return {
@@ -1060,11 +1062,18 @@ function sanitizeBankPayload(body = {}) {
   }
 }
 
+async function clearPrimaryBankAccounts(userId, exceptId = null) {
+  const filter = { userId, isPrimary: true }
+  if (exceptId) filter._id = { $ne: exceptId }
+  await BankAccount.updateMany(filter, { $set: { isPrimary: false } })
+}
+
 router.get('/bank-accounts', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('bankAccounts').lean()
-    if (!user) return res.status(404).json({ message: 'User not found' })
-    res.json({ bankAccounts: user.bankAccounts || [] })
+    const bankAccounts = await BankAccount.find({ userId: req.user._id })
+      .sort({ isPrimary: -1, createdAt: -1 })
+      .lean()
+    res.json({ bankAccounts })
   } catch (error) {
     console.error('Error fetching bank accounts:', error)
     res.status(500).json({ message: 'Error fetching bank accounts' })
@@ -1079,19 +1088,17 @@ router.post('/bank-accounts', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Enter a valid account number' })
     }
 
-    const user = await User.findById(req.user._id)
-    if (!user) return res.status(404).json({ message: 'User not found' })
-    if (!user.bankAccounts) user.bankAccounts = []
-
-    if (payload.isPrimary || user.bankAccounts.length === 0) {
-      user.bankAccounts.forEach((a) => { a.isPrimary = false })
+    const existingCount = await BankAccount.countDocuments({ userId: req.user._id })
+    if (payload.isPrimary || existingCount === 0) {
+      await clearPrimaryBankAccounts(req.user._id)
       payload.isPrimary = true
     }
 
-    user.bankAccounts.push(payload)
-    await user.save()
-    const saved = user.bankAccounts[user.bankAccounts.length - 1]
-    res.status(201).json({ bankAccount: saved })
+    const bankAccount = await BankAccount.create({
+      userId: req.user._id,
+      ...payload,
+    })
+    res.status(201).json({ bankAccount })
   } catch (error) {
     console.error('Error adding bank account:', error)
     res.status(500).json({ message: 'Error adding bank account' })
@@ -1100,10 +1107,10 @@ router.post('/bank-accounts', authMiddleware, async (req, res) => {
 
 router.put('/bank-accounts/:accountId', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id)
-    if (!user) return res.status(404).json({ message: 'User not found' })
-
-    const account = user.bankAccounts?.id(req.params.accountId)
+    const account = await BankAccount.findOne({
+      _id: req.params.accountId,
+      userId: req.user._id,
+    })
     if (!account) return res.status(404).json({ message: 'Bank account not found' })
 
     const payload = sanitizeBankPayload({ ...account.toObject(), ...req.body })
@@ -1113,7 +1120,7 @@ router.put('/bank-accounts/:accountId', authMiddleware, async (req, res) => {
     }
 
     if (payload.isPrimary) {
-      user.bankAccounts.forEach((a) => { a.isPrimary = false })
+      await clearPrimaryBankAccounts(req.user._id, account._id)
     }
 
     account.bankName = payload.bankName
@@ -1123,7 +1130,7 @@ router.put('/bank-accounts/:accountId', authMiddleware, async (req, res) => {
     account.branchName = payload.branchName
     if (req.body.isPrimary !== undefined) account.isPrimary = Boolean(req.body.isPrimary)
 
-    await user.save()
+    await account.save()
     res.json({ bankAccount: account })
   } catch (error) {
     console.error('Error updating bank account:', error)
@@ -1134,18 +1141,22 @@ router.put('/bank-accounts/:accountId', authMiddleware, async (req, res) => {
 
 router.delete('/bank-accounts/:accountId', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id)
-    if (!user) return res.status(404).json({ message: 'User not found' })
-
-    const account = user.bankAccounts?.id(req.params.accountId)
+    const account = await BankAccount.findOne({
+      _id: req.params.accountId,
+      userId: req.user._id,
+    })
     if (!account) return res.status(404).json({ message: 'Bank account not found' })
 
     const wasPrimary = account.isPrimary
-    account.deleteOne()
-    if (wasPrimary && user.bankAccounts.length > 0) {
-      user.bankAccounts[0].isPrimary = true
+    await account.deleteOne()
+
+    if (wasPrimary) {
+      const next = await BankAccount.findOne({ userId: req.user._id }).sort({ createdAt: 1 })
+      if (next) {
+        next.isPrimary = true
+        await next.save()
+      }
     }
-    await user.save()
     res.json({ message: 'Bank account deleted' })
   } catch (error) {
     console.error('Error deleting bank account:', error)
@@ -1154,7 +1165,7 @@ router.delete('/bank-accounts/:accountId', authMiddleware, async (req, res) => {
   }
 })
 
-// ─── Saved Cards (metadata only — never store full PAN/CVV) ──────────────────
+// ─── Saved Cards (separate collection; metadata only — never store full PAN/CVV)
 
 function detectCardBrand(digits) {
   if (/^4/.test(digits)) return 'Visa'
@@ -1190,11 +1201,18 @@ function sanitizeCardPayload(body = {}, { requireNumber = false } = {}) {
   }
 }
 
+async function clearPrimarySavedCards(userId, exceptId = null) {
+  const filter = { userId, isPrimary: true }
+  if (exceptId) filter._id = { $ne: exceptId }
+  await SavedCard.updateMany(filter, { $set: { isPrimary: false } })
+}
+
 router.get('/saved-cards', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id).select('savedCards').lean()
-    if (!user) return res.status(404).json({ message: 'User not found' })
-    res.json({ savedCards: user.savedCards || [] })
+    const savedCards = await SavedCard.find({ userId: req.user._id })
+      .sort({ isPrimary: -1, createdAt: -1 })
+      .lean()
+    res.json({ savedCards })
   } catch (error) {
     console.error('Error fetching saved cards:', error)
     res.status(500).json({ message: 'Error fetching saved cards' })
@@ -1214,16 +1232,14 @@ router.post('/saved-cards', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Expiry must be MM/YY' })
     }
 
-    const user = await User.findById(req.user._id)
-    if (!user) return res.status(404).json({ message: 'User not found' })
-    if (!user.savedCards) user.savedCards = []
-
-    if (payload.isPrimary || user.savedCards.length === 0) {
-      user.savedCards.forEach((c) => { c.isPrimary = false })
+    const existingCount = await SavedCard.countDocuments({ userId: req.user._id })
+    if (payload.isPrimary || existingCount === 0) {
+      await clearPrimarySavedCards(req.user._id)
       payload.isPrimary = true
     }
 
-    user.savedCards.push({
+    const savedCard = await SavedCard.create({
+      userId: req.user._id,
       brand: payload.brand,
       last4: payload.last4,
       expiry: payload.expiry,
@@ -1231,9 +1247,7 @@ router.post('/saved-cards', authMiddleware, async (req, res) => {
       nickname: payload.nickname || `${payload.brand} Card`,
       isPrimary: payload.isPrimary,
     })
-    await user.save()
-    const saved = user.savedCards[user.savedCards.length - 1]
-    res.status(201).json({ savedCard: saved })
+    res.status(201).json({ savedCard })
   } catch (error) {
     console.error('Error adding saved card:', error)
     res.status(500).json({ message: 'Error adding saved card' })
@@ -1242,10 +1256,10 @@ router.post('/saved-cards', authMiddleware, async (req, res) => {
 
 router.put('/saved-cards/:cardId', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id)
-    if (!user) return res.status(404).json({ message: 'User not found' })
-
-    const card = user.savedCards?.id(req.params.cardId)
+    const card = await SavedCard.findOne({
+      _id: req.params.cardId,
+      userId: req.user._id,
+    })
     if (!card) return res.status(404).json({ message: 'Saved card not found' })
 
     const payload = sanitizeCardPayload({
@@ -1274,13 +1288,13 @@ router.put('/saved-cards/:cardId', authMiddleware, async (req, res) => {
     if (req.body.brand !== undefined && !payload._rawNumber) card.brand = payload.brand
 
     if (payload.isPrimary) {
-      user.savedCards.forEach((c) => { c.isPrimary = false })
+      await clearPrimarySavedCards(req.user._id, card._id)
       card.isPrimary = true
     } else if (req.body.isPrimary !== undefined) {
       card.isPrimary = Boolean(req.body.isPrimary)
     }
 
-    await user.save()
+    await card.save()
     res.json({ savedCard: card })
   } catch (error) {
     console.error('Error updating saved card:', error)
@@ -1291,18 +1305,22 @@ router.put('/saved-cards/:cardId', authMiddleware, async (req, res) => {
 
 router.delete('/saved-cards/:cardId', authMiddleware, async (req, res) => {
   try {
-    const user = await User.findById(req.user._id)
-    if (!user) return res.status(404).json({ message: 'User not found' })
-
-    const card = user.savedCards?.id(req.params.cardId)
+    const card = await SavedCard.findOne({
+      _id: req.params.cardId,
+      userId: req.user._id,
+    })
     if (!card) return res.status(404).json({ message: 'Saved card not found' })
 
     const wasPrimary = card.isPrimary
-    card.deleteOne()
-    if (wasPrimary && user.savedCards.length > 0) {
-      user.savedCards[0].isPrimary = true
+    await card.deleteOne()
+
+    if (wasPrimary) {
+      const next = await SavedCard.findOne({ userId: req.user._id }).sort({ createdAt: 1 })
+      if (next) {
+        next.isPrimary = true
+        await next.save()
+      }
     }
-    await user.save()
     res.json({ message: 'Saved card deleted' })
   } catch (error) {
     console.error('Error deleting saved card:', error)

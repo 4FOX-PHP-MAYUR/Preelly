@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import SettingsPageShell from '../../components/Dashboard/SettingsPageShell'
 import { loadPostAdDraft, clearPostAdDraft } from '@shared/utils/postAdDraftStore'
+import { loadServerPostAdDraft, discardServerPostAdDraft } from '@shared/utils/persistPostAdDraft'
 import { formatPrice } from '@shared/utils/helpers'
 import ModalDialog from '../../components/ui/ModalDialog'
 
@@ -42,6 +43,10 @@ function draftTitle(draft) {
 function draftCategory(draft) {
   const path = draft?.selectedPathNames || []
   if (path.length) return path[path.length - 1]
+  if (Array.isArray(draft?.selectedPath) && draft.selectedPath.length) {
+    const last = draft.selectedPath[draft.selectedPath.length - 1]
+    if (last && typeof last === 'object' && last.name) return last.name
+  }
   return (
     draft?.selectedCategory?.name ||
     draft?.formValues?.categoryName ||
@@ -61,6 +66,36 @@ function draftThumb(draft) {
   if (img instanceof Blob) return URL.createObjectURL(img)
   if (typeof img === 'string') return img
   return null
+}
+
+function mergeDraftViews(localDraft, serverDraft) {
+  if (!localDraft && !serverDraft) return null
+  if (localDraft && !(localDraft.currentStep > 1) && !serverDraft) return null
+
+  const base = {
+    ...(serverDraft || {}),
+    ...(localDraft || {}),
+    draftId: localDraft?.draftId || serverDraft?._id || null,
+    formValues: {
+      ...(serverDraft?.formValues || {}),
+      ...(localDraft?.formValues || {}),
+    },
+    dynamicFormValues: {
+      ...(serverDraft?.dynamicFormValues || {}),
+      ...(localDraft?.dynamicFormValues || {}),
+    },
+    selectedPath: localDraft?.selectedPath?.length
+      ? localDraft.selectedPath
+      : serverDraft?.selectedPath || [],
+    selectedCategory: localDraft?.selectedCategory || serverDraft?.selectedCategory || '',
+    currentStep: localDraft?.currentStep || serverDraft?.currentStep || 1,
+    imageFiles: localDraft?.imageFiles || [],
+    videoFile: localDraft?.videoFile || null,
+    savedAt: localDraft?.savedAt || (serverDraft?.lastSavedAt ? new Date(serverDraft.lastSavedAt).getTime() : null),
+  }
+
+  if (!(base.currentStep > 1)) return null
+  return base
 }
 
 function DraftCard({ draft, onContinue, onPreview, onPublish, onDelete }) {
@@ -156,8 +191,11 @@ export default function DashboardDraftsPage() {
   const refresh = async () => {
     setLoading(true)
     try {
-      const data = await loadPostAdDraft(user?._id)
-      setDraft(data && data.currentStep > 1 ? data : null)
+      const [local, server] = await Promise.all([
+        loadPostAdDraft(user?._id),
+        user?._id ? loadServerPostAdDraft() : Promise.resolve(null),
+      ])
+      setDraft(mergeDraftViews(local, server))
     } finally {
       setLoading(false)
     }
@@ -171,7 +209,9 @@ export default function DashboardDraftsPage() {
 
   const handleDelete = async () => {
     if (!window.confirm('Delete this draft? This cannot be undone.')) return
+    const draftId = draft?.draftId || draft?._id
     await clearPostAdDraft(user?._id)
+    await discardServerPostAdDraft(draftId)
     setDraft(null)
     toast.success('Draft deleted')
   }
@@ -248,7 +288,8 @@ export default function DashboardDraftsPage() {
             <p className="text-sm text-slate-500">{draftCategory(draft)}</p>
             <p className="text-sm font-semibold text-slate-900">{draftPrice(draft)}</p>
             <p className="text-xs text-slate-400">
-              Step {draft.currentStep || 1} of your post-ad flow is saved locally on this device.
+              Step {draft.currentStep || 1} of your post-ad flow is saved
+              {draft.draftId || draft._id ? ' and synced to your account' : ' locally on this device'}.
             </p>
             <button
               type="button"

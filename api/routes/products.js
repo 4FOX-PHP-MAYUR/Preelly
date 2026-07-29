@@ -2166,6 +2166,24 @@ router.post(
       const product = new Product(productData)
       await product.save()
 
+      // Optional: if the client sent a draftId (or any live draft exists), mark it
+      // published. Failures here must never break the existing create response.
+      try {
+        const productDraftService = require('../services/productDraftService')
+        const draftIdRaw = req.body?.draftId
+        const draftId =
+          draftIdRaw && String(draftIdRaw).trim() && String(draftIdRaw).trim() !== 'undefined'
+            ? String(draftIdRaw).trim()
+            : null
+        await productDraftService.markPublished({
+          userId: req.user._id,
+          draftId,
+          productId: product._id,
+        })
+      } catch (draftErr) {
+        console.error('[products] failed to mark productDraft published:', draftErr.message)
+      }
+
       if (product.video) {
         enqueueProductVideoTranscode(product._id, product.video).catch((err) => {
           console.error('[products] adaptive transcode queue failed:', err.message)

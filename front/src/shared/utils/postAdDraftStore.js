@@ -4,6 +4,9 @@
  * IndexedDB (not localStorage/sessionStorage) is required here because it can
  * store File/Blob objects directly via structured clone; the uploaded video and
  * photos can't be persisted any other way in the browser.
+ *
+ * Also keeps the server `productDraft` id (`draftId`) so background sync can
+ * update the same record without changing the existing wizard UX.
  */
 
 const DB_NAME = 'preelly-post-ad-drafts'
@@ -76,5 +79,16 @@ export async function clearPostAdDraft(userId) {
     db.close()
   } catch (err) {
     console.error('[postAdDraftStore] Failed to clear draft:', err)
+  }
+}
+
+/** Persist only the server draft id without touching media blobs. */
+export async function setPostAdDraftId(userId, draftId) {
+  if (!userId) return
+  try {
+    const existing = (await loadPostAdDraft(userId)) || {}
+    await savePostAdDraft(userId, { ...existing, draftId: draftId || null })
+  } catch (err) {
+    console.error('[postAdDraftStore] Failed to set draftId:', err)
   }
 }

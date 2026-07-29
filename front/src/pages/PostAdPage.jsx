@@ -76,7 +76,13 @@ import { FieldRenderer } from '../features/postAdCategoryForm/components/FieldRe
 import { LocationMapPicker } from '../features/postAdCategoryForm/components/LocationMapPicker'
 import { FIELD_KIND, getFieldKind } from '@shared/utils/dynamicFormFieldKind'
 import { resolveFieldDisplayValue } from '@shared/utils/dynamicFormDisplay'
-import { savePostAdDraft, loadPostAdDraft, clearPostAdDraft } from '@shared/utils/postAdDraftStore'
+import { loadPostAdDraft, clearPostAdDraft } from '@shared/utils/postAdDraftStore'
+import {
+  persistPostAdDraft,
+  loadServerPostAdDraft,
+  markPostAdDraftPublished,
+  discardServerPostAdDraft,
+} from '@shared/utils/persistPostAdDraft'
 
 const TOTAL_STEPS = 6
 
@@ -3217,6 +3223,9 @@ function PostAdPage() {
   // dynamic-form values are handed down via ref and re-applied right after — see
   // useCategoryDynamicForm.
   const restoredDynamicFormValuesRef = useRef(null)
+  // Server productDraft id — kept in a ref so autosave / next / prev can update
+  // the same record without re-rendering the wizard.
+  const draftIdRef = useRef(null)
 
   // Restore session from storage when entering post-ad (prevents false logout on Back).
   useEffect(() => {
@@ -3224,7 +3233,7 @@ function PostAdPage() {
   }, [dispatch])
 
   // Fresh post-ad flow each visit — UNLESS a previously saved draft exists for this
-  // user (IndexedDB; see postAdDraftStore), in which case it's restored instead so a
+  // user (IndexedDB + productDraft), in which case it's restored instead so a
   // refresh, or leaving and coming back to /post-ad, picks up right where they left
   // off (title/description/category/photos/video and admin-configured fields).
   // A `step` URL param (kept in sync below) still wins over the draft's own step
@@ -3237,35 +3246,62 @@ function PostAdPage() {
 
     let cancelled = false
 
+    const applyDraft = (draft) => {
+      if (!draft || !(draft.currentStep > 1)) return false
+
+      if (draft.draftId || draft._id) {
+        draftIdRef.current = draft.draftId || draft._id
+      }
+
+      Object.entries(draft.formValues || {}).forEach(([key, value]) => setValue(key, value))
+      if (draft.videoFile) setValue('video', draft.videoFile)
+      setSelectedPath(draft.selectedPath || [])
+      setSelectedCategory(draft.selectedCategory || '')
+      // Restore the drill level; map legacy string phases from older drafts.
+      setCategoryLevel(
+        typeof draft.categoryLevel === 'number'
+          ? draft.categoryLevel
+          : { root: 0, subcategory: 1, childCategory: 2 }[draft.categoryPhase] ?? 0
+      )
+      setVideoFile(draft.videoFile || null)
+      setImageFiles(draft.imageFiles || [])
+      restoredDynamicFormValuesRef.current = draft.dynamicFormValues || null
+
+      const requestedDisplayStep = Number(searchParams.get('step'))
+      const requestedStep = Number.isInteger(requestedDisplayStep) ? toInternalStep(requestedDisplayStep) : NaN
+      const canHonorRequestedStep =
+        Number.isInteger(requestedStep) && requestedStep >= 2 && requestedStep <= TOTAL_STEPS
+      setCurrentStep(canHonorRequestedStep ? requestedStep : draft.currentStep)
+      return true
+    }
+
     const restoreOrReset = async () => {
-      const draft = user?._id ? await loadPostAdDraft(user._id) : null
+      const localDraft = user?._id ? await loadPostAdDraft(user._id) : null
 
-      if (!cancelled && draft && draft.currentStep > 1) {
-        Object.entries(draft.formValues || {}).forEach(([key, value]) => setValue(key, value))
-        if (draft.videoFile) setValue('video', draft.videoFile)
-        setSelectedPath(draft.selectedPath || [])
-        setSelectedCategory(draft.selectedCategory || '')
-        // Restore the drill level; map legacy string phases from older drafts.
-        setCategoryLevel(
-          typeof draft.categoryLevel === 'number'
-            ? draft.categoryLevel
-            : { root: 0, subcategory: 1, childCategory: 2 }[draft.categoryPhase] ?? 0
-        )
-        setVideoFile(draft.videoFile || null)
-        setImageFiles(draft.imageFiles || [])
-        restoredDynamicFormValuesRef.current = draft.dynamicFormValues || null
-
-        const requestedDisplayStep = Number(searchParams.get('step'))
-        const requestedStep = Number.isInteger(requestedDisplayStep) ? toInternalStep(requestedDisplayStep) : NaN
-        const canHonorRequestedStep =
-          Number.isInteger(requestedStep) && requestedStep >= 2 && requestedStep <= TOTAL_STEPS
-        setCurrentStep(canHonorRequestedStep ? requestedStep : draft.currentStep)
-        setInitialStepResolved(true)
+      if (!cancelled && applyDraft(localDraft)) {
+        // Prefer local media; still adopt server draftId if local is missing it.
+        if (user?._id && !draftIdRef.current) {
+          const serverDraft = await loadServerPostAdDraft()
+          if (!cancelled && serverDraft?._id) {
+            draftIdRef.current = serverDraft._id
+          }
+        }
+        if (!cancelled) setInitialStepResolved(true)
         return
+      }
+
+      // No local draft — try productDraft (e.g. new browser / cleared IndexedDB).
+      if (user?._id) {
+        const serverDraft = await loadServerPostAdDraft()
+        if (!cancelled && applyDraft(serverDraft)) {
+          setInitialStepResolved(true)
+          return
+        }
       }
 
       if (cancelled) return
 
+      draftIdRef.current = null
       setSelectedPath([])
       setSelectedCategory('')
       setValue('category', '')
@@ -3292,15 +3328,16 @@ function PostAdPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch, isEditMode, setValue, user?.id])
 
-  // Debounced autosave of the in-progress draft (text fields, category, video, photos,
-  // and Step 5's admin-configured fields) so it survives a refresh or navigating away.
-  useEffect(() => {
-    if (isEditMode || !initialStepResolved || !user?._id || currentStep < 2) return
-
-    const timeoutId = window.setTimeout(() => {
-      const { video, ...formValues } = getValues()
-      savePostAdDraft(user._id, {
-        currentStep,
+  const saveDraftSnapshot = async (stepOverride) => {
+    if (isEditMode || !user?._id) return null
+    const { video, ...formValues } = getValues()
+    const nextId = await persistPostAdDraft({
+      userId: user._id,
+      draftId: draftIdRef.current,
+      localDraft: {
+        draftId: draftIdRef.current,
+        currentStep: stepOverride ?? currentStep,
+        lastSavedStep: stepOverride ?? currentStep,
         categoryLevel,
         selectedPath,
         selectedCategory,
@@ -3308,10 +3345,23 @@ function PostAdPage() {
         videoFile,
         imageFiles,
         dynamicFormValues: dynamicFormSubmitValues,
-      })
+      },
+    })
+    if (nextId) draftIdRef.current = nextId
+    return nextId
+  }
+
+  // Debounced autosave of the in-progress draft (IndexedDB + productDraft) so it
+  // survives a refresh or navigating away without changing the wizard UX.
+  useEffect(() => {
+    if (isEditMode || !initialStepResolved || !user?._id || currentStep < 2) return
+
+    const timeoutId = window.setTimeout(() => {
+      saveDraftSnapshot(currentStep)
     }, 800)
 
     return () => window.clearTimeout(timeoutId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     isEditMode,
     initialStepResolved,
@@ -3755,7 +3805,10 @@ function PostAdPage() {
     // Additional custom validation
     if (validateStep(currentStep)) {
       if (currentStep < TOTAL_STEPS) {
-        setCurrentStep(currentStep + 1)
+        const next = currentStep + 1
+        // Persist current step fields before advancing (productDraft upsert).
+        saveDraftSnapshot(currentStep)
+        setCurrentStep(next)
         window.scrollTo(0, 0)
       }
     } else {
@@ -3842,7 +3895,9 @@ function PostAdPage() {
 }
   const prevStep = () => {
     if (currentStep > 1) {
-      setCurrentStep(currentStep - 1)
+      const prev = currentStep - 1
+      saveDraftSnapshot(currentStep)
+      setCurrentStep(prev)
       window.scrollTo(0, 0)
     }
   }
@@ -3880,7 +3935,12 @@ function PostAdPage() {
     Boolean((watch('description') || '').trim())
 
   const handleFlushData = () => {
-    if (user?._id) clearPostAdDraft(user._id)
+    const draftId = draftIdRef.current
+    if (user?._id) {
+      clearPostAdDraft(user._id)
+      discardServerPostAdDraft(draftId)
+    }
+    draftIdRef.current = null
     reset()
     setSelectedPath([])
     setSelectedCategory('')
@@ -4158,6 +4218,8 @@ function PostAdPage() {
             : undefined,
         video: newVideo || undefined,
         existingVideo: existingVideoUrl || undefined,
+        // Optional: lets POST /products mark productDraft as published after create.
+        ...(draftIdRef.current ? { draftId: draftIdRef.current } : {}),
         ...(aiMergedCarListing
           ? {
               display_data: aiMergedCarListing.display_data,
@@ -4359,10 +4421,16 @@ function PostAdPage() {
       } else {
         const createdProduct = await dispatch(createProduct(formData)).unwrap()
         toast.success('Product submitted for review! It will be visible after admin approval.')
-        if (user?._id) clearPostAdDraft(user._id)
+        const publishedDraftId = draftIdRef.current
+        const createdId = createdProduct?._id || createdProduct?.id
+        if (user?._id) {
+          clearPostAdDraft(user._id)
+          // Backend also marks published when draftId is sent; this is a safe fallback.
+          await markPostAdDraftPublished({ draftId: publishedDraftId, productId: createdId })
+        }
+        draftIdRef.current = null
 
         // Listing is saved (isPaymentDone = 0) — send the seller on to pick a package.
-        const createdId = createdProduct?._id || createdProduct?.id
         if (createdId) {
           navigate(`/post-ad/select-package?productId=${createdId}`, {
             state: { breadcrumbItems: [...pathNames, 'Summary'] },

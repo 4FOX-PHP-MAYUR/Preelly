@@ -318,6 +318,20 @@ export const productService = {
   deleteProduct: (id) => api.delete(`/products/${id}`),
 }
 
+// Post Your Ad — productDraft table sync (background; does not replace IndexedDB media)
+export const productDraftService = {
+  upsertDraft: (payload) => api.post('/product-drafts', payload),
+  updateDraft: (id, payload) => api.put(`/product-drafts/${id}`, payload),
+  listDrafts: (config) => api.get('/product-drafts', config),
+  getCurrentDraft: (config) => api.get('/product-drafts/current', config),
+  getDraftById: (id, config) => api.get(`/product-drafts/${id}`, config),
+  markPublished: (id, payload = {}) => api.post(`/product-drafts/${id}/publish`, payload),
+  deleteDraft: (id, { soft = false } = {}) =>
+    api.delete(`/product-drafts/${id}`, { params: soft ? { soft: true } : undefined }),
+  deleteCurrentDraft: ({ soft = false } = {}) =>
+    api.delete('/product-drafts', { params: soft ? { soft: true } : undefined }),
+}
+
 // AI listing extraction
 export const listingService = {
   aiExtract: ({

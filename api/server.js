@@ -171,6 +171,7 @@ app.use('/api/cart',          require('./routes/cart'))
 app.use('/api',               require('./routes/feedData'))
 app.use('/api',               require('./routes/interactions'))  // before /products
 app.use('/api/products',      require('./routes/products'))
+app.use('/api/product-drafts', require('./routes/productDrafts'))
 app.use('/api',               require('./routes/dynamicForm'))
 app.use('/api/admin',         require('./routes/admin'))
 app.use('/api/coupon',        require('./routes/coupons'))
@@ -288,6 +289,7 @@ connectDB().then(() => {
     require('./models/PaymentTransaction').fixIndexes?.() ?? Promise.resolve(),
     require('./models/PaymentLog').fixIndexes?.() ?? Promise.resolve(),
     require('./models/Product').syncIndexes(),
+    require('./models/ProductDraft').syncIndexes(),
     require('./models/User').syncIndexes(),
     require('./models/Chat').syncIndexes(),
     require('./models/SearchHistory').syncIndexes(),

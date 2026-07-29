@@ -115,27 +115,6 @@ const userSchema = new mongoose.Schema(
         isDefault: { type: Boolean, default: false },
       },
     ],
-    bankAccounts: [
-      {
-        bankName: { type: String, required: true, trim: true, maxlength: 120 },
-        accountNumber: { type: String, required: true, trim: true, maxlength: 64 },
-        iban: { type: String, default: '', trim: true, maxlength: 64 },
-        swift: { type: String, default: '', trim: true, maxlength: 32 },
-        branchName: { type: String, default: '', trim: true, maxlength: 120 },
-        isPrimary: { type: Boolean, default: false },
-      },
-    ],
-    // Only non-sensitive card metadata is stored (never full PAN or CVV).
-    savedCards: [
-      {
-        brand: { type: String, default: 'Card', trim: true, maxlength: 40 },
-        last4: { type: String, required: true, trim: true, maxlength: 4 },
-        expiry: { type: String, default: '', trim: true, maxlength: 7 }, // MM/YY
-        holderName: { type: String, default: '', trim: true, maxlength: 120 },
-        nickname: { type: String, default: '', trim: true, maxlength: 80 },
-        isPrimary: { type: Boolean, default: false },
-      },
-    ],
     genderCustom: {
       type: String,
       default: null,

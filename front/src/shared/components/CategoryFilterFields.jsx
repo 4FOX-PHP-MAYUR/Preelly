@@ -1,9 +1,13 @@
-import { memo, useMemo } from 'react'
+import { memo, useMemo, useState } from 'react'
+import { ChevronDown, ChevronUp } from 'lucide-react'
 import {
   FILTER_FIELD_KIND,
   FREE_FORM_FIELD_KINDS,
 } from '@shared/utils/categoryFilterFields'
 import { PanelSection } from '@shared/components/FilterPanelSection'
+
+/** Option-list filters (radio/checkbox/chips) collapse to this many values until expanded. */
+const VISIBLE_OPTION_LIMIT = 5
 
 /**
  * Renders admin-configured category filters according to each filter's field
@@ -36,6 +40,27 @@ function OptionChip({ label, active, onClick }) {
   )
 }
 
+/** Independent expand/collapse state per field, so toggling one filter never affects another. */
+function useShowMoreOptions(options, enabled) {
+  const [expanded, setExpanded] = useState(false)
+  const hasMore = enabled && options.length > VISIBLE_OPTION_LIMIT
+  const visibleOptions = hasMore && !expanded ? options.slice(0, VISIBLE_OPTION_LIMIT) : options
+  return { visibleOptions, hasMore, expanded, toggle: () => setExpanded((v) => !v) }
+}
+
+function ShowMoreToggle({ expanded, onToggle }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="mt-2.5 inline-flex items-center gap-1 text-sm font-medium text-brand hover:text-brand-700"
+    >
+      {expanded ? 'Show Less' : 'Show More'}
+      {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+    </button>
+  )
+}
+
 function FieldShell({ field, children }) {
   return (
     <PanelSection
@@ -51,7 +76,15 @@ function FieldShell({ field, children }) {
   )
 }
 
-function FilterField({ field, selectedIds, values, onToggleId, onSetIds, onValueChange }) {
+function FilterField({
+  field,
+  selectedIds,
+  values,
+  onToggleId,
+  onSetIds,
+  onValueChange,
+  enableShowMore,
+}) {
   const optionIds = useMemo(
     () => field.options.map((opt) => String(opt.filterId || opt.value)),
     [field.options],
@@ -102,67 +135,84 @@ function FilterField({ field, selectedIds, values, onToggleId, onSetIds, onValue
 
   if (field.kind === FILTER_FIELD_KIND.RADIO) {
     return (
-      <FieldShell field={field}>
-        <div className="space-y-2">
-          {field.options.map((opt) => {
-            const id = String(opt.filterId || opt.value)
-            return (
-              <label key={id} className="flex cursor-pointer items-center gap-2 text-sm text-[#475569]">
-                <input
-                  type="radio"
-                  name={`filter-${field.id}`}
-                  checked={selectedIds.has(id)}
-                  onChange={() => onSetIds(optionIds, [id])}
-                  className="h-4 w-4 accent-[#2563eb]"
-                />
-                {opt.label}
-              </label>
-            )
-          })}
-        </div>
-      </FieldShell>
+      <FieldShellWithShowMore field={field} options={field.options} enableShowMore={enableShowMore}>
+        {(visibleOptions) => (
+          <div className="space-y-2">
+            {visibleOptions.map((opt) => {
+              const id = String(opt.filterId || opt.value)
+              return (
+                <label key={id} className="flex cursor-pointer items-center gap-2 text-sm text-[#475569]">
+                  <input
+                    type="radio"
+                    name={`filter-${field.id}`}
+                    checked={selectedIds.has(id)}
+                    onChange={() => onSetIds(optionIds, [id])}
+                    className="h-4 w-4 accent-[#2563eb]"
+                  />
+                  {opt.label}
+                </label>
+              )
+            })}
+          </div>
+        )}
+      </FieldShellWithShowMore>
     )
   }
 
   if (field.kind === FILTER_FIELD_KIND.CHECKBOX) {
     return (
-      <FieldShell field={field}>
-        <div className="space-y-2">
-          {field.options.map((opt) => {
-            const id = String(opt.filterId || opt.value)
-            return (
-              <label key={id} className="flex cursor-pointer items-center gap-2 text-sm text-[#475569]">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(id)}
-                  onChange={() => onToggleId(id)}
-                  className="h-4 w-4 rounded accent-[#2563eb]"
-                />
-                {opt.label}
-              </label>
-            )
-          })}
-        </div>
-      </FieldShell>
+      <FieldShellWithShowMore field={field} options={field.options} enableShowMore={enableShowMore}>
+        {(visibleOptions) => (
+          <div className="space-y-2">
+            {visibleOptions.map((opt) => {
+              const id = String(opt.filterId || opt.value)
+              return (
+                <label key={id} className="flex cursor-pointer items-center gap-2 text-sm text-[#475569]">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(id)}
+                    onChange={() => onToggleId(id)}
+                    className="h-4 w-4 rounded accent-[#2563eb]"
+                  />
+                  {opt.label}
+                </label>
+              )
+            })}
+          </div>
+        )}
+      </FieldShellWithShowMore>
     )
   }
 
   // Default: multi-select chips (how the listing sidebar has always looked).
   return (
+    <FieldShellWithShowMore field={field} options={field.options} enableShowMore={enableShowMore}>
+      {(visibleOptions) => (
+        <div className="flex flex-wrap gap-2">
+          {visibleOptions.map((opt) => {
+            const id = String(opt.filterId || opt.value)
+            return (
+              <OptionChip
+                key={`${field.id}-${opt.value}`}
+                label={opt.label}
+                active={selectedIds.has(id)}
+                onClick={() => onToggleId(id)}
+              />
+            )
+          })}
+        </div>
+      )}
+    </FieldShellWithShowMore>
+  )
+}
+
+/** FieldShell plus a "Show More/Less" toggle when a field has more than VISIBLE_OPTION_LIMIT options. */
+function FieldShellWithShowMore({ field, options, enableShowMore, children }) {
+  const { visibleOptions, hasMore, expanded, toggle } = useShowMoreOptions(options, enableShowMore)
+  return (
     <FieldShell field={field}>
-      <div className="flex flex-wrap gap-2">
-        {field.options.map((opt) => {
-          const id = String(opt.filterId || opt.value)
-          return (
-            <OptionChip
-              key={`${field.id}-${opt.value}`}
-              label={opt.label}
-              active={selectedIds.has(id)}
-              onClick={() => onToggleId(id)}
-            />
-          )
-        })}
-      </div>
+      {children(visibleOptions)}
+      {hasMore ? <ShowMoreToggle expanded={expanded} onToggle={toggle} /> : null}
     </FieldShell>
   )
 }
@@ -173,6 +223,10 @@ function CategoryFilterFields({
   filterValues = {},
   onFilterIdsChange,
   onFilterValuesChange,
+  /** Opt-in: collapse option lists past 5 with a Show More/Less toggle. Off by
+   * default so existing consumers (the listing filter sidebar) keep their
+   * exact current look. */
+  enableShowMore = false,
 }) {
   const selectedIds = useMemo(
     () => new Set((selectedFilterIds || []).map(String)),
@@ -217,6 +271,7 @@ function CategoryFilterFields({
           onToggleId={toggleId}
           onSetIds={setIdsForField}
           onValueChange={setValue}
+          enableShowMore={enableShowMore}
         />
       ))}
     </>

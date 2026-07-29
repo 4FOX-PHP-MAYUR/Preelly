@@ -3,20 +3,25 @@ import { useNavigate } from 'react-router-dom'
 import { ListingMedia, formatListingPrice } from '@shared/components/categoryBrowseShared'
 import AvailabilityBadge from '@shared/components/ProductDetail/AvailabilityBadge'
 
-function ProductCard({ product, index = 0, bordered = true }) {
+function ProductCard({ product, index = 0, bordered = true, onOpen = null }) {
   const navigate = useNavigate()
   const title = product?.title || 'Listing'
   const headline = index % 3 === 0 ? `Urgent Sale – ${title}` : title
+
+  const open = () => {
+    if (onOpen) onOpen(product)
+    else navigate(`/products/${product._id}`)
+  }
 
   return (
     <article
       role="button"
       tabIndex={0}
-      onClick={() => navigate(`/products/${product._id}`)}
+      onClick={open}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()
-          navigate(`/products/${product._id}`)
+          open()
         }
       }}
       className={`group relative aspect-[4/5] w-full cursor-pointer overflow-hidden bg-slate-100 transition hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-brand/40 ${

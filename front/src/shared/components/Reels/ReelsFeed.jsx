@@ -16,6 +16,10 @@ function ReelsFeed({
   embedded = false,
   onOpenComments = null,
   onOpenShare = null,
+  onProductArchived = null,
+  onProductDeleted = null,
+  onProductUpdated = null,
+  forceOwnerMenu = false,
 }) {
   const containerBgClass = embedded ? 'bg-transparent' : 'bg-black'
   const itemBgClass = embedded ? 'bg-transparent' : 'bg-black'
@@ -302,6 +306,10 @@ function ReelsFeed({
                 embedded={embedded}
                 onOpenComments={onOpenComments}
                 onOpenShare={onOpenShare}
+                onProductArchived={onProductArchived}
+                onProductDeleted={onProductDeleted}
+                onProductUpdated={onProductUpdated}
+                forceOwnerMenu={forceOwnerMenu}
               />
             </div>
             {/* End-of-feed overlay on last reel so reels always stay visible when data is finished */}

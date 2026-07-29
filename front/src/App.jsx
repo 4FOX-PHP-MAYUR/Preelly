@@ -34,6 +34,7 @@ const DashboardBlockedUsersPage = lazy(() => import('./pages/dashboard/Dashboard
 const DashboardInfoPage = lazy(() => import('./pages/dashboard/DashboardInfoPage'))
 const DashboardDraftsPage = lazy(() => import('./pages/dashboard/DashboardDraftsPage'))
 const DashboardMySearchPage = lazy(() => import('./pages/dashboard/DashboardMySearchPage'))
+const DashboardArchivesPage = lazy(() => import('./pages/dashboard/DashboardArchivesPage'))
 const UserProfilePage = lazy(() => import('@shared/pages/UserProfilePage'))
 const FollowersFollowingPage = lazy(() => import('./pages/FollowersFollowingPage'))
 const SearchResultsPage = lazy(() => import('./pages/SearchResultsPage'))
@@ -247,6 +248,14 @@ function App() {
             element={
               <PrivateRoute>
                 <DashboardDraftsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard/archives"
+            element={
+              <PrivateRoute>
+                <DashboardArchivesPage />
               </PrivateRoute>
             }
           />

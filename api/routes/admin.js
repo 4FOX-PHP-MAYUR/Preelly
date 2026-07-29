@@ -28,6 +28,7 @@ const { upload, uploadAny } = require('../middleware/upload')
 const { Types } = require('mongoose')
 const XLSX = require('xlsx')
 const slugify = require('slugify')
+const { syncArchiveFieldsFromStatus } = require('../utils/productArchive')
 const { buildNestedCategoryTreeForFilters } = require('../services/categoryNestedTreeService')
 const { importFiltersFromExcel } = require('../services/filterExcelImportService')
 const { importCategoriesFromExcel } = require('../services/categoryExcelImportService')
@@ -391,6 +392,7 @@ router.put('/products/:id/status', adminMiddleware, async (req, res) => {
     }
 
     product.status = status
+    syncArchiveFieldsFromStatus(product, status, req.user._id)
     await product.save()
 
     await product.populate('category', 'name icon emoji')

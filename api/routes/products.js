@@ -28,6 +28,11 @@ const {
 const { buildProductAttributesPresentation, buildDetailFeaturesPresentation } = require('../utils/productAttributesResolver')
 const { enrichReelsProducts } = require('../utils/reelsProductFields')
 const { resolveOrderPlatform } = require('../utils/paymentLabels')
+const {
+  markProductArchived,
+  clearProductArchive,
+  syncArchiveFieldsFromStatus,
+} = require('../utils/productArchive')
 
 function resolveProductAddType(req) {
   const fromBody = String(req.body?.productAddType || '').trim().toLowerCase()
@@ -2461,16 +2466,26 @@ router.put(
         }
       }
 
-      // Status / sold flag (owners can mark sold/inactive; admins can change any status)
+      // Status / sold flag:
+      // - owners: sold, inactive (archive), or restore active when currently archived/inactive
+      // - admins: any status
       const isSoldValue = parseBooleanField(isSold)
       if (status) {
-        if (isAdmin || ['sold', 'inactive'].includes(status.trim())) {
-          productDoc.status = status.trim()
-          productDoc.isSold = status.trim() === 'sold'
+        const nextStatus = status.trim()
+        const isArchivedDoc = productDoc.isArchived || productDoc.status === 'inactive'
+        const ownerMayRestore = isArchivedDoc && nextStatus === 'active'
+        const ownerMaySet = ['sold', 'inactive'].includes(nextStatus) || ownerMayRestore
+        if (isAdmin || ownerMaySet) {
+          productDoc.status = nextStatus
+          productDoc.isSold = nextStatus === 'sold'
+          syncArchiveFieldsFromStatus(productDoc, nextStatus, req.user._id)
         }
       } else if (isSoldValue !== null) {
         productDoc.isSold = isSoldValue
-        if (isSoldValue) productDoc.status = 'sold'
+        if (isSoldValue) {
+          productDoc.status = 'sold'
+          syncArchiveFieldsFromStatus(productDoc, 'sold', req.user._id)
+        }
       }
 
       // ---- VIDEO UPDATE (compressed) ----
@@ -2701,6 +2716,76 @@ router.put(
   }
 )
 
+
+// @route   PUT /api/products/:id/archive
+// @desc    Soft-archive product (same document → status inactive + archive flags)
+// @access  Private (Owner only)
+router.put('/:id/archive', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' })
+    }
+    if (product.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to archive this product' })
+    }
+    if (product.status === 'sold') {
+      return res.status(400).json({ message: 'Sold products cannot be archived' })
+    }
+    if (product.isArchived || product.status === 'inactive') {
+      return res.json({ message: 'Product already archived', product })
+    }
+
+    markProductArchived(product, req.user._id)
+    await product.save()
+    await product.populate('category', 'name icon emoji')
+    await product.populate('seller', 'name avatar rating memberSince')
+
+    res.json({ message: 'Product archived successfully', product })
+  } catch (error) {
+    console.error('Error archiving product:', error)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid product ID' })
+    }
+    res.status(500).json({ message: 'Error archiving product' })
+  }
+})
+
+// @route   PUT /api/products/:id/restore
+// @desc    Restore archived product back to My Ads (same document → active)
+// @access  Private (Owner only)
+router.put('/:id/restore', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' })
+    }
+    if (product.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to restore this product' })
+    }
+    if (!product.isArchived && product.status !== 'inactive') {
+      return res.status(400).json({ message: 'Product is not archived' })
+    }
+
+    // Prefer pending when still awaiting moderation approval
+    const restoreStatus =
+      product.moderationStatus === 'pending' || product.moderationStatus === 'rejected'
+        ? 'pending'
+        : 'active'
+    clearProductArchive(product, { status: restoreStatus })
+    await product.save()
+    await product.populate('category', 'name icon emoji')
+    await product.populate('seller', 'name avatar rating memberSince')
+
+    res.json({ message: 'Product restored successfully', product })
+  } catch (error) {
+    console.error('Error restoring product:', error)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid product ID' })
+    }
+    res.status(500).json({ message: 'Error restoring product' })
+  }
+})
 
 // @route   DELETE /api/products/:id
 // @desc    Delete product

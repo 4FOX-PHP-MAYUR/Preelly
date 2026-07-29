@@ -315,6 +315,8 @@ export const productService = {
     })
   },
   resubmitProduct: (id) => api.put(`/products/${id}/resubmit`),
+  archiveProduct: (id) => api.put(`/products/${id}/archive`),
+  restoreProduct: (id) => api.put(`/products/${id}/restore`),
   deleteProduct: (id) => api.delete(`/products/${id}`),
 }
 

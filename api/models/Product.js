@@ -537,6 +537,22 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Soft archive on the same Product row (no separate archive collection).
+    // status: 'inactive' remains the public-visibility gate; these fields track metadata.
+    isArchived: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    archivedAt: {
+      type: Date,
+      default: null,
+    },
+    archivedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
     // 0 = package not paid for yet, 1 = payment completed.
     // Set to 0 on creation; flipped to 1 once the seller pays for a package.
     isPaymentDone: {
@@ -592,6 +608,7 @@ productSchema.index({ subcategory: 1 })
 productSchema.index({ seller: 1 })
 productSchema.index({ seller: 1, createdAt: -1 })
 productSchema.index({ status: 1, createdAt: -1 })
+productSchema.index({ seller: 1, isArchived: 1, archivedAt: -1 })
 productSchema.index({ createdAt: -1 })
 // Helps membership checks for “liked by user” when querying by likes array.
 productSchema.index({ likes: 1 })

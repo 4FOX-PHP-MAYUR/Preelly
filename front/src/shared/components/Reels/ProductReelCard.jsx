@@ -24,7 +24,7 @@ import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
 // Use native <video> for precise sizing/control
 import toast from 'react-hot-toast'
 import { useSelector, useDispatch } from 'react-redux'
-import { interactionService, userService } from '@shared/services/api'
+import { interactionService, userService, productService } from '@shared/services/api'
 import { refreshUser, selectIsAuthenticated, selectIsGuest, selectUser } from '@shared/store/slices/authSlice'
 import { selectIsMuted, toggleMute } from '@shared/store/slices/uiSlice'
 import { getMediaUrl, isIdentityVerified, isValidObjectId } from '@shared/utils/helpers'
@@ -34,6 +34,7 @@ import ReelCommentsModal from './ReelCommentsModal'
 import ReelShareModal from './ReelShareModal'
 import QuickViewModal from './QuickViewModal'
 import ReelStreamPlayer from './ReelStreamPlayer'
+import AdMoreOptionsModal from '../Profile/AdMoreOptionsModal'
 import useProductVideoViewTracking from '@shared/hooks/useProductVideoViewTracking'
 
 /** Keep only the first `count` words of a title (adds an ellipsis if more were dropped). */
@@ -44,7 +45,17 @@ function shortTitle(text, count = 3) {
   return words.length > count ? `${clipped}…` : clipped
 }
 
-function ProductReelCard({ product, isVisible, embedded = false, onOpenComments = null, onOpenShare = null }) {
+function ProductReelCard({
+  product,
+  isVisible,
+  embedded = false,
+  onOpenComments = null,
+  onOpenShare = null,
+  onProductArchived = null,
+  onProductDeleted = null,
+  onProductUpdated = null,
+  forceOwnerMenu = false,
+}) {
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const isAuthenticated = useSelector(selectIsAuthenticated)
@@ -57,6 +68,8 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
   const [isLiked, setIsLiked] = useState(Boolean(product.liked))
   const [isSaved, setIsSaved] = useState(Boolean(product.saved))
   const [showMoreMenu, setShowMoreMenu] = useState(false)
+  const [showOwnerMore, setShowOwnerMore] = useState(false)
+  const [ownerBusy, setOwnerBusy] = useState(false)
   const [likeCount, setLikeCount] = useState(product.likesCount ?? product.likes?.length ?? 0)
   const [viewCount, setViewCount] = useState(product.views || 0)
   const [commentCount, setCommentCount] = useState(product.commentCount ?? 0)
@@ -69,6 +82,15 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
   const [progress, setProgress] = useState(0)
   const [mediaLoaded, setMediaLoaded] = useState(false)
   const [showFallback, setShowFallback] = useState(false)
+
+  const sellerId = product?.seller?._id
+    ? String(product.seller._id)
+    : product?.seller
+      ? String(product.seller)
+      : ''
+  const isOwner = Boolean(
+    forceOwnerMenu || (user?._id && sellerId && String(user._id) === sellerId),
+  )
 
   const { handleVideoTimeUpdate: handleVideoViewProgress } = useProductVideoViewTracking({
     productId: product._id,
@@ -332,6 +354,63 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
       } catch (error) {
         toast.error('Failed to report product')
       }
+    }
+  }
+
+  const handleOwnerMoreClick = (e) => {
+    e.stopPropagation()
+    setShowMoreMenu(false)
+    setShowOwnerMore(true)
+  }
+
+  const handleEditAd = () => {
+    navigate(`/post-ad?edit=${encodeURIComponent(product._id)}`)
+  }
+
+  const handleComingSoon = (label) => {
+    toast(`${label} — coming soon`)
+  }
+
+  const handleMarkSold = async () => {
+    setOwnerBusy(true)
+    try {
+      await productService.updateProduct(product._id, { status: 'sold' })
+      toast.success('Marked as sold')
+      onProductUpdated?.(product._id, { status: 'sold', isSold: true })
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Failed to mark as sold')
+      return false
+    } finally {
+      setOwnerBusy(false)
+    }
+  }
+
+  const handleUnpublish = async () => {
+    setOwnerBusy(true)
+    try {
+      await productService.archiveProduct(product._id)
+      toast.success('Ad moved to My Archives')
+      onProductArchived?.(product._id)
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Failed to unpublish ad')
+      return false
+    } finally {
+      setOwnerBusy(false)
+    }
+  }
+
+  const handleDeleteAd = async () => {
+    if (!window.confirm('Delete this ad permanently? This cannot be undone.')) return false
+    setOwnerBusy(true)
+    try {
+      await productService.deleteProduct(product._id)
+      toast.success('Ad deleted')
+      onProductDeleted?.(product._id)
+    } catch (error) {
+      toast.error(error?.response?.data?.message || 'Failed to delete ad')
+      return false
+    } finally {
+      setOwnerBusy(false)
     }
   }
 
@@ -635,7 +714,11 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
             {!embedded && (
               <button
                 type="button"
-                onClick={(e) => { e.stopPropagation(); setShowMoreMenu((v) => !v) }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  if (isOwner) handleOwnerMoreClick(e)
+                  else setShowMoreMenu((v) => !v)
+                }}
                 className="p-1 hover:scale-110 transition-transform"
                 aria-label="More options"
               >
@@ -673,7 +756,7 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
       </div>
 
       {/* Click outside to close menu */}
-      {showMoreMenu && (
+      {showMoreMenu && !isOwner && (
         <>
           <div className="fixed inset-0 z-[60]" onClick={(e) => { e.stopPropagation(); setShowMoreMenu(false) }} />
           <div className="absolute right-12 bottom-32 z-[70] w-44 rounded-xl bg-gray-900/95 py-1 shadow-xl backdrop-blur-sm">
@@ -691,6 +774,21 @@ function ProductReelCard({ product, isVisible, embedded = false, onOpenComments 
           </div>
         </>
       )}
+
+      {isOwner ? (
+        <AdMoreOptionsModal
+          open={showOwnerMore}
+          onClose={() => setShowOwnerMore(false)}
+          busy={ownerBusy}
+          onEdit={handleEditAd}
+          onWarehouse={() => handleComingSoon('Move to Warehouse')}
+          onInsight={() => handleComingSoon('See Insight')}
+          onBoost={() => handleComingSoon('Boost this Ad')}
+          onMarkSold={handleMarkSold}
+          onUnpublish={handleUnpublish}
+          onDelete={handleDeleteAd}
+        />
+      ) : null}
 
       {/* Instagram-style comment popup (portal renders at body so it's not clipped) */}
       {showCommentModal && product?._id && (

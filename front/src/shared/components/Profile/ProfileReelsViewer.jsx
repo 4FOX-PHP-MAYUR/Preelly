@@ -11,9 +11,19 @@ export default function ProfileReelsViewer({
   initialIndex = 0,
   profileUser,
   onClose,
+  onProductArchived,
+  onProductDeleted,
+  onProductUpdated,
+  isOwnProfile = false,
 }) {
   const [visible, setVisible] = useState(false)
+  const [items, setItems] = useState(products || [])
+  const [startIndex, setStartIndex] = useState(initialIndex)
   const displayName = profileUser?.displayName || profileUser?.name || 'User'
+
+  useEffect(() => {
+    setItems(products || [])
+  }, [products])
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => setVisible(true))
@@ -41,7 +51,24 @@ export default function ProfileReelsViewer({
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [handleClose])
 
-  if (!products?.length) return null
+  const removeProduct = useCallback(
+    (productId, notify) => {
+      setItems((prev) => {
+        const idx = prev.findIndex((p) => String(p._id) === String(productId))
+        const next = prev.filter((p) => String(p._id) !== String(productId))
+        if (next.length === 0) {
+          setTimeout(handleClose, 120)
+        } else if (idx >= 0) {
+          setStartIndex(Math.min(idx, next.length - 1))
+        }
+        return next
+      })
+      notify?.(productId)
+    },
+    [handleClose],
+  )
+
+  if (!items?.length) return null
 
   return createPortal(
     <div
@@ -73,13 +100,17 @@ export default function ProfileReelsViewer({
 
       <div className="h-[100dvh] w-full">
         <ReelsFeed
-          products={products}
-          initialIndex={initialIndex}
+          products={items}
+          initialIndex={startIndex}
           hasMore={false}
           loading={false}
           onLoadMore={() => {}}
           heightOverride="100%"
           embedded={false}
+          onProductArchived={(id) => removeProduct(id, onProductArchived)}
+          onProductDeleted={(id) => removeProduct(id, onProductDeleted)}
+          onProductUpdated={onProductUpdated}
+          forceOwnerMenu={isOwnProfile}
         />
       </div>
     </div>,

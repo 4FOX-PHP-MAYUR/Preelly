@@ -23,9 +23,8 @@ import { refreshUser, selectIsAuthenticated, selectIsAdmin, selectUser } from '@
 import VerificationFlow, { OtpVerificationCard } from '@shared/components/VerificationFlow'
 import IdentityVerificationFlow, { IdentityVerificationCard } from '@shared/components/IdentityVerificationFlow'
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
-import ListingVideoPreview from '@shared/components/Video/ListingVideoPreview'
 import ProductCard from '../../components/Listing/ProductCard'
-import ProfileReelsViewer from '@shared/components/Profile/ProfileReelsViewer'
+import ProfilePostModal from '@shared/components/Profile/ProfilePostModal'
 import ReviewRatingModal from '../../components/Profile/ReviewRatingModal'
 import BlockFlow from '../../components/Block/BlockFlow'
 import ReportUserFlow from '../../components/Block/ReportUserFlow'
@@ -38,36 +37,6 @@ function formatCompact(n) {
   if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
   if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
   return String(num)
-}
-
-function ProfileProductThumb({ product, onClick }) {
-  const currency = product?.currency?.toUpperCase() || 'AED'
-  const price = Number(product?.price || 0)
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="relative group aspect-square overflow-hidden rounded-none bg-gray-100 text-left"
-    >
-      <ListingVideoPreview
-        product={product}
-        className="h-full w-full object-cover transition group-hover:scale-105"
-        alt={product.title}
-        interactive={false}
-        autoPlayOnHover
-        showVideoBadge={false}
-      />
-      <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-black/60 to-transparent p-2.5">
-        <p className="line-clamp-2 text-[11px] font-medium leading-tight text-white">{product.title}</p>
-      </div>
-      <div className="pointer-events-none absolute bottom-2 right-2 rounded-lg bg-black/55 px-2 py-1">
-        <p className="text-xs font-bold text-white">
-          {currency} {price.toLocaleString()}
-        </p>
-      </div>
-    </button>
-  )
 }
 
 function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode = false }) {
@@ -88,7 +57,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
   const [showOtpVerification, setShowOtpVerification] = useState(false)
   const [showIdentityVerification, setShowIdentityVerification] = useState(false)
   const [showReviews, setShowReviews] = useState(false)
-  const [activeReelsIndex, setActiveReelsIndex] = useState(null)
+  const [activePost, setActivePost] = useState(null)
   const [stats, setStats] = useState({ totalProducts: 0, totalViews: 0, totalLikes: 0 })
   // Own-profile content tabs: My Listings / Saved / Liked.
   const [activeTab, setActiveTab] = useState('listings')
@@ -288,10 +257,14 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
   )
 
   // The list the grid shows: own profile can switch between listings / saved / liked.
+  // Archived (inactive / isArchived) ads belong in My Archives, not My Ads.
   const tabProducts = useMemo(() => {
     if (isOwnProfile && activeTab === 'saved') return savedItems
     if (isOwnProfile && activeTab === 'liked') return likedItems
-    return products
+    if (isOwnProfile && activeTab === 'listings') {
+      return products.filter((p) => p.status !== 'inactive' && !p.isArchived)
+    }
+    return products.filter((p) => p.status !== 'inactive' && !p.isArchived)
   }, [isOwnProfile, activeTab, savedItems, likedItems, products])
 
   const videoProducts = useMemo(() => tabProducts.filter(productHasVideo), [tabProducts])
@@ -581,7 +554,13 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
             {/* Same card layout as the category /products page, kept at 4 per row. */}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
               {displayProducts.map((product, index) => (
-                <ProductCard key={product._id} product={product} index={index} bordered={false} />
+                <ProductCard
+                  key={product._id}
+                  product={product}
+                  index={index}
+                  bordered={false}
+                  onOpen={() => setActivePost(product)}
+                />
               ))}
             </div>
           </div>
@@ -620,14 +599,36 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
         />
       )}
 
-      {activeReelsIndex !== null && (
-        <ProfileReelsViewer
-          products={displayProducts}
-          initialIndex={activeReelsIndex}
+      {activePost ? (
+        <ProfilePostModal
+          product={activePost}
           profileUser={profileUser}
-          onClose={() => setActiveReelsIndex(null)}
+          isOwnProfile={isOwnProfile && activeTab === 'listings'}
+          onClose={() => setActivePost(null)}
+          onProductArchived={(productId) => {
+            setProducts((prev) => prev.filter((p) => String(p._id) !== String(productId)))
+            setSavedItems((prev) => prev.filter((p) => String(p._id) !== String(productId)))
+            setLikedItems((prev) => prev.filter((p) => String(p._id) !== String(productId)))
+            setActivePost(null)
+          }}
+          onProductDeleted={(productId) => {
+            setProducts((prev) => prev.filter((p) => String(p._id) !== String(productId)))
+            setSavedItems((prev) => prev.filter((p) => String(p._id) !== String(productId)))
+            setLikedItems((prev) => prev.filter((p) => String(p._id) !== String(productId)))
+            setActivePost(null)
+          }}
+          onProductUpdated={(productId, patch) => {
+            const apply = (list) =>
+              list.map((p) => (String(p._id) === String(productId) ? { ...p, ...patch } : p))
+            setProducts(apply)
+            setSavedItems(apply)
+            setLikedItems(apply)
+            setActivePost((prev) =>
+              prev && String(prev._id) === String(productId) ? { ...prev, ...patch } : prev,
+            )
+          }}
         />
-      )}
+      ) : null}
 
       <ReviewRatingModal
         open={showReviews}

@@ -14,6 +14,7 @@ const Notification = require('../models/Notification')
 const EmailOtp = require('../models/EmailOtp')
 const BankAccount = require('../models/BankAccount')
 const SavedCard = require('../models/SavedCard')
+const mongoose = require('mongoose')
 const { sendEmail } = require('../utils/mailer')
 const { isSuperAdminRole, buildFullPermissionSet } = require('../config/adminPermissions')
 const { getPermissionMapForRole } = require('../services/adminPermissionService')
@@ -245,15 +246,48 @@ router.get('/listings', authMiddleware, async (req, res) => {
     const limit = Math.min(50, Math.max(1, Number(req.query.limit || 12)))
     const q = String(req.query.q || '').trim()
     const status = String(req.query.status || '').trim()
+    const category = String(req.query.category || '').trim()
+    const archived = ['1', 'true', 'yes'].includes(String(req.query.archived || '').trim().toLowerCase())
+    const sortKey = String(req.query.sort || '').trim()
 
     const query = { seller: req.user._id }
-    if (status) query.status = status
-    if (q) query.$or = [{ title: new RegExp(q, 'i') }, { description: new RegExp(q, 'i') }]
+    if (archived) {
+      // Archives: inactive status and/or isArchived flag (legacy + new)
+      query.$or = [{ status: 'inactive' }, { isArchived: true }]
+    } else if (status) {
+      query.status = status
+    }
+    if (category && mongoose.Types.ObjectId.isValid(category)) {
+      query.category = category
+    }
+    if (q) {
+      const textClause = {
+        $or: [{ title: new RegExp(q, 'i') }, { description: new RegExp(q, 'i') }],
+      }
+      if (query.$or) {
+        // Combine archived $or with text search via $and
+        query.$and = [{ $or: query.$or }, textClause]
+        delete query.$or
+      } else {
+        Object.assign(query, textClause)
+      }
+    }
+
+    let sort = { createdAt: -1 }
+    if (sortKey === 'oldest') sort = { createdAt: 1 }
+    else if (sortKey === 'price_asc') sort = { price: 1, createdAt: -1 }
+    else if (sortKey === 'price_desc') sort = { price: -1, createdAt: -1 }
+    else if (sortKey === 'archived_newest') sort = { archivedAt: -1, updatedAt: -1, createdAt: -1 }
+    else if (sortKey === 'archived_oldest') sort = { archivedAt: 1, updatedAt: 1, createdAt: 1 }
+    else if (sortKey === 'updated') sort = { updatedAt: -1 }
 
     const [items, total] = await Promise.all([
       Product.find(query)
-        .select('title price currency status images video location createdAt views')
-        .sort({ createdAt: -1 })
+        .select(
+          'title price currency status moderationStatus images video location category isArchived archivedAt createdAt updatedAt views',
+        )
+        .populate('category', 'name')
+        .sort(sort)
         .skip((page - 1) * limit)
         .limit(limit)
         .lean(),

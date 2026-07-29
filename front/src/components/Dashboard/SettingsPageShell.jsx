@@ -77,7 +77,7 @@ const QUICK_TILES = [
   // The standalone cart page is gone — purchases now live in the chat inbox's Cart tab.
   { label: 'My Cart', icon: ShoppingCart, to: '/chat?tab=Cart' },
   { label: 'My Drafts', icon: Files, to: '/dashboard/drafts' },
-  { label: 'My Archives', icon: Archive, to: '/dashboard/listings?status=inactive' },
+  { label: 'My Archives', icon: Archive, to: '/dashboard/archives' },
 ]
 
 const MENU_GROUPS = [
@@ -137,8 +137,8 @@ function SettingsSideMenu({ onNavigate }) {
             (location.pathname === to.split('?')[0] ||
               (to.startsWith('/dashboard/drafts') && location.pathname === '/dashboard/drafts') ||
               (to.startsWith('/dashboard/my-search') && location.pathname === '/dashboard/my-search') ||
-              (label === 'My Ads' && location.pathname === '/my-profile') ||
-              (label === 'My Archives' && location.pathname === '/dashboard/listings' && location.search.includes('status=inactive')))
+              (to.startsWith('/dashboard/archives') && location.pathname === '/dashboard/archives') ||
+              (label === 'My Ads' && location.pathname === '/my-profile'))
           return (
             <button
               key={label}

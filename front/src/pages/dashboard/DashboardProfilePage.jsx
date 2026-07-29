@@ -5,8 +5,6 @@ import toast from 'react-hot-toast'
 import {
   ArrowLeft,
   Calendar,
-  CreditCard,
-  Landmark,
   MapPin,
   Plus,
   User,
@@ -521,58 +519,53 @@ export default function DashboardProfilePage() {
 
         {/* Bank Details */}
         <section id="bank-details" className="mb-8 scroll-mt-6">
-          <SectionHeader
-            title="Bank Details"
-            description="Manage your bank accounts and saved cards."
-          />
-          <div className="space-y-3">
-            {bankAccounts.length === 0 ? (
-              <div className="rounded-[12px] border border-dashed border-[#E5E7EB] px-4 py-8 text-center">
-                <Landmark className="mx-auto h-8 w-8 text-slate-300" />
-                <p className="mt-3 text-sm font-semibold text-slate-700">No bank accounts yet</p>
-                <p className="mt-1 text-xs text-slate-400">Add a bank account to get paid faster</p>
-              </div>
-            ) : (
-              bankAccounts.map((account) => (
-                <BankCard
-                  key={account._id}
-                  account={account}
-                  primaryLoading={primaryLoadingId === account._id}
-                  onEdit={(item) => setBankModal({ mode: 'edit', data: item })}
-                  onDelete={handleDeleteBank}
-                  onTogglePrimary={handleTogglePrimaryBank}
-                />
-              ))
-            )}
+          <div className="mb-5">
+            <h2 className="text-lg font-bold text-[#111827]">Bank Details</h2>
+            <p className="mt-1 text-sm text-[#9CA3AF]">Please review the details</p>
+          </div>
 
-            {savedCards.length === 0 ? (
-              <div className="rounded-[12px] border border-dashed border-[#E5E7EB] px-4 py-8 text-center">
-                <CreditCard className="mx-auto h-8 w-8 text-slate-300" />
-                <p className="mt-3 text-sm font-semibold text-slate-700">No saved cards yet</p>
-                <p className="mt-1 text-xs text-slate-400">Add a card for quicker checkout</p>
-              </div>
-            ) : (
-              savedCards.map((card) => (
-                <SavedCard
-                  key={card._id}
-                  card={card}
-                  primaryLoading={primaryLoadingId === card._id}
-                  onEdit={(item) => setCardModal({ mode: 'edit', data: item })}
-                  onDelete={handleDeleteCard}
-                  onTogglePrimary={handleTogglePrimaryCard}
-                />
-              ))
-            )}
+          <div className="space-y-4">
+            {bankAccounts.map((account) => (
+              <BankCard
+                key={account._id}
+                account={account}
+                primaryLoading={primaryLoadingId === account._id}
+                onEdit={(item) => setBankModal({ mode: 'edit', data: item })}
+                onDelete={handleDeleteBank}
+                onTogglePrimary={handleTogglePrimaryBank}
+              />
+            ))}
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <SoftButton onClick={() => setBankModal({ mode: 'add' })}>
-                <Plus className="h-4 w-4" />
+            {savedCards.map((card) => (
+              <SavedCard
+                key={card._id}
+                card={card}
+                primaryLoading={primaryLoadingId === card._id}
+                onEdit={(item) => setCardModal({ mode: 'edit', data: item })}
+                onDelete={handleDeleteCard}
+                onTogglePrimary={handleTogglePrimaryCard}
+              />
+            ))}
+
+            {bankAccounts.length === 0 && savedCards.length === 0 ? (
+              <p className="py-2 text-sm text-[#9CA3AF]">No bank accounts or cards saved yet.</p>
+            ) : null}
+
+            <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setBankModal({ mode: 'add' })}
+                className="flex w-full items-center justify-center rounded-full bg-[#E8F0FE] px-4 py-3.5 text-sm font-semibold text-brand transition duration-200 hover:bg-[#DCE8FC] active:scale-[0.99]"
+              >
                 Add New Bank Account
-              </SoftButton>
-              <SoftButton onClick={() => setCardModal({ mode: 'add' })}>
-                <Plus className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setCardModal({ mode: 'add' })}
+                className="flex w-full items-center justify-center rounded-full bg-[#E8F0FE] px-4 py-3.5 text-sm font-semibold text-brand transition duration-200 hover:bg-[#DCE8FC] active:scale-[0.99]"
+              >
                 Add New Card
-              </SoftButton>
+              </button>
             </div>
           </div>
         </section>

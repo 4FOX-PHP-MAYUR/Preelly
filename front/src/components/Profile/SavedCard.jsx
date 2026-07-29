@@ -3,9 +3,23 @@ import ToggleSwitch from './ToggleSwitch'
 
 function maskCard(value) {
   const raw = String(value || '').replace(/\s+/g, '')
-  if (!raw) return '•••• •••• •••• ••••'
+  if (!raw) return 'XXXX XXXX XXXX XXXX'
+  if (raw.length <= 4) return `XXXX XXXX XXXX ${raw}`
+  const first4 = raw.length >= 8 ? raw.slice(0, 4) : ''
   const last4 = raw.slice(-4)
-  return `•••• •••• •••• ${last4}`
+  if (first4 && first4 !== last4) return `${first4} XXXX XXXX ${last4}`
+  return `XXXX XXXX XXXX ${last4}`
+}
+
+function DetailField({ label, value }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[13px] leading-5 text-[#9CA3AF]">{label}</p>
+      <p className="mt-1 break-all text-[15px] font-semibold leading-6 text-[#111827]">
+        {value || '—'}
+      </p>
+    </div>
+  )
 }
 
 export default function SavedCard({
@@ -15,59 +29,60 @@ export default function SavedCard({
   onTogglePrimary,
   primaryLoading = false,
 }) {
+  // Title is the card name; nickname is shown separately in the grid
+  const title = card?.nickname || card?.brand || 'Saved Card'
+  const cardNumber = maskCard(card?.cardNumber || card?.last4)
+
   return (
-    <div className="rounded-[12px] border border-[#E5E7EB] bg-white p-4 shadow-[0_1px_3px_rgba(15,23,42,0.04)] transition duration-200 hover:border-slate-300 sm:p-5">
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-50 text-brand">
-          <CreditCard className="h-5 w-5" />
+    <div className="rounded-[16px] border border-[#D9E4F2] bg-[#F0F4FA] px-5 py-5 sm:px-6 sm:py-6">
+      {/* Header: icon + card name | Set as Primary */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <CreditCard className="h-5 w-5 shrink-0 text-[#374151]" strokeWidth={1.75} />
+          <h3 className="truncate text-base font-bold text-[#111827]">{title}</h3>
         </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 space-y-1">
-              <h3 className="text-sm font-semibold text-slate-900">
-                {card?.nickname || card?.brand || 'Saved Card'}
-              </h3>
-              <p className="text-sm text-slate-500">{maskCard(card?.last4 || card?.cardNumber)}</p>
-              {card?.expiry ? (
-                <p className="text-sm text-slate-500">Valid through {card.expiry}</p>
-              ) : null}
-              {card?.holderName ? (
-                <p className="text-sm text-slate-500">Name on card {card.holderName}</p>
-              ) : null}
-              {card?.nickname ? (
-                <p className="text-sm text-slate-500">Card Nickname {card.nickname}</p>
-              ) : null}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-medium text-slate-500">Set as Primary</span>
-              <ToggleSwitch
-                checked={Boolean(card?.isPrimary)}
-                disabled={primaryLoading || Boolean(card?.isPrimary)}
-                label="Set as primary card"
-                onChange={(next) => next && onTogglePrimary?.(card)}
-              />
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-center justify-end gap-4">
-            <button
-              type="button"
-              onClick={() => onEdit?.(card)}
-              className="text-sm font-medium text-slate-500 transition duration-200 hover:text-brand"
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              onClick={() => onDelete?.(card)}
-              className="text-sm font-medium text-slate-500 transition duration-200 hover:text-red-500"
-            >
-              Delete
-            </button>
-          </div>
+        <div className="flex items-center gap-2.5">
+          <span className="text-[13px] text-[#9CA3AF]">Set as Primary</span>
+          <ToggleSwitch
+            checked={Boolean(card?.isPrimary)}
+            disabled={primaryLoading || Boolean(card?.isPrimary)}
+            label="Set as primary card"
+            onChange={(next) => next && onTogglePrimary?.(card)}
+          />
         </div>
+      </div>
+
+      {/*
+        Body grid matching design rows:
+        Row 1: Card No        | Valid through
+        Row 2: Name on card   | (empty)
+        Row 3: Card Nick Name | (empty)
+      */}
+      <div className="mt-5 grid grid-cols-1 gap-x-12 gap-y-5 sm:grid-cols-2">
+        <DetailField label="Card No" value={cardNumber} />
+        <DetailField label="Valid through" value={card?.expiry} />
+        <DetailField label="Name on card" value={card?.holderName} />
+        <div className="hidden sm:block" aria-hidden="true" />
+        <DetailField label="Card Nick Name" value={card?.nickname} />
+      </div>
+
+      {/* Footer: Edit (blue) + Delete (grey) */}
+      <div className="mt-6 flex items-center justify-end gap-6">
+        <button
+          type="button"
+          onClick={() => onEdit?.(card)}
+          className="text-sm font-semibold text-brand transition hover:text-brand-700"
+        >
+          Edit
+        </button>
+        <button
+          type="button"
+          onClick={() => onDelete?.(card)}
+          className="text-sm font-semibold text-[#6B7280] transition hover:text-red-500"
+        >
+          Delete
+        </button>
       </div>
     </div>
   )

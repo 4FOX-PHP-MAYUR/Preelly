@@ -71,7 +71,7 @@ function HomeCategorySidebar() {
 }
 
 const QUICK_TILES = [
-  { label: 'My Ads', icon: FileText, to: '/dashboard/listings' },
+  { label: 'My Ads', icon: FileText, to: '/my-profile' },
   { label: 'My Search', icon: Search, to: '/dashboard/my-search' },
   { label: 'My Bookings', icon: CalendarCheck, to: '/dashboard/orders' },
   { label: 'My Cart', icon: ShoppingCart, to: '/cart' },
@@ -136,7 +136,7 @@ function SettingsSideMenu({ onNavigate }) {
             (location.pathname === to.split('?')[0] ||
               (to.startsWith('/dashboard/drafts') && location.pathname === '/dashboard/drafts') ||
               (to.startsWith('/dashboard/my-search') && location.pathname === '/dashboard/my-search') ||
-              (label === 'My Ads' && location.pathname === '/dashboard/listings' && !location.search.includes('status=inactive')) ||
+              (label === 'My Ads' && location.pathname === '/my-profile') ||
               (label === 'My Archives' && location.pathname === '/dashboard/listings' && location.search.includes('status=inactive')))
           return (
             <button

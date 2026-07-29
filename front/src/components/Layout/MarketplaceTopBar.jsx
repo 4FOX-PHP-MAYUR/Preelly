@@ -133,7 +133,7 @@ function MarketplaceTopBar({ className = '', onToggleMobileMenu, topBarColSpan =
         <div className="mt-3 flex items-center gap-1 sm:gap-2">
           <TopBarIcon to={isAuthenticated ? '/chat' : '/login'} label="Chat" Icon={ChatIcon} badge={unreadChatCount} />
           <TopBarIcon to="/search" label="My Search" Icon={MySearchIcon} />
-          <TopBarIcon to={isAuthenticated ? '/dashboard/listings' : '/login'} label="My Ads" Icon={MyAdsIcon} />
+          <TopBarIcon to={isAuthenticated ? '/my-profile' : '/login'} label="My Ads" Icon={MyAdsIcon} />
           <TopBarIcon to={isAuthenticated ? '/dashboard/notifications' : '/login'} label="Notification" Icon={NotificationIcon} />
         </div>
       </div>
@@ -149,7 +149,7 @@ function MarketplaceTopBar({ className = '', onToggleMobileMenu, topBarColSpan =
         <div className="flex items-end gap-1 sm:gap-2">
           <TopBarIcon to={isAuthenticated ? '/chat' : '/login'} label="Chat" Icon={ChatIcon} badge={unreadChatCount} />
           <TopBarIcon to="/search" label="My Search" Icon={MySearchIcon} />
-          <TopBarIcon to={isAuthenticated ? '/dashboard/listings' : '/login'} label="My Ads" Icon={MyAdsIcon} />
+          <TopBarIcon to={isAuthenticated ? '/my-profile' : '/login'} label="My Ads" Icon={MyAdsIcon} />
           <TopBarIcon to={isAuthenticated ? '/dashboard/notifications' : '/login'} label="Notification" Icon={NotificationIcon} />
 
           <div className="mb-2 ml-1 hidden h-8 w-px bg-slate-200 lg:block" />

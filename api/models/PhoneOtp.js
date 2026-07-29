@@ -11,7 +11,7 @@ const phoneOtpSchema = new mongoose.Schema(
     purpose: {
       type: String,
       required: true,
-      enum: ['register', 'password_reset', 'login'],
+      enum: ['register', 'password_reset', 'login', 'change_phone'],
       index: true,
     },
     otpHash: {

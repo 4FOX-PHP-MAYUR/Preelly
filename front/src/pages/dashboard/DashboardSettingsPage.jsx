@@ -1,14 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import { Link } from 'react-router-dom'
-import toast from 'react-hot-toast'
 import { Mail, Phone, Pencil, ArrowLeft, Check, X } from 'lucide-react'
-import { userService } from '@shared/services/api'
 import VerificationFlow, { OtpVerificationCard } from '@shared/components/VerificationFlow'
 import IdentityVerificationFlow, { IdentityVerificationCard } from '@shared/components/IdentityVerificationFlow'
 import { refreshUser } from '@shared/store/slices/authSlice'
 import SettingsPageShell from '../../components/Dashboard/SettingsPageShell'
 import ChangeEmailFlow from '../../components/Profile/ChangeEmailFlow'
+import ChangePhoneFlow from '../../components/Profile/ChangePhoneFlow'
 
 const FIELD_BG =
   'flex items-center gap-3 rounded-[12px] border border-transparent bg-[#F3F5FB] px-4 py-3.5 transition duration-200 focus-within:border-brand/30 focus-within:ring-2 focus-within:ring-brand/10'
@@ -68,42 +67,18 @@ export default function DashboardSettingsPage() {
   const dispatch = useDispatch()
   const currentUser = useSelector((s) => s.auth.user)
 
-  const [editingField, setEditingField] = useState(null)
-  const [phone, setPhone] = useState('')
-  const [saving, setSaving] = useState(false)
   const [showIdentityVerification, setShowIdentityVerification] = useState(false)
   const [showOtpVerification, setShowOtpVerification] = useState(false)
   const [showChangeEmail, setShowChangeEmail] = useState(false)
+  const [showChangePhone, setShowChangePhone] = useState(false)
 
-  useEffect(() => {
-    setPhone(currentUser?.phone || '')
-  }, [currentUser])
-
-  const cancelEdit = () => {
-    setEditingField(null)
-    setPhone(currentUser?.phone || '')
-  }
-
-  const saveField = async (field) => {
-    if (field !== 'phone') return
-    setSaving(true)
-    try {
-      await userService.updateProfile({ phone: phone.trim() })
-      await dispatch(refreshUser()).unwrap()
-      toast.success('Mobile number updated')
-      setEditingField(null)
-    } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to save')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const handleEmailChanged = async () => {
+  // Email and mobile are both changed through their OTP flows, which own the
+  // toasts — this only refreshes the cached user afterwards.
+  const handleContactChanged = async () => {
     try {
       await dispatch(refreshUser()).unwrap()
     } catch {
-      // toast already shown by ChangeEmailFlow
+      // the flow already surfaced the error
     }
   }
 
@@ -142,14 +117,14 @@ export default function DashboardSettingsPage() {
             label="Mobile Number"
             icon={Phone}
             value={currentUser?.phone}
-            editing={editingField === 'phone'}
-            draft={phone}
-            onDraftChange={setPhone}
+            editing={false}
+            draft={currentUser?.phone || ''}
+            onDraftChange={() => {}}
             type="tel"
             inputMode="tel"
-            onStartEdit={() => setEditingField('phone')}
-            onSave={() => !saving && saveField('phone')}
-            onCancel={cancelEdit}
+            onStartEdit={() => setShowChangePhone(true)}
+            onSave={() => {}}
+            onCancel={() => {}}
           />
         </div>
 
@@ -176,7 +151,12 @@ export default function DashboardSettingsPage() {
       <ChangeEmailFlow
         open={showChangeEmail}
         onClose={() => setShowChangeEmail(false)}
-        onSuccess={handleEmailChanged}
+        onSuccess={handleContactChanged}
+      />
+      <ChangePhoneFlow
+        open={showChangePhone}
+        onClose={() => setShowChangePhone(false)}
+        onSuccess={handleContactChanged}
       />
     </SettingsPageShell>
   )

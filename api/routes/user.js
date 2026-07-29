@@ -12,10 +12,13 @@ const Follow = require('../models/Follow')
 const Order = require('../models/Order')
 const Notification = require('../models/Notification')
 const EmailOtp = require('../models/EmailOtp')
+const PhoneOtp = require('../models/PhoneOtp')
 const BankAccount = require('../models/BankAccount')
 const SavedCard = require('../models/SavedCard')
 const mongoose = require('mongoose')
 const { sendEmail } = require('../utils/mailer')
+const { sendWhatsAppOtp } = require('../utils/whatsapp')
+const { phoneDigitsOnly, parsePhoneInput, applyPhoneFieldsToUser } = require('../utils/phone')
 const { isSuperAdminRole, buildFullPermissionSet } = require('../config/adminPermissions')
 const { getPermissionMapForRole } = require('../services/adminPermissionService')
 const validateObjectId = require('../middleware/validateObjectId')
@@ -23,6 +26,7 @@ const optionalAuth = require('../middleware/optionalAuth')
 const { getBlockedUserIds, isBlockedBetween } = require('../core/services/blockService')
 
 const CHANGE_EMAIL_PURPOSE = 'change_email'
+const CHANGE_PHONE_PURPOSE = 'change_phone'
 const OTP_LENGTH = Number(process.env.EMAIL_OTP_LENGTH || 6)
 const OTP_TTL_SECONDS = Number(process.env.EMAIL_OTP_TTL_SECONDS || 600)
 const OTP_MAX_ATTEMPTS = Number(process.env.EMAIL_OTP_MAX_ATTEMPTS || 5)
@@ -54,6 +58,32 @@ const sendChangeEmailOtp = async (email) => {
     text: `Your verification code is: ${code}\n\nUse this code to confirm your new email address. It expires in ${minutes} minutes.`,
     html: `<p>Your verification code is:</p><h2 style="margin: 0 0 12px 0;">${code}</h2><p>Use this code to confirm your new email address. It expires in ${minutes} minutes.</p>`,
   })
+}
+
+// Phone changes reuse the same WhatsApp OTP delivery as sign-in
+// (routes/auth.js sendLoginPhoneOtp), but store the code under its own purpose
+// so a sign-in code can never be replayed to change someone's number.
+const sendChangePhoneOtp = async (phoneKey) => {
+  const code = generateOtpCode()
+  const otpHash = hashOtp(code)
+  const expiresAt = new Date(Date.now() + OTP_TTL_SECONDS * 1000)
+
+  await PhoneOtp.findOneAndUpdate(
+    { phone: phoneKey, purpose: CHANGE_PHONE_PURPOSE },
+    { otpHash, expiresAt, attempts: 0, lockedUntil: null },
+    { upsert: true, returnDocument: 'after' }
+  )
+
+  await sendWhatsAppOtp({ to: phoneKey, code })
+}
+
+/** Another account already using this number? Covers the stored phone formats. */
+const phoneTakenByOtherUser = async (phoneKey, selfId) => {
+  const existing = await User.findOne({
+    _id: { $ne: selfId },
+    $or: [{ phone: phoneKey }, { phone: `+${phoneKey}` }],
+  }).select('_id')
+  return Boolean(existing)
 }
 
 const avatarDir = path.join(__dirname, '..', 'uploads', 'avatars')
@@ -868,6 +898,152 @@ router.post(
         return res.status(400).json({ message: 'This email is already linked to another account' })
       }
       res.status(500).json({ message: 'Server error while updating email' })
+    }
+  }
+)
+
+// @route   POST /api/user/change-phone/request
+// @desc    Send a WhatsApp OTP to a new mobile number for a phone change
+// @access  Private
+router.post(
+  '/change-phone/request',
+  authMiddleware,
+  [body('phone').trim().notEmpty().withMessage('Phone number is required')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req)
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg })
+      }
+
+      let parsedPhone
+      try {
+        parsedPhone = parsePhoneInput({
+          phone: req.body.phone,
+          phoneCountryCode: req.body.phoneCountryCode,
+          phoneCountryIso: req.body.phoneCountryIso,
+        })
+      } catch {
+        return res.status(400).json({ message: 'Please enter a valid phone number' })
+      }
+
+      const phoneKey = parsedPhone.phoneDigits
+      const user = await User.findById(req.user._id)
+      if (!user) return res.status(404).json({ message: 'User not found' })
+
+      if (user.phone && phoneDigitsOnly(user.phone) === phoneKey) {
+        return res
+          .status(400)
+          .json({ message: 'Enter a mobile number that is different from your current one' })
+      }
+
+      if (await phoneTakenByOtherUser(phoneKey, user._id)) {
+        return res.status(400).json({ message: 'This mobile number is already linked to another account' })
+      }
+
+      await sendChangePhoneOtp(phoneKey)
+      return res.status(200).json({
+        message: 'Verification code sent',
+        phone: phoneKey,
+        otpLength: OTP_LENGTH,
+      })
+    } catch (error) {
+      console.error('change-phone request error:', error)
+      if (String(error.message || '').includes('WABA_')) {
+        return res
+          .status(500)
+          .json({ message: 'WhatsApp OTP service is not configured (WABA env vars missing)' })
+      }
+      res.status(500).json({ message: 'Server error while sending verification code' })
+    }
+  }
+)
+
+// @route   POST /api/user/change-phone/verify
+// @desc    Verify the OTP and update the authenticated user's mobile number
+// @access  Private
+router.post(
+  '/change-phone/verify',
+  authMiddleware,
+  [
+    body('phone').trim().notEmpty().withMessage('Phone number is required'),
+    body('otp')
+      .trim()
+      .isLength({ min: OTP_LENGTH, max: OTP_LENGTH })
+      .withMessage('Invalid OTP length'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req)
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg })
+      }
+
+      let parsedPhone
+      try {
+        parsedPhone = parsePhoneInput({
+          phone: req.body.phone,
+          phoneCountryCode: req.body.phoneCountryCode,
+          phoneCountryIso: req.body.phoneCountryIso,
+        })
+      } catch {
+        return res.status(400).json({ message: 'Please enter a valid phone number' })
+      }
+
+      const phoneKey = parsedPhone.phoneDigits
+      const otp = String(req.body.otp || '').trim()
+      const user = await User.findById(req.user._id)
+      if (!user) return res.status(404).json({ message: 'User not found' })
+
+      if (user.phone && phoneDigitsOnly(user.phone) === phoneKey) {
+        return res
+          .status(400)
+          .json({ message: 'Enter a mobile number that is different from your current one' })
+      }
+
+      if (await phoneTakenByOtherUser(phoneKey, user._id)) {
+        return res.status(400).json({ message: 'This mobile number is already linked to another account' })
+      }
+
+      const record = await PhoneOtp.findOne({ phone: phoneKey, purpose: CHANGE_PHONE_PURPOSE }).select('+otpHash')
+      if (!record) return res.status(400).json({ message: 'Invalid or expired verification code' })
+
+      const now = Date.now()
+      if (record.lockedUntil && record.lockedUntil.getTime() > now) {
+        return res.status(429).json({ message: 'Too many attempts. Try again later.' })
+      }
+      if (record.expiresAt.getTime() < now) {
+        await PhoneOtp.deleteOne({ _id: record._id })
+        return res.status(400).json({ message: 'Invalid or expired verification code' })
+      }
+
+      const isMatch = hashOtp(otp) === record.otpHash
+      if (!isMatch) {
+        record.attempts = (record.attempts || 0) + 1
+        if (record.attempts >= OTP_MAX_ATTEMPTS) {
+          record.lockedUntil = new Date(now + OTP_LOCK_SECONDS * 1000)
+        }
+        await record.save()
+        return res.status(400).json({ message: 'Invalid or expired verification code' })
+      }
+
+      await PhoneOtp.deleteOne({ _id: record._id })
+
+      applyPhoneFieldsToUser(user, parsedPhone)
+      user.isPhoneVerified = true
+      await user.save()
+
+      return res.status(200).json({
+        message: 'Mobile number updated successfully',
+        phone: user.phone,
+        isPhoneVerified: true,
+      })
+    } catch (error) {
+      console.error('change-phone verify error:', error)
+      if (error.code === 11000) {
+        return res.status(400).json({ message: 'This mobile number is already linked to another account' })
+      }
+      res.status(500).json({ message: 'Server error while updating mobile number' })
     }
   }
 )

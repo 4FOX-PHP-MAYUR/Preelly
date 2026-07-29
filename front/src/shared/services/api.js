@@ -435,6 +435,10 @@ export const userService = {
   updateProfile: (data) => api.put('/user/profile', data),
   requestEmailChange: (email) => api.post('/user/change-email/request', { email }),
   verifyEmailChange: ({ email, otp }) => api.post('/user/change-email/verify', { email, otp }),
+  requestPhoneChange: ({ phone, phoneCountryCode, phoneCountryIso } = {}) =>
+    api.post('/user/change-phone/request', { phone, phoneCountryCode, phoneCountryIso }),
+  verifyPhoneChange: ({ phone, otp, phoneCountryCode, phoneCountryIso } = {}) =>
+    api.post('/user/change-phone/verify', { phone, otp, phoneCountryCode, phoneCountryIso }),
   completeBasicProfile: (formData) =>
     api.post('/user/profile', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

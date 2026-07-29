@@ -8,13 +8,25 @@ import { categoryService } from '@shared/services/api'
  *     (GET /api/categories?parent_id=<id>) and opens the next level
  *   - `isChild !== 1`, or a category whose children come back empty, is a leaf
  *
- * Unlimited nesting is supported: levels are appended until a leaf is reached.
+ * Levels are appended until a leaf is reached, or until `maxLevels` if the
+ * caller caps the depth.
  */
 
 /** A category is a leaf when the API says it has no children. */
 export const isLeafCategory = (category) => Number(category?.isChild) !== 1
 
-export function useCategoryDrilldown() {
+/**
+ * How many levels the picker walks before treating the selection as final:
+ * root → subcategory → child category. Mirrors the Post Ad flow's
+ * MAX_CATEGORY_LEVEL_INDEX (2) so both screens stop at the same depth.
+ */
+export const MAX_CATEGORY_PATH_LENGTH = 3
+
+/**
+ * @param {{ maxLevels?: number }} [options] cap on how deep the picker drills;
+ *   defaults to unlimited nesting.
+ */
+export function useCategoryDrilldown({ maxLevels = Infinity } = {}) {
   // levelOptions[i] holds the options shown at level i; selectedPath[i] the pick.
   const [levelOptions, setLevelOptions] = useState([[]])
   const [selectedPath, setSelectedPath] = useState([])
@@ -63,7 +75,8 @@ export function useCategoryDrilldown() {
       setSelectedPath(nextPath)
       setIsComplete(false)
 
-      if (isLeafCategory(selected)) {
+      // A leaf, or the deepest level we're allowed to show, ends the selection.
+      if (isLeafCategory(selected) || nextPath.length >= maxLevels) {
         setLevelOptions((prev) => prev.slice(0, level + 1))
         setIsComplete(true)
         return
@@ -90,7 +103,7 @@ export function useCategoryDrilldown() {
         if (requestId === requestIdRef.current) setLoadingChildren(false)
       }
     },
-    [levelOptions, selectedPath],
+    [levelOptions, selectedPath, maxLevels],
   )
 
   /**
@@ -125,12 +138,12 @@ export function useCategoryDrilldown() {
       const levels = [Array.isArray(rootsRes.data) ? rootsRes.data : []]
       const resolved = []
 
-      for (let i = 0; i < ids.length; i += 1) {
+      for (let i = 0; i < Math.min(ids.length, maxLevels); i += 1) {
         const options = levels[i] || []
         const match = options.find((c) => String(c._id) === String(ids[i]))
         if (!match) break
         resolved.push(String(match._id))
-        if (isLeafCategory(match)) break
+        if (isLeafCategory(match) || resolved.length >= maxLevels) break
         const childRes = await categoryService.getCategoryChildren(match._id)
         const children = Array.isArray(childRes.data) ? childRes.data : []
         if (!children.length) break
@@ -147,7 +160,7 @@ export function useCategoryDrilldown() {
     } finally {
       if (requestId === requestIdRef.current) setLoadingChildren(false)
     }
-  }, [])
+  }, [maxLevels])
 
   const selectedCategories = selectedPath.map(
     (id, level) => (levelOptions[level] || []).find((c) => String(c._id) === String(id)) || null,

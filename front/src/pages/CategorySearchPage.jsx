@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ChevronLeft, Home, Loader2, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
-import useCategoryDrilldown from '@shared/hooks/useCategoryDrilldown'
+import useCategoryDrilldown, { MAX_CATEGORY_PATH_LENGTH } from '@shared/hooks/useCategoryDrilldown'
 import useCategoryFilterFields from '@shared/hooks/useCategoryFilterFields'
 import CategoryFilterFields from '@shared/components/CategoryFilterFields'
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
@@ -14,11 +14,13 @@ import CategoryIconGrid from '../components/Listing/CategoryIconGrid'
 /**
  * Hierarchical category search (/search).
  *
- * Category selection reuses the Post Ad step-1 UI, API and drill-down logic
- * (see useCategoryDrilldown): every pick with `isChild === 1` opens its children
- * below the current selection, recursively, until a leaf is reached. The leaf's
- * admin-configured filters are then rendered by field type, and Search hands the
- * whole selection to the product listing page through the URL.
+ * Category selection reuses the Post Ad category API and drill-down logic (see
+ * useCategoryDrilldown): a pick with `isChild === 1` opens its children in the
+ * section below, up to three levels (root → subcategory → child category), the
+ * same depth Post Ad uses. Sections are rendered with the listing page's filter
+ * panel primitives. Once the selection is final the category's admin-configured
+ * filters render by field type, and Search hands the whole selection to the
+ * product listing page through the URL.
  */
 function CategorySearchPage() {
   const navigate = useNavigate()
@@ -34,7 +36,9 @@ function CategorySearchPage() {
     error,
     selectAtLevel,
     clearFromLevel,
-  } = useCategoryDrilldown()
+    // Stops at root → subcategory → child category, the same depth the Post Ad
+    // flow uses, so the search stays a short 2-3 step selection.
+  } = useCategoryDrilldown({ maxLevels: MAX_CATEGORY_PATH_LENGTH })
 
   const [selectedFilterIds, setSelectedFilterIds] = useState([])
   const [filterValues, setFilterValues] = useState({})

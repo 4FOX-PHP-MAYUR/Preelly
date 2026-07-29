@@ -1,153 +1,329 @@
-import { useEffect, useState } from 'react'
-import { CreditCard, Package, ShoppingCart } from 'lucide-react'
-import { userService } from '@shared/services/api'
-import { getMediaUrl } from '@shared/utils/helpers'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import toast from 'react-hot-toast'
+import {
+  ArrowLeft,
+  Download,
+  ExternalLink,
+  FileText,
+  MoreVertical,
+  Receipt,
+} from 'lucide-react'
+import SettingsPageShell from '../../components/Dashboard/SettingsPageShell'
+import { paymentService } from '@shared/services/api'
+import { formatPrice, getMediaUrl } from '@shared/utils/helpers'
 
-function Pill({ children, tone = 'gray' }) {
-  const cls =
-    tone === 'green'
-      ? 'bg-green-50 text-green-700 dark:bg-green-950/30 dark:text-green-300'
-      : tone === 'red'
-      ? 'bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300'
-      : tone === 'yellow'
-      ? 'bg-yellow-50 text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-300'
-      : 'bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-gray-300'
-  return <span className={`inline-flex px-2 py-1 rounded-full text-xs font-medium ${cls}`}>{children}</span>
+const PAGE_SIZE = 10
+
+/** Filter chips over paymentTransaction.orderStatus. */
+const STATUS_FILTERS = [
+  { value: '', label: 'All' },
+  { value: 'SUCCESS', label: 'Paid' },
+  { value: 'INITIATED', label: 'Pending' },
+  { value: 'FAILED', label: 'Failed' },
+  { value: 'CANCELLED', label: 'Cancelled' },
+]
+
+const STATUS_TONES = {
+  SUCCESS: 'bg-[#EAF8EA] text-[#3F7F3F]',
+  INITIATED: 'bg-[#FFF6DF] text-[#96731A]',
+  PENDING: 'bg-[#FFF6DF] text-[#96731A]',
+  FAILED: 'bg-[#FFEBEB] text-[#B23B3B]',
+  CANCELLED: 'bg-slate-100 text-slate-600',
+}
+
+const STATUS_LABELS = {
+  SUCCESS: 'Paid',
+  INITIATED: 'Pending',
+  PENDING: 'Pending',
+  FAILED: 'Failed',
+  CANCELLED: 'Cancelled',
+}
+
+/** paymentType 1 = seller's ad payment, 2 = buyer's product checkout. */
+function orderKindLabel(txn) {
+  if (Number(txn?.paymentType) === 2) return 'Product purchase'
+  if (txn?.package?.packageName) return `Ad package · ${txn.package.packageName}`
+  return 'Ad payment'
+}
+
+function orderDate(txn) {
+  const raw = txn?.paymentDate || txn?.createdAt
+  if (!raw) return null
+  const d = new Date(raw)
+  return Number.isNaN(d.getTime()) ? null : d
+}
+
+function OrderCard({ txn, onDownloadInvoice }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!menuOpen) return undefined
+    const onDown = (e) => {
+      if (!menuRef.current?.contains(e.target)) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', onDown)
+    return () => document.removeEventListener('mousedown', onDown)
+  }, [menuOpen])
+
+  const image = txn.product?.image
+  const thumb = image ? getMediaUrl(image) || image : null
+  const status = String(txn.orderStatus || '').toUpperCase()
+  const date = orderDate(txn)
+
+  const menuItems = [
+    txn.product?.title
+      ? { label: 'View Listing', icon: ExternalLink, to: `/products/${txn.product.id}` }
+      : null,
+    txn.hasInvoice
+      ? { label: 'Download Invoice', icon: Download, onClick: () => onDownloadInvoice(txn) }
+      : null,
+  ].filter(Boolean)
+
+  return (
+    <div className="flex items-center gap-3 rounded-[16px] border border-[#E5E7EB] bg-white p-3 shadow-[0_2px_10px_rgba(15,23,42,0.04)] transition duration-200 hover:border-brand/20 sm:gap-4 sm:p-4">
+      <div className="h-20 w-24 shrink-0 overflow-hidden rounded-[12px] bg-slate-100 sm:h-24 sm:w-32">
+        {thumb ? (
+          <img src={thumb} alt="" className="h-full w-full object-cover" loading="lazy" />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-slate-300">
+            <Receipt className="h-8 w-8" />
+          </div>
+        )}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start gap-2">
+          <h3 className="min-w-0 flex-1 truncate text-sm font-bold text-slate-900 sm:text-base">
+            {txn.product?.title || 'Payment'}
+          </h3>
+          <span
+            className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+              STATUS_TONES[status] || STATUS_TONES.CANCELLED
+            }`}
+          >
+            {STATUS_LABELS[status] || status || 'Unknown'}
+          </span>
+        </div>
+        <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">{orderKindLabel(txn)}</p>
+        <p className="mt-1 text-sm font-bold text-slate-900">
+          {formatPrice(Number(txn.amount || 0), txn.currency || 'AED')}
+          {txn.discountAmount > 0 ? (
+            <span className="ml-2 text-[11px] font-medium text-[#3F7F3F]">
+              −{formatPrice(Number(txn.discountAmount), txn.currency || 'AED')} off
+            </span>
+          ) : null}
+        </p>
+        <p className="mt-0.5 truncate text-[11px] text-slate-400">
+          Order {txn.orderId}
+          {date ? ` · ${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+          {txn.paymentMode ? ` · ${txn.paymentMode}` : ''}
+        </p>
+        {status === 'FAILED' && txn.failureMessage ? (
+          <p className="mt-1 truncate text-[11px] text-[#B23B3B]">{txn.failureMessage}</p>
+        ) : null}
+      </div>
+
+      {menuItems.length ? (
+        <div className="relative shrink-0" ref={menuRef}>
+          <button
+            type="button"
+            aria-label="Order options"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((v) => !v)}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition duration-200 hover:bg-slate-100"
+          >
+            <MoreVertical className="h-5 w-5" />
+          </button>
+          {menuOpen ? (
+            <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-[12px] border border-[#E5E7EB] bg-white py-1 shadow-lg">
+              {menuItems.map((item) => {
+                const Icon = item.icon
+                const className =
+                  'flex w-full items-center gap-2.5 px-3 py-2.5 text-left text-sm text-slate-700 transition duration-150 hover:bg-slate-50'
+                return item.to ? (
+                  <Link key={item.label} to={item.to} className={className} onClick={() => setMenuOpen(false)}>
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </Link>
+                ) : (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => {
+                      setMenuOpen(false)
+                      item.onClick?.()
+                    }}
+                    className={className}
+                  >
+                    <Icon className="h-4 w-4" />
+                    {item.label}
+                  </button>
+                )
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 export default function DashboardOrdersPage() {
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
   const [items, setItems] = useState([])
   const [page, setPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [status, setStatus] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
 
-  const load = async (p = 1) => {
+  useEffect(() => {
+    let cancelled = false
     setLoading(true)
     setError(null)
+
+    paymentService
+      .listTransactions({ page, limit: PAGE_SIZE, orderStatus: status || undefined })
+      .then((res) => {
+        if (cancelled) return
+        const data = res?.data?.data || {}
+        setItems(Array.isArray(data.items) ? data.items : [])
+        setTotalPages(data.totalPages || 1)
+        setTotal(data.total || 0)
+      })
+      .catch((e) => {
+        if (cancelled) return
+        setItems([])
+        setError(e?.response?.data?.message || 'Failed to load orders')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [page, status])
+
+  const handleStatusChange = (next) => {
+    setStatus(next)
+    setPage(1)
+  }
+
+  const handleDownloadInvoice = async (txn) => {
     try {
-      const res = await userService.getOrders({ page: p, limit: 10 })
-      setItems(res.data.items || [])
-      setPage(res.data.page || p)
-      setTotalPages(res.data.totalPages || 1)
+      const res = await paymentService.downloadInvoice(txn.orderId, txn.invoiceUrl)
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `${txn.invoiceNumber || txn.orderId}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      URL.revokeObjectURL(url)
     } catch (e) {
-      setError(e?.response?.data?.message || 'Failed to load orders')
-    } finally {
-      setLoading(false)
+      toast.error(e?.response?.data?.message || 'Failed to download invoice')
     }
   }
 
-  useEffect(() => {
-    load(1)
-  }, [])
+  const subtitle = useMemo(() => {
+    if (loading) return 'Loading your payment history…'
+    if (!total) return 'Your payments and purchases appear here'
+    return `${total} payment${total === 1 ? '' : 's'} on your account`
+  }, [loading, total])
 
   return (
-    <div className="space-y-5">
-      <div>
-        <div className="text-sm text-gray-500 dark:text-gray-400">Buyer</div>
-        <div className="text-xl font-semibold text-gray-900 dark:text-gray-100">My Orders</div>
-      </div>
-
-      {error ? (
-        <div className="rounded-xl border border-red-200 bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>
-      ) : null}
-
-      {loading ? (
-        <div className="rounded-2xl border border-gray-200 dark:border-gray-900 bg-white dark:bg-gray-950 p-4 animate-pulse h-64" />
-      ) : items.length === 0 ? (
-        <div className="rounded-2xl border border-gray-200 dark:border-gray-900 bg-white dark:bg-gray-950 p-8 text-center">
-          <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">No orders yet</div>
-          <div className="mt-2 text-sm text-gray-600 dark:text-gray-300">When you purchase items, they’ll show up here.</div>
+    <SettingsPageShell>
+      <div className="mx-auto max-w-3xl pb-10">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3 sm:mb-8">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">My Orders</h1>
+            <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+          </div>
+          <Link
+            to="/"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand transition duration-200 hover:text-brand-700 sm:text-sm"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Home
+          </Link>
         </div>
-      ) : (
+
+        <div className="mb-5 flex flex-wrap gap-2">
+          {STATUS_FILTERS.map((f) => (
+            <button
+              key={f.value || 'all'}
+              type="button"
+              onClick={() => handleStatusChange(f.value)}
+              className={`rounded-full px-3.5 py-2 text-sm font-medium transition duration-200 ${
+                status === f.value
+                  ? 'bg-brand text-white shadow-sm shadow-brand/25'
+                  : 'bg-white text-slate-600 ring-1 ring-[#E5E7EB] hover:text-brand hover:ring-brand/30'
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {error ? (
+          <div className="mb-4 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+
         <div className="space-y-3">
-          {items.map((o) => {
-            const product = o.product
-            const img = product?.images?.[0]
-            const mediaSrc = img ? getMediaUrl(img) || img : null
-            const orderTone =
-              o.orderStatus === 'delivered'
-                ? 'green'
-                : o.orderStatus === 'cancelled' || o.orderStatus === 'refunded'
-                ? 'red'
-                : o.orderStatus === 'shipped' || o.orderStatus === 'confirmed'
-                ? 'yellow'
-                : 'gray'
-            const payTone =
-              o.paymentStatus === 'paid' ? 'green' : o.paymentStatus === 'failed' ? 'red' : o.paymentStatus === 'refunded' ? 'yellow' : 'gray'
-
-            return (
-              <div key={o._id} className="rounded-2xl border border-gray-200 dark:border-gray-900 bg-white dark:bg-gray-950 p-4">
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <div className="h-20 w-20 rounded-xl bg-gray-100 dark:bg-gray-900 overflow-hidden flex-shrink-0">
-                    {mediaSrc ? <img src={mediaSrc} alt={product?.title || 'Product'} className="h-full w-full object-cover" /> : null}
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-semibold text-gray-900 dark:text-gray-100 truncate">{product?.title || 'Product'}</div>
-                        <div className="mt-1 text-sm text-gray-600 dark:text-gray-300">
-                          {o.currency || product?.currency || 'USD'} {Number(o.totals?.total ?? o.unitPrice ?? product?.price ?? 0).toLocaleString()}
-                        </div>
-                        <div className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                          Seller: {o.seller?.name || 'Unknown'}
-                        </div>
-                      </div>
-                      <div className="flex flex-col items-end gap-2">
-                        <Pill tone={orderTone}>
-                          <span className="inline-flex items-center gap-1">
-                            <Package className="h-3.5 w-3.5" /> {o.orderStatus}
-                          </span>
-                        </Pill>
-                        <Pill tone={payTone}>
-                          <span className="inline-flex items-center gap-1">
-                            <CreditCard className="h-3.5 w-3.5" /> {o.paymentStatus}
-                          </span>
-                        </Pill>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )
-          })}
-
-          <div className="flex items-center justify-between pt-2">
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              Page {page} of {totalPages}
+          {loading ? (
+            [1, 2, 3].map((i) => (
+              <div key={i} className="h-28 animate-pulse rounded-[16px] bg-slate-100" />
+            ))
+          ) : items.length ? (
+            items.map((txn) => (
+              <OrderCard key={txn.id || txn.orderId} txn={txn} onDownloadInvoice={handleDownloadInvoice} />
+            ))
+          ) : (
+            <div className="rounded-[16px] border border-dashed border-[#E5E7EB] px-4 py-12 text-center">
+              <FileText className="mx-auto h-10 w-10 text-slate-300" />
+              <p className="mt-3 text-sm font-semibold text-slate-700">
+                {status ? 'No orders match this filter' : 'No orders yet'}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                {status
+                  ? 'Try another status to see more of your payment history.'
+                  : 'Payments for your ads and purchases will show up here.'}
+              </p>
             </div>
+          )}
+        </div>
+
+        {!loading && totalPages > 1 ? (
+          <div className="mt-6 flex items-center justify-between">
+            <p className="text-xs text-slate-400">
+              Page {page} of {totalPages}
+            </p>
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-900 text-sm text-gray-700 dark:text-gray-200 disabled:opacity-50"
                 disabled={page <= 1}
-                onClick={() => load(page - 1)}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="rounded-full px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-[#E5E7EB] transition duration-200 hover:text-brand hover:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Prev
               </button>
               <button
                 type="button"
-                className="px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-900 text-sm text-gray-700 dark:text-gray-200 disabled:opacity-50"
                 disabled={page >= totalPages}
-                onClick={() => load(page + 1)}
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                className="rounded-full px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-[#E5E7EB] transition duration-200 hover:text-brand hover:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Next
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      <div className="rounded-2xl border border-gray-200 dark:border-gray-900 bg-white dark:bg-gray-950 p-4">
-        <div className="flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-          <ShoppingCart className="h-4 w-4" /> Mock-friendly
-        </div>
-        <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          If you don’t have orders yet, this section stays empty until you add checkout/order creation.
-        </div>
+        ) : null}
       </div>
-    </div>
+    </SettingsPageShell>
   )
 }
-

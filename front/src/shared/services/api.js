@@ -261,6 +261,12 @@ export const paymentService = {
   // Product Checkout flow (buyer pays for product + checkout-service add-ons).
   initiateCheckout: (payload, config) => api.post('/payment/checkout/initiate', payload, config),
   getTransaction: (orderId, config) => api.get(`/payment/transaction/${orderId}`, config),
+  /**
+   * Signed-in user's payment history (paymentTransaction collection) — powers the
+   * dashboard Orders page.
+   * @param {{ page?: number, limit?: number, orderStatus?: string, paymentType?: number }} [params]
+   */
+  listTransactions: (params, config) => api.get('/payment/transactions', { params, ...config }),
   // Authenticated PDF download — returned as a blob so the bearer token is carried.
   // Prefers the transaction's BASE_URL-based invoiceUrl; falls back to the relative
   // endpoint. A full URL passed to axios overrides baseURL but still runs the

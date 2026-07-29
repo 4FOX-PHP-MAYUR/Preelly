@@ -785,11 +785,54 @@ async function getTransactionForUser(orderId, userId) {
   return txn
 }
 
+/**
+ * Paginated payment history for one user — powers the dashboard Orders page.
+ * Scoped to the payer (`userId`), which is the seller for Ads payments
+ * (paymentType 1) and the buyer for Product Checkout (paymentType 2).
+ *
+ * @param {string} userId
+ * @param {{ page?: number, limit?: number, orderStatus?: string, paymentType?: number }} [options]
+ */
+async function listTransactionsForUser(userId, options = {}) {
+  const page = Math.max(1, Number(options.page) || 1)
+  const limit = Math.min(50, Math.max(1, Number(options.limit) || 10))
+
+  const query = { userId, deletedAt: null }
+  const status = String(options.orderStatus || '').trim().toUpperCase()
+  if (status && PaymentTransaction.ORDER_STATUSES.includes(status)) {
+    query.orderStatus = status
+  }
+  const paymentType = Number(options.paymentType)
+  if (paymentType === 1 || paymentType === 2) query.paymentType = paymentType
+
+  const [items, total] = await Promise.all([
+    PaymentTransaction.find(query)
+      .populate('productId', 'title images videoScreenshots')
+      .populate('packageId', 'packageName packageAmount')
+      .populate('storagefacilitiesId', 'facilityWeek facilityAmount')
+      // paymentDate is only set once the gateway responds, so fall back to createdAt.
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean(),
+    PaymentTransaction.countDocuments(query),
+  ])
+
+  return {
+    items,
+    page,
+    limit,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / limit)),
+  }
+}
+
 module.exports = {
   DEFAULT_GATEWAY,
   initiatePayment,
   initiateCheckoutPayment,
   processCallback,
   getTransactionForUser,
+  listTransactionsForUser,
   getInvoiceForUser,
 }

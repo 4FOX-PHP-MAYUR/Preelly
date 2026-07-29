@@ -228,7 +228,6 @@ function App() {
           >
             <Route index element={<Navigate to="/my-profile" replace />} />
             <Route path="listings" element={<DashboardListingsPage />} />
-            <Route path="orders" element={<DashboardOrdersPage />} />
             <Route path="wishlist" element={<DashboardWishlistPage />} />
             <Route path="messages" element={<DashboardMessagesPage />} />
             <Route path="notifications" element={<DashboardNotificationsPage />} />
@@ -248,6 +247,14 @@ function App() {
             element={
               <PrivateRoute>
                 <DashboardDraftsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard/orders"
+            element={
+              <PrivateRoute>
+                <DashboardOrdersPage />
               </PrivateRoute>
             }
           />

@@ -162,6 +162,36 @@ router.post('/ccavenue/callback', express.urlencoded({ extended: true }), handle
 router.post('/ccavenue/cancel', express.urlencoded({ extended: true }), handleCallback)
 
 /**
+ * GET /api/payment/transactions  (JWT)
+ * Paginated payment history for the signed-in user — powers the dashboard
+ * Orders page. Optional `orderStatus` and `paymentType` narrow the list.
+ */
+router.get('/transactions', authMiddleware, async (req, res) => {
+  try {
+    const result = await paymentService.listTransactionsForUser(req.user._id, {
+      page: req.query.page,
+      limit: req.query.limit,
+      orderStatus: req.query.orderStatus,
+      paymentType: req.query.paymentType,
+    })
+    res.json({
+      success: true,
+      message: 'Transactions fetched',
+      data: {
+        ...result,
+        items: result.items.map(toPaymentTransactionDto),
+      },
+    })
+  } catch (error) {
+    logger.error('payment.transactions_list_failed', { message: error.message })
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || 'Failed to fetch transactions',
+    })
+  }
+})
+
+/**
  * GET /api/payment/transaction/:orderId  (JWT)
  * Fetches a transaction for the success/failure pages. Owner only.
  */

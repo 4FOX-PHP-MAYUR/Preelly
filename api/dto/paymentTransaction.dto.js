@@ -7,7 +7,14 @@ function toPaymentTransactionDto(txn) {
   const facility = txn.storagefacilitiesId && typeof txn.storagefacilitiesId === 'object' ? txn.storagefacilitiesId : null
 
   return {
+    id: String(txn._id),
     orderId: txn.orderId,
+    // 1 = Ads payment (seller), 2 = Product Checkout (buyer) — the Orders list
+    // labels rows from this.
+    paymentType: Number(txn.paymentType ?? 1),
+    // When the row was created, so INITIATED/FAILED rows (no paymentDate) still
+    // show a date in the list.
+    createdAt: txn.createdAt || null,
     trackingId: txn.trackingId || null,
     bankRefNo: txn.bankRefNo || null,
     orderStatus: txn.orderStatus,

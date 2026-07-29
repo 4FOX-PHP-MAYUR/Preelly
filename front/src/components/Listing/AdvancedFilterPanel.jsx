@@ -3,7 +3,7 @@ import { Search, X } from 'lucide-react'
 import CategoryDynamicFilters from '../Categories/CategoryDynamicFilters'
 import CategoryIconGrid from './CategoryIconGrid'
 import DualRangeSlider from './DualRangeSlider'
-import { FilterChip } from './FilterChips'
+import { PanelSection, ChipRow } from '@shared/components/FilterPanelSection'
 import StickyFooter from './StickyFooter'
 
 const CONDITION_OPTIONS = [
@@ -32,36 +32,6 @@ const FUEL_OPTIONS = [
 ]
 
 const BEDROOM_OPTIONS = ['1', '2', '3', '4', '5+']
-
-function PanelSection({ title, children }) {
-  return (
-    <div className="border-b border-[#E8EBF2] py-4 last:border-b-0">
-      <p className="mb-3 text-sm font-semibold text-[#0F172A]">{title}</p>
-      {children}
-    </div>
-  )
-}
-
-function ChipRow({ options = [], value = '', onChange, allowAny = true, anyLabel = 'Any' }) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {allowAny ? <FilterChip label={anyLabel} active={!value} onClick={() => onChange?.('')} /> : null}
-      {options.map((opt) => {
-        const v = typeof opt === 'string' ? opt : opt.value
-        const label = typeof opt === 'string' ? opt : opt.label
-        const active = String(value) === String(v)
-        return (
-          <FilterChip
-            key={String(v)}
-            label={label}
-            active={active}
-            onClick={() => onChange?.(active ? '' : v)}
-          />
-        )
-      })}
-    </div>
-  )
-}
 
 function AdvancedFilterPanel({
   className = '',

@@ -8,7 +8,8 @@ import CategoryFilterFields from '@shared/components/CategoryFilterFields'
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
 import { buildListingUrl } from '@shared/utils/categorySearchParams'
 import { getLevelLabels } from '@shared/utils/categoryFields'
-import CategoryLevelPicker from '../features/categorySearch/components/CategoryLevelPicker'
+import { PanelSection, ChipRow } from '@shared/components/FilterPanelSection'
+import CategoryIconGrid from '../components/Listing/CategoryIconGrid'
 
 /**
  * Hierarchical category search (/search).
@@ -27,7 +28,6 @@ function CategorySearchPage() {
     selectedPath,
     selectedCategories,
     categoryPathNames,
-    leafCategory,
     isComplete,
     loadingRoots,
     loadingChildren,
@@ -39,8 +39,18 @@ function CategorySearchPage() {
   const [selectedFilterIds, setSelectedFilterIds] = useState([])
   const [filterValues, setFilterValues] = useState({})
 
-  // Same per-level labels the Post Ad cascading selection uses.
-  const levelLabels = getLevelLabels(selectedCategories[0]?.name || '')
+  // Section titles use the listing page's wording ("Categories" / "Sub Category").
+  // Deeper levels take the admin-configured label for the root when there is a
+  // real one; otherwise they're named after the category they belong to, since
+  // getLevelLabels falls back to generic "Level 3" placeholders.
+  const configuredLabels = getLevelLabels(selectedCategories[0]?.name || '')
+  const levelTitle = (level) => {
+    if (level === 0) return 'Categories'
+    if (level === 1) return 'Sub Category'
+    const configured = configuredLabels[level]
+    if (configured && !/^level\s*\d+$/i.test(configured)) return configured
+    return selectedCategories[level - 1]?.name || 'Sub Category'
+  }
 
   const {
     fields,
@@ -114,10 +124,6 @@ function CategorySearchPage() {
     )
   }
 
-  // Levels already picked collapse to a summary row; the deepest open level is
-  // the one being chosen from.
-  const openLevel = selectedPath.length === levelOptions.length ? -1 : levelOptions.length - 1
-
   return (
     // Same shell (marketplace top bar + category sidebar) as the product
     // listing page, so search and results share one chrome.
@@ -128,7 +134,7 @@ function CategorySearchPage() {
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#F7F8FC]">
         <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-          <div className="mx-auto w-full max-w-[860px] pb-10">
+          <div className="mx-auto w-full max-w-[640px] pb-10">
           <button
             type="button"
             onClick={handleBack}
@@ -146,7 +152,7 @@ function CategorySearchPage() {
           </div>
 
           {categoryPathNames.length ? (
-            <nav className="mb-6 flex w-full flex-wrap items-center gap-2 text-sm text-gray-500" aria-label="Breadcrumb">
+            <nav className="mb-4 flex w-full flex-wrap items-center gap-2 text-sm text-gray-500" aria-label="Breadcrumb">
               <Home className="h-4 w-4 shrink-0" aria-hidden />
               {categoryPathNames.map((name, index) => (
                 <span key={`${selectedPath[index] || index}`} className="flex items-center gap-2">
@@ -163,62 +169,70 @@ function CategorySearchPage() {
             </p>
           ) : null}
 
-          <div className="flex w-full flex-col gap-4">
-            {levelOptions.map((options, level) => (
-              <CategoryLevelPicker
-                key={`level-${level}`}
-                level={level}
-                levelLabel={levelLabels[level]}
-                options={options}
-                selectedId={selectedPath[level] || ''}
-                selectedName={selectedCategories[level]?.name || ''}
-                loading={level === 0 ? loadingRoots : loadingChildren}
-                onSelect={handleSelect}
-                onEdit={level === openLevel ? null : handleEditLevel}
-              />
-            ))}
-
-            {loadingChildren && selectedPath.length === levelOptions.length && !isComplete ? (
-              <div className="flex w-full justify-center py-6">
-                <Loader2 className="h-6 w-6 animate-spin text-primary-600" />
+          {/* Category levels and filters render as the same sections the listing
+              page's Advanced Filter panel uses: picking a category appends the
+              next section below, it never swaps the layout out. */}
+          <div className="rounded-2xl border border-[#E8EBF2] bg-white px-5 py-2">
+            {loadingRoots && !levelOptions[0]?.length ? (
+              <div className="flex items-center gap-2 py-6 text-sm text-[#64748B]">
+                <Loader2 className="h-4 w-4 animate-spin text-brand" />
+                Loading categories…
               </div>
+            ) : null}
+
+            {levelOptions.map((options, level) =>
+              options.length ? (
+                <PanelSection key={`level-${level}`} title={levelTitle(level)}>
+                  {level === 0 ? (
+                    <CategoryIconGrid
+                      items={options}
+                      selectedId={selectedPath[0] || ''}
+                      onSelect={(id) => handleSelect(0, id)}
+                    />
+                  ) : (
+                    <ChipRow
+                      options={options.map((c) => ({ value: c._id, label: c.name }))}
+                      value={selectedPath[level] || ''}
+                      onChange={(id) => (id ? handleSelect(level, id) : handleEditLevel(level))}
+                      allowAny={false}
+                    />
+                  )}
+                </PanelSection>
+              ) : null,
+            )}
+
+            {loadingChildren ? (
+              <div className="flex items-center gap-2 py-4 text-sm text-[#64748B]">
+                <Loader2 className="h-4 w-4 animate-spin text-brand" />
+                Loading subcategories…
+              </div>
+            ) : null}
+
+            {isComplete && filtersLoading ? (
+              <div className="flex items-center gap-2 py-4 text-sm text-[#64748B]">
+                <Loader2 className="h-4 w-4 animate-spin text-brand" />
+                Loading filters for this category…
+              </div>
+            ) : null}
+
+            {isComplete && filtersError ? (
+              <p className="my-4 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                {filtersError}
+              </p>
+            ) : null}
+
+            {isComplete && !filtersLoading && !filtersError ? (
+              <CategoryFilterFields
+                fields={fields}
+                selectedFilterIds={selectedFilterIds}
+                filterValues={filterValues}
+                onFilterIdsChange={setSelectedFilterIds}
+                onFilterValuesChange={setFilterValues}
+              />
             ) : null}
           </div>
 
-          {isComplete ? (
-            <div className="mt-8 w-full">
-              <h3 className="text-base font-semibold text-[#0F172A]">
-                Filters for {leafCategory?.name || 'this category'}
-              </h3>
-
-              {filtersLoading ? (
-                <div className="mt-4 flex items-center gap-2 rounded-2xl border border-slate-100 bg-slate-50 px-4 py-6 text-sm text-slate-600">
-                  <Loader2 className="h-4 w-4 animate-spin text-brand" />
-                  Loading filters for this category…
-                </div>
-              ) : filtersError ? (
-                <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-                  {filtersError}
-                </p>
-              ) : fields.length ? (
-                <div className="mt-2">
-                  <CategoryFilterFields
-                    fields={fields}
-                    selectedFilterIds={selectedFilterIds}
-                    filterValues={filterValues}
-                    onFilterIdsChange={setSelectedFilterIds}
-                    onFilterValuesChange={setFilterValues}
-                  />
-                </div>
-              ) : (
-                <p className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm text-slate-500">
-                  No filters are configured for this category — search to see all listings.
-                </p>
-              )}
-            </div>
-          ) : null}
-
-          <div className="mt-8 w-full">
+          <div className="mt-6 w-full">
             <button
               type="button"
               onClick={handleSearch}

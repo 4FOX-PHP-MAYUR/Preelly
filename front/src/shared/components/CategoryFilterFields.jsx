@@ -3,6 +3,7 @@ import {
   FILTER_FIELD_KIND,
   FREE_FORM_FIELD_KINDS,
 } from '@shared/utils/categoryFilterFields'
+import { PanelSection } from '@shared/components/FilterPanelSection'
 
 /**
  * Renders admin-configured category filters according to each filter's field
@@ -37,13 +38,16 @@ function OptionChip({ label, active, onClick }) {
 
 function FieldShell({ field, children }) {
   return (
-    <div className="border-b border-[#E8EBF2] py-4 last:border-b-0">
-      <p className="mb-3 text-sm font-semibold text-[#0F172A]">
-        {field.name}
-        {field.required ? <span className="ml-1 text-red-500">*</span> : null}
-      </p>
+    <PanelSection
+      title={
+        <>
+          {field.name}
+          {field.required ? <span className="ml-1 text-red-500">*</span> : null}
+        </>
+      }
+    >
       {children}
-    </div>
+    </PanelSection>
   )
 }
 

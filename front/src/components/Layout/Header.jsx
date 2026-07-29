@@ -102,7 +102,8 @@ function Header() {
     location.pathname === '/dashboard/faq' ||
     location.pathname === '/dashboard/contact' ||
     location.pathname === '/dashboard/drafts' ||
-    location.pathname === '/dashboard/my-search'
+    location.pathname === '/dashboard/my-search' ||
+    location.pathname === '/dashboard/archives'
   const isMyProfile = location.pathname === '/my-profile'
   const isCartPage = location.pathname === '/cart'
   const isPostAdFlow =

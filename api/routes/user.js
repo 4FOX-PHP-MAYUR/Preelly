@@ -19,6 +19,8 @@ const { sendEmail } = require('../utils/mailer')
 const { isSuperAdminRole, buildFullPermissionSet } = require('../config/adminPermissions')
 const { getPermissionMapForRole } = require('../services/adminPermissionService')
 const validateObjectId = require('../middleware/validateObjectId')
+const optionalAuth = require('../middleware/optionalAuth')
+const { getBlockedUserIds, isBlockedBetween } = require('../core/services/blockService')
 
 const CHANGE_EMAIL_PURPOSE = 'change_email'
 const OTP_LENGTH = Number(process.env.EMAIL_OTP_LENGTH || 6)
@@ -350,7 +352,11 @@ router.get('/orders', authMiddleware, async (req, res) => {
 // @access  Private
 router.get('/liked', authMiddleware, async (req, res) => {
   try {
-    const products = await Product.find({ likes: req.user._id })
+    const blockedIds = await getBlockedUserIds(req.user._id)
+    const products = await Product.find({
+      likes: req.user._id,
+      ...(blockedIds.length ? { seller: { $nin: blockedIds } } : {}),
+    })
       .populate('category', 'name icon emoji')
       .populate('seller', 'name avatar rating isVerified identityVerificationStatus')
       .sort({ createdAt: -1 })
@@ -371,7 +377,12 @@ router.get('/wishlist', authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' })
 
     const savedIds = (user.savedProducts || []).filter(Boolean)
-    const products = await Product.find({ _id: { $in: savedIds } })
+    // Wishlist entries from blocked accounts stay stored but are hidden.
+    const blockedIds = await getBlockedUserIds(req.user._id)
+    const products = await Product.find({
+      _id: { $in: savedIds },
+      ...(blockedIds.length ? { seller: { $nin: blockedIds } } : {}),
+    })
       .populate('category', 'name icon emoji')
       .populate('seller', 'name avatar rating isVerified identityVerificationStatus')
       .sort({ createdAt: -1 })
@@ -392,7 +403,12 @@ router.get('/notifications', authMiddleware, async (req, res) => {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)))
     const { tab } = req.query // 'buying' | 'selling' | 'general' | undefined (all)
 
-    const query = { user: req.user._id }
+    // Notifications whose actor is a blocked account are hidden from both the
+    // list and the badge counts, in either direction.
+    const blockedIds = await getBlockedUserIds(req.user._id)
+    const actorFilter = blockedIds.length ? { actor: { $nin: blockedIds } } : {}
+
+    const query = { user: req.user._id, ...actorFilter }
     if (tab && tab !== 'all') query.tab = tab
 
     const items = await Notification.find(query)
@@ -404,8 +420,8 @@ router.get('/notifications', authMiddleware, async (req, res) => {
 
     // counts per tab for badge display
     const [buyingUnread, sellingUnread] = await Promise.all([
-      Notification.countDocuments({ user: req.user._id, tab: 'buying', isRead: false }),
-      Notification.countDocuments({ user: req.user._id, tab: 'selling', isRead: false }),
+      Notification.countDocuments({ user: req.user._id, tab: 'buying', isRead: false, ...actorFilter }),
+      Notification.countDocuments({ user: req.user._id, tab: 'selling', isRead: false, ...actorFilter }),
     ])
 
     res.json({ items, buyingUnread, sellingUnread })
@@ -448,12 +464,18 @@ router.patch('/notifications/:id/read', authMiddleware, validateObjectId('id'), 
 // @desc    Get user profile by ID (public)
 // @access  Public
 // NOTE: This route must come BEFORE /profile to avoid route conflicts
-router.get('/:id/profile', validateObjectId('id'), async (req, res) => {
+router.get('/:id/profile', validateObjectId('id'), optionalAuth, async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
       .select('-password -savedProducts -emiratesIdFront -emiratesIdBack -identityVerificationRejectionReason')
 
     if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    // Direct-URL access to a blocked account's profile (either direction)
+    // resolves to the standard not-found response.
+    if (req.user && (await isBlockedBetween(req.user._id, user._id))) {
       return res.status(404).json({ message: 'User not found' })
     }
 
@@ -481,19 +503,29 @@ router.get('/:id/profile', validateObjectId('id'), async (req, res) => {
 // @route   GET /api/user/:id/followers
 // @desc    Get list of active followers for a user
 // @access  Public
-router.get('/:id/followers', validateObjectId('id'), async (req, res) => {
+router.get('/:id/followers', validateObjectId('id'), optionalAuth, async (req, res) => {
   try {
     const userExists = await User.exists({ _id: req.params.id })
     if (!userExists) {
       return res.status(404).json({ message: 'User not found' })
     }
+    if (req.user && (await isBlockedBetween(req.user._id, req.params.id))) {
+      return res.status(404).json({ message: 'User not found' })
+    }
 
-    const records = await Follow.find({ following: req.params.id, status: 'active' })
+    const blockedIds = req.user ? await getBlockedUserIds(req.user._id) : []
+    const records = await Follow.find({
+      following: req.params.id,
+      status: 'active',
+      ...(blockedIds.length ? { follower: { $nin: blockedIds } } : {}),
+    })
       .populate('follower', 'name avatar email phone rating memberSince isVerified role')
       .sort({ followedAt: -1 })
       .lean()
 
-    const followers = records.map((r) => ({ ...r.follower, followedAt: r.followedAt }))
+    const followers = records
+      .filter((r) => r.follower)
+      .map((r) => ({ ...r.follower, followedAt: r.followedAt }))
 
     res.json({ followers, count: followers.length })
   } catch (error) {
@@ -508,19 +540,29 @@ router.get('/:id/followers', validateObjectId('id'), async (req, res) => {
 // @route   GET /api/user/:id/following
 // @desc    Get list of users that a user is actively following
 // @access  Public
-router.get('/:id/following', validateObjectId('id'), async (req, res) => {
+router.get('/:id/following', validateObjectId('id'), optionalAuth, async (req, res) => {
   try {
     const userExists = await User.exists({ _id: req.params.id })
     if (!userExists) {
       return res.status(404).json({ message: 'User not found' })
     }
+    if (req.user && (await isBlockedBetween(req.user._id, req.params.id))) {
+      return res.status(404).json({ message: 'User not found' })
+    }
 
-    const records = await Follow.find({ follower: req.params.id, status: 'active' })
+    const blockedIds = req.user ? await getBlockedUserIds(req.user._id) : []
+    const records = await Follow.find({
+      follower: req.params.id,
+      status: 'active',
+      ...(blockedIds.length ? { following: { $nin: blockedIds } } : {}),
+    })
       .populate('following', 'name avatar email phone rating memberSince isVerified role')
       .sort({ followedAt: -1 })
       .lean()
 
-    const following = records.map((r) => ({ ...r.following, followedAt: r.followedAt }))
+    const following = records
+      .filter((r) => r.following)
+      .map((r) => ({ ...r.following, followedAt: r.followedAt }))
 
     res.json({ following, count: following.length })
   } catch (error) {
@@ -918,6 +960,8 @@ router.get('/suggested', authMiddleware, async (req, res) => {
     const existing = await Follow.find({ follower: req.user._id }).select('following').lean()
     const excludeIds = existing.map((r) => r.following)
     excludeIds.push(req.user._id)
+    // Never suggest an account blocked in either direction.
+    excludeIds.push(...(await getBlockedUserIds(req.user._id)))
 
     const suggested = await User.find({ _id: { $nin: excludeIds }, status: 'active' })
       .select('name avatar isVerified')
@@ -945,8 +989,11 @@ router.get('/search', authMiddleware, async (req, res) => {
     // Escape regex metacharacters so a raw query can't break the pattern.
     const safe = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
+    // Blocked accounts (either direction) never appear in user search.
+    const blockedIds = await getBlockedUserIds(req.user._id)
+
     const users = await User.find({
-      _id: { $ne: req.user._id },
+      _id: { $nin: [req.user._id, ...blockedIds] },
       status: 'active',
       $or: [
         { name: { $regex: safe, $options: 'i' } },

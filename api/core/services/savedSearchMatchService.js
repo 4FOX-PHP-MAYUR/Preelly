@@ -3,6 +3,7 @@ const Product = require('../../models/Product')
 const User = require('../../models/User')
 const Notification = require('../../models/Notification')
 const { sendEmail } = require('../../utils/mailer')
+const { isBlockedBetween } = require('./blockService')
 
 function escapeRegex(value) {
   return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -179,6 +180,10 @@ async function notifySavedSearchMatch(savedSearch, product, user) {
   const adTitle = product.title || 'a new listing'
   const masterOn = savedSearch.notificationEnabled ?? savedSearch.notifyEnabled
   if (!masterOn) return
+
+  // A saved search must never surface a listing from a blocked account —
+  // this covers the in-app, push and email channels below.
+  if (product.seller && (await isBlockedBetween(savedSearch.userId, product.seller))) return
 
   const tasks = []
 

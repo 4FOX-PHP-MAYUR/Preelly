@@ -6,56 +6,36 @@ const Product = require('../models/Product')
 const User = require('../models/User')
 const Notification = require('../models/Notification')
 const Report = require('../models/Report')
-const Follow = require('../models/Follow')
 const authMiddleware = require('../middleware/auth')
 const { chatUpload } = require('../middleware/upload')
 const path = require('path')
 const fs = require('fs')
 
-// A block is stored as { follower: blockedUser, following: blocker, status: 'blocked' }
-// (see routes/interactions.js POST /user/:id/block).
-// Returns, for each counterparty id: who blocked whom relative to `userId`.
-async function getBlockMap(userId, otherIds) {
-  const ids = Array.from(new Set((otherIds || []).filter(Boolean).map(String)))
-  const map = {}
-  for (const id of ids) map[id] = { blockedByMe: false, blockedMe: false }
-  if (ids.length === 0) return map
-
-  const me = String(userId)
-  const records = await Follow.find({
-    status: 'blocked',
-    $or: [
-      { following: userId, follower: { $in: ids } }, // I blocked them
-      { follower: userId, following: { $in: ids } }, // they blocked me
-    ],
-  })
-    .select('follower following')
-    .lean()
-
-  for (const rec of records) {
-    const blocker = String(rec.following)
-    const blocked = String(rec.follower)
-    if (blocker === me && map[blocked]) map[blocked].blockedByMe = true
-    if (blocked === me && map[blocker]) map[blocker].blockedMe = true
-  }
-  return map
-}
-
-async function getBlockState(userId, otherId) {
-  if (!otherId) return { blockedByMe: false, blockedMe: false }
-  const map = await getBlockMap(userId, [otherId])
-  return map[String(otherId)] || { blockedByMe: false, blockedMe: false }
-}
+// Block state lives in core/services/blockService (backed by the same
+// { follower: blockedUser, following: blocker, status: 'blocked' } record
+// written by routes/interactions.js POST /user/:id/block).
+const {
+  getBlockMap,
+  getBlockState,
+  isBlockedBetween,
+  getBlockedUserIds,
+} = require('../core/services/blockService')
 
 async function getUnreadTotalForUser(userId) {
   const productChats = await Chat.find({
     type: { $ne: 'support' },
     $or: [{ buyer: userId }, { seller: userId }],
   }).select('buyer seller unreadForBuyer unreadForSeller')
+
+  // Blocked counterparties must not contribute to the badge in either direction.
+  const blockedIds = new Set((await getBlockedUserIds(userId)).map(String))
+
   let total = 0
   for (const chat of productChats) {
     if (!chat.buyer || !chat.seller) continue
     const isBuyer = chat.buyer.toString() === userId.toString()
+    const otherId = isBuyer ? chat.seller.toString() : chat.buyer.toString()
+    if (blockedIds.has(otherId)) continue
     total += isBuyer ? (chat.unreadForBuyer || 0) : (chat.unreadForSeller || 0)
   }
   const supportChat = await Chat.findOne({ type: 'support', user: userId }).select('unreadForUser')
@@ -228,6 +208,18 @@ router.post('/group', authMiddleware, async (req, res) => {
     const members = await User.find({ _id: { $in: Array.from(memberSet) } }).select('name')
     if (members.length !== memberSet.size) {
       return res.status(400).json({ message: 'One or more members were not found' })
+    }
+
+    // A block in either direction prevents the creator from adding that member.
+    const memberBlockMap = await getBlockMap(creatorId, Array.from(memberSet))
+    const blockedMember = Array.from(memberSet).find(
+      (id) => memberBlockMap[id]?.blockedByMe || memberBlockMap[id]?.blockedMe,
+    )
+    if (blockedMember) {
+      return res.status(403).json({
+        blocked: true,
+        message: "You can't add an account you've blocked, or that has blocked you, to a group.",
+      })
     }
 
     const participants = [creatorId, ...members.map((m) => m._id)]
@@ -410,6 +402,19 @@ router.post('/', authMiddleware, async (req, res) => {
       return res.json({
         chat: { ...chat.toObject(), ...blockState },
         messages,
+      })
+    }
+
+    // No existing thread: a block in either direction prevents starting a new
+    // conversation. (An already-existing thread is still returned above, with
+    // its block state, so history stays visible but the composer stays locked.)
+    if (await isBlockedBetween(buyerId, sellerId)) {
+      const { blockedByMe } = await getBlockState(buyerId, sellerId)
+      return res.status(403).json({
+        blocked: true,
+        message: blockedByMe
+          ? "You've blocked this account. Unblock them to start a conversation."
+          : "You can't start a conversation with this account.",
       })
     }
 
@@ -684,6 +689,12 @@ router.post('/:id/call-event', authMiddleware, async (req, res) => {
     const uid      = userId.toString()
     if (uid !== buyerId && uid !== sellerId) {
       return res.status(403).json({ message: 'Not authorized' })
+    }
+
+    // Calls are a form of contact — a block in either direction closes them.
+    const callOtherId = uid === buyerId ? sellerId : buyerId
+    if (callOtherId && (await isBlockedBetween(userId, callOtherId))) {
+      return res.status(403).json({ blocked: true, message: "You can't call this account." })
     }
 
     const message = await Message.create({

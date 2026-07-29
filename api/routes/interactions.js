@@ -9,7 +9,31 @@ const CommentReport = require('../models/CommentReport')
 const Report = require('../models/Report')
 const ProductView = require('../models/ProductView')
 const authMiddleware = require('../middleware/auth')
+const optionalAuth = require('../middleware/optionalAuth')
 const validateObjectId = require('../middleware/validateObjectId')
+const {
+  getBlockedUserIds,
+  getBlockState,
+  isBlockedBetween,
+} = require('../core/services/blockService')
+
+// Content owned by a blocked account must read as if it does not exist, so
+// visibility checks answer with the project's standard 404 copy rather than a
+// 403 that would confirm the account exists.
+const CONTENT_UNAVAILABLE = 'Product not found'
+const USER_UNAVAILABLE = 'User not found'
+
+/**
+ * Guard for actions taken *against another user's content or profile*.
+ * Returns true when the request was answered (caller should return immediately).
+ */
+async function denyIfBlocked(req, res, otherId, message = CONTENT_UNAVAILABLE) {
+  if (!otherId || !req.user?._id) return false
+  if (String(otherId) === String(req.user._id)) return false
+  if (!(await isBlockedBetween(req.user._id, otherId))) return false
+  res.status(404).json({ message })
+  return true
+}
 
 function toObjectIdString(value) {
   if (!value) return null
@@ -42,9 +66,10 @@ router.post('/products/:id/like', authMiddleware, validateObjectId('id'), async 
     if (!product) {
       return res.status(404).json({ message: 'Product not found' })
     }
+    if (await denyIfBlocked(req, res, product.seller)) return
 
     const userId = req.user._id
-    
+
     // Use some() for proper ObjectId comparison
     const isLiked = product.likes?.some(
       (id) => id.toString() === userId.toString()
@@ -79,9 +104,18 @@ router.post('/products/:id/like', authMiddleware, validateObjectId('id'), async 
 // @route   POST /api/products/:id/view
 // @desc    Increment product view count
 // @access  Public
-router.post('/products/:id/view', validateObjectId('id'), async (req, res) => {
+router.post('/products/:id/view', validateObjectId('id'), optionalAuth, async (req, res) => {
   try {
     const id = req.params.id
+
+    // A signed-in viewer who is blocked by (or has blocked) the seller must not
+    // register a view. Anonymous viewers are unaffected.
+    if (req.user) {
+      const owner = await Product.findById(id).select('seller').lean()
+      if (!owner) return res.status(404).json({ message: 'Product not found' })
+      if (await denyIfBlocked(req, res, owner.seller)) return
+    }
+
     // Atomic increment to avoid race conditions and model save validation issues
     const updated = await Product.findByIdAndUpdate(
       id,
@@ -112,10 +146,11 @@ router.post('/products/:id/video-view', authMiddleware, validateObjectId('id'), 
     const productId = req.params.id
     const userId = req.user._id
 
-    const product = await Product.findById(productId).select('_id status').lean()
+    const product = await Product.findById(productId).select('_id status seller').lean()
     if (!product) {
       return res.status(404).json({ message: 'Product not found' })
     }
+    if (await denyIfBlocked(req, res, product.seller)) return
 
     const existing = await ProductView.findOne({
       productID: productId,
@@ -159,9 +194,17 @@ router.post('/products/:id/video-view', authMiddleware, validateObjectId('id'), 
 // @route   POST /api/products/:id/share
 // @desc    Increment product share count
 // @access  Public
-router.post('/products/:id/share', validateObjectId('id'), async (req, res) => {
+router.post('/products/:id/share', validateObjectId('id'), optionalAuth, async (req, res) => {
   try {
     const id = req.params.id
+
+    // Sharing is an interaction — denied across an active block.
+    if (req.user) {
+      const owner = await Product.findById(id).select('seller').lean()
+      if (!owner) return res.status(404).json({ message: 'Product not found' })
+      if (await denyIfBlocked(req, res, owner.seller)) return
+    }
+
     // Atomic increment to avoid race conditions and model save validation issues
     const updated = await Product.findByIdAndUpdate(
       id,
@@ -198,6 +241,7 @@ router.post('/products/:id/save', authMiddleware, validateObjectId('id'), async 
     if (!product) {
       return res.status(404).json({ message: 'Product not found' })
     }
+    if (await denyIfBlocked(req, res, product.seller)) return
 
     if (!user.savedProducts) {
       user.savedProducts = []
@@ -240,7 +284,12 @@ router.get('/user/saved', authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' })
 
     const savedIds = (user.savedProducts || []).filter(Boolean)
-    const products = await Product.find({ _id: { $in: savedIds } })
+    // Saved listings from blocked accounts stay saved but are hidden from view.
+    const blockedIds = await getBlockedUserIds(req.user._id)
+    const products = await Product.find({
+      _id: { $in: savedIds },
+      ...(blockedIds.length ? { seller: { $nin: blockedIds } } : {}),
+    })
       .populate('category', 'name icon emoji')
       .populate('seller', 'name avatar rating isVerified identityVerificationStatus')
       .sort({ createdAt: -1 })
@@ -445,12 +494,16 @@ router.post('/user/:id/follow/reject', authMiddleware, validateObjectId('id'), a
 // @access  Private
 router.get('/user/blocked', authMiddleware, async (req, res) => {
   try {
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1)
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit, 10) || 20))
+    const q = String(req.query.q || '').trim()
+
     const records = await Follow.find({ following: req.user._id, status: 'blocked' })
       .populate('follower', 'name displayName avatar email phone isVerified')
       .sort({ blockedAt: -1 })
       .lean()
 
-    const blockedUsers = records
+    let blockedUsers = records
       .map((r) => {
         if (!r.follower) return null
         return {
@@ -466,10 +519,52 @@ router.get('/user/blocked', authMiddleware, async (req, res) => {
       })
       .filter(Boolean)
 
-    res.json({ blockedUsers, count: blockedUsers.length })
+    if (q) {
+      const needle = q.toLowerCase()
+      blockedUsers = blockedUsers.filter((u) =>
+        [u.name, u.displayName, u.email, u.phone]
+          .filter(Boolean)
+          .some((field) => String(field).toLowerCase().includes(needle)),
+      )
+    }
+
+    const total = blockedUsers.length
+    const start = (page - 1) * limit
+    const items = blockedUsers.slice(start, start + limit)
+
+    // `blockedUsers`/`count` keep the original (unpaginated-client) contract;
+    // `items`/`total`/`page` follow the pagination shape used elsewhere.
+    res.json({
+      blockedUsers: items,
+      items,
+      count: total,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit) || 0,
+      hasMore: start + items.length < total,
+    })
   } catch (error) {
     console.error('Error fetching blocked users:', error)
     res.status(500).json({ message: 'Error fetching blocked users' })
+  }
+})
+
+// @route   GET /api/user/:id/block-status
+// @desc    Block relationship between the current user and :id
+// @access  Private
+router.get('/user/:id/block-status', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const targetId = req.params.id
+    if (String(req.user._id) === String(targetId)) {
+      return res.json({ blockedByMe: false, blockedMe: false, blocked: false })
+    }
+
+    const { blockedByMe, blockedMe } = await getBlockState(req.user._id, targetId)
+    res.json({ blockedByMe, blockedMe, blocked: blockedByMe || blockedMe })
+  } catch (error) {
+    console.error('Error fetching block status:', error)
+    res.status(500).json({ message: 'Error fetching block status' })
   }
 })
 
@@ -523,6 +618,18 @@ router.post('/user/:id/block', authMiddleware, validateObjectId('id'), async (re
       })
     }
 
+    // Instagram parity: blocking severs the relationship both ways. The record
+    // above already removed target→blocker; drop the blocker→target follow too,
+    // along with any pending follow-request notifications between the pair.
+    await Follow.deleteOne({ follower: blockerId, following: targetId, status: { $ne: 'blocked' } })
+    await Notification.deleteMany({
+      type: { $in: ['follow', 'follow_request'] },
+      $or: [
+        { user: blockerId, actor: targetId },
+        { user: targetId, actor: blockerId },
+      ],
+    })
+
     res.json({ blocked: true, message: 'User blocked' })
   } catch (error) {
     console.error('Error toggling block:', error)
@@ -553,6 +660,7 @@ router.post('/user/:id/report', authMiddleware, validateObjectId('id'), async (r
     if (!targetExists) {
       return res.status(404).json({ message: 'User not found' })
     }
+    if (await denyIfBlocked(req, res, reportedUserId, USER_UNAVAILABLE)) return
 
     const report = await Report.create({
       reporter: reporterId,
@@ -630,10 +738,11 @@ router.post('/products/:id/report', authMiddleware, validateObjectId('id'), asyn
   try {
     const { reason, description } = req.body
     const product = await Product.findById(req.params.id)
-    
+
     if (!product) {
       return res.status(404).json({ message: 'Product not found' })
     }
+    if (await denyIfBlocked(req, res, product.seller)) return
 
     // In a real app, you would save this to a reports collection
     // For now, we'll just log it
@@ -658,16 +767,21 @@ router.post('/products/:id/report', authMiddleware, validateObjectId('id'), asyn
 // @route   GET /api/products/:id/comments
 // @desc    Get all published comments for a product (persisted in DB). Returns array only.
 // @access  Public
-router.get('/products/:id/comments', validateObjectId('id'), async (req, res) => {
+router.get('/products/:id/comments', validateObjectId('id'), optionalAuth, async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
     if (!product) {
       return res.status(404).json({ message: 'Product not found' })
     }
+    if (await denyIfBlocked(req, res, product.seller)) return
+
+    // Comments authored by blocked accounts are hidden from the viewer.
+    const blockedIds = req.user ? await getBlockedUserIds(req.user._id) : []
 
     const comments = await Comment.find({
       product: req.params.id,
       status: 'approved',
+      ...(blockedIds.length ? { user: { $nin: blockedIds } } : {}),
     })
       .populate('user', 'name avatar')
       .select('product user text status likes parentID parentComment createdAt updatedAt')
@@ -713,6 +827,7 @@ router.post('/products/:id/comments', authMiddleware, validateObjectId('id'), as
     if (!product) {
       return res.status(404).json({ message: 'Product not found' })
     }
+    if (await denyIfBlocked(req, res, product.seller)) return
     if (!text || !text.trim()) {
       return res.status(400).json({ message: 'Comment text is required' })
     }
@@ -782,6 +897,7 @@ router.post('/comments/:id/report', authMiddleware, async (req, res) => {
     if (comment.user.toString() === req.user._id.toString()) {
       return res.status(400).json({ message: 'You cannot report your own comment' })
     }
+    if (await denyIfBlocked(req, res, comment.user, 'Comment not found')) return
 
     const existing = await CommentReport.findOne({
       comment: req.params.id,
@@ -850,6 +966,7 @@ router.post('/comments/:id/like', authMiddleware, async (req, res) => {
     if (!comment) {
       return res.status(404).json({ message: 'Comment not found' })
     }
+    if (await denyIfBlocked(req, res, comment.user, 'Comment not found')) return
 
     const userId = req.user._id
     const isLiked = comment.likes?.some(
@@ -885,16 +1002,21 @@ router.post('/comments/:id/like', authMiddleware, async (req, res) => {
 // @route   GET /api/products/:id/comments/count
 // @desc    Get comment count for a product
 // @access  Public
-router.get('/products/:id/comments/count', validateObjectId('id'), async (req, res) => {
+router.get('/products/:id/comments/count', validateObjectId('id'), optionalAuth, async (req, res) => {
   try {
     const product = await Product.findById(req.params.id)
     if (!product) {
       return res.status(404).json({ message: 'Product not found' })
     }
+    if (await denyIfBlocked(req, res, product.seller)) return
+
+    // Keep the count consistent with the filtered comment list above.
+    const blockedIds = req.user ? await getBlockedUserIds(req.user._id) : []
 
     const count = await Comment.countDocuments({
       product: req.params.id,
       status: 'approved', // Only count approved comments
+      ...(blockedIds.length ? { user: { $nin: blockedIds } } : {}),
     })
 
     res.json({ count })

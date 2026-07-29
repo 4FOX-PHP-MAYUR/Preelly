@@ -9,6 +9,7 @@ import { selectIsAuthenticated, selectIsGuest, selectUser } from '../../store/sl
 import { useChat } from '../Chat/ChatContext'
 import DetailCard from './DetailCard'
 import { pickDisplay } from './detailHelpers'
+import BlockFlow from '../../../components/Block/BlockFlow'
 
 function formatPhoneForWhatsApp(phone) {
   if (!phone) return null
@@ -24,6 +25,7 @@ function SellerInfo({ product }) {
   const user = useSelector(selectUser)
   const { createOrGetThread } = useChat()
   const [showPhoneNumber, setShowPhoneNumber] = useState(false)
+  const [showBlockFlow, setShowBlockFlow] = useState(false)
 
   if (!seller) return null
 
@@ -100,7 +102,22 @@ function SellerInfo({ product }) {
       </div>
 
       {sellerId ? (
-        <div className="mt-3 flex justify-end">
+        <div className="mt-3 flex items-center justify-end gap-4">
+          {!isOwner ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (!isAuthenticated || isGuest) {
+                  toast.error('Please login to block accounts')
+                  return
+                }
+                setShowBlockFlow(true)
+              }}
+              className="text-sm font-semibold text-slate-500 transition hover:text-red-600"
+            >
+              Block
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={() => navigate(`/user/${sellerId}`)}
@@ -155,6 +172,16 @@ function SellerInfo({ product }) {
           </a>
         </div>
       )}
+
+      <BlockFlow
+        open={showBlockFlow}
+        user={seller}
+        onClose={() => setShowBlockFlow(false)}
+        onBlocked={() => {
+          // This listing is no longer visible to either party once blocked.
+          navigate('/')
+        }}
+      />
     </DetailCard>
   )
 }

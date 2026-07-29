@@ -28,6 +28,20 @@ const {
 const { buildProductAttributesPresentation, buildDetailFeaturesPresentation } = require('../utils/productAttributesResolver')
 const { enrichReelsProducts } = require('../utils/reelsProductFields')
 const { resolveOrderPlatform } = require('../utils/paymentLabels')
+const { getBlockedUserIds, isBlockedBetween } = require('../core/services/blockService')
+
+/**
+ * Hide listings owned by accounts blocked in either direction.
+ * Applied via `$and` so it composes with (and never clobbers) an existing
+ * `query.seller` clause set by the userId / excludeUserId filters.
+ */
+async function applyBlockExclusion(query, viewerId, field = 'seller') {
+  if (!viewerId) return query
+  const blockedIds = await getBlockedUserIds(viewerId)
+  if (blockedIds.length === 0) return query
+  query.$and = [...(query.$and || []), { [field]: { $nin: blockedIds } }]
+  return query
+}
 const {
   markProductArchived,
   clearProductArchive,
@@ -190,6 +204,10 @@ router.get('/price-range', async (req, res) => {
       }
     }
 
+    // Keep the slider bounds consistent with the listings the viewer can see.
+    const priceViewer = await readSavedStorageForRequest(req)
+    await applyBlockExclusion(matchStage, priceViewer.userId)
+
     const priceStats = await Product.aggregate([
       { $match: matchStage },
       {
@@ -255,6 +273,10 @@ router.get('/facets', async (req, res) => {
         matchStage.subcategory = subcategoryId
       }
     }
+
+    // Facet counts must match the filtered result set the viewer will get.
+    const facetViewer = await readSavedStorageForRequest(req)
+    await applyBlockExclusion(matchStage, facetViewer.userId)
 
     const result = await Product.aggregate([
       { $match: matchStage },
@@ -953,6 +975,8 @@ router.get('/', async (req, res) => {
       }
     }
 
+    await applyBlockExclusion(query, savedStorage.userId)
+
     const products = await Product.find(query)
       .populate('category', 'name icon emoji')
       .populate('seller', 'name avatar rating memberSince isVerified identityVerificationStatus')
@@ -1103,6 +1127,8 @@ router.get('/reels-feed', async (req, res) => {
       query.status = 'active'
     }
 
+    await applyBlockExclusion(query, savedStorage.userId)
+
     // Log final filter for debugging
     console.log('reels-feed final filter =>', query)
 
@@ -1224,6 +1250,12 @@ router.get('/:id/related', validateObjectId('id'), async (req, res) => {
       return res.status(404).json({ message: 'Product not found' })
     }
 
+    // Resolved up-front so the block rules apply to the source listing too.
+    const savedStorage = await readSavedStorageForRequest(req)
+    if (savedStorage.userId && (await isBlockedBetween(savedStorage.userId, product.seller))) {
+      return res.status(404).json({ message: 'Product not found' })
+    }
+
     const { categoryId, location, subcategoryId } = req.query
     const escapeRegExp = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
@@ -1231,6 +1263,7 @@ router.get('/:id/related', validateObjectId('id'), async (req, res) => {
       _id: { $ne: product._id },
       status: 'active',
     }
+    await applyBlockExclusion(baseQuery, savedStorage.userId)
 
     const category = categoryId || product.category
     if (category) baseQuery.category = category
@@ -1275,7 +1308,6 @@ router.get('/:id/related', validateObjectId('id'), async (req, res) => {
       }
     }
 
-    const savedStorage = await readSavedStorageForRequest(req)
     const relatedWithSaved = relatedProducts.map((p) => withSaved(p, savedStorage))
 
     res.json(relatedWithSaved)
@@ -1360,6 +1392,10 @@ router.get('/search', async (req, res) => {
       if (minPrice != null && Number.isFinite(minPrice)) match.price.$gte = minPrice
       if (maxPrice != null && Number.isFinite(maxPrice)) match.price.$lte = maxPrice
     }
+
+    // Listings from blocked accounts never surface in search results.
+    const searchViewer = await readSavedStorageForRequest(req)
+    await applyBlockExclusion(match, searchViewer.userId)
 
     let products = []
     let total = 0
@@ -1554,7 +1590,17 @@ router.get('/:id', validateObjectId('id'), async (req, res) => {
       })
       return res.status(404).json({ message: 'Product not found' })
     }
-    
+
+    // Direct-URL access: a listing owned by a blocked account must read as
+    // missing, in both directions. Owners/admins are exempt.
+    if (!isOwnerOrAdmin) {
+      const detailViewer = await readSavedStorageForRequest(req)
+      if (detailViewer.userId && (await isBlockedBetween(detailViewer.userId, product.seller))) {
+        return res.status(404).json({ message: 'Product not found' })
+      }
+    }
+
+
     console.log('✅ Product access granted:', { 
       productId: req.params.id, 
       status: product.status, 

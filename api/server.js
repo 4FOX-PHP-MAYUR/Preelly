@@ -242,31 +242,42 @@ io.on('connection', (socket) => {
   socket.on('leave-room', (roomId) => { if (roomId) socket.leave(roomId) })
 
   // ── WebRTC call signaling ─────────────────────────────────────────────────
+  // Every hop is block-checked server-side: a blocked pair must not be able to
+  // reach each other over sockets even if the REST guards are bypassed.
+  const { isBlockedBetween } = require('./core/services/blockService')
+
+  const relayIfAllowed = async (to, event, payload) => {
+    if (!to || !socket.userId) return
+    try {
+      if (await isBlockedBetween(socket.userId, to)) return
+    } catch (err) {
+      // Fail closed — never relay when the block state can't be established.
+      console.error('Socket block check failed:', err.message)
+      return
+    }
+    socket.to(`user-${to}`).emit(event, payload)
+  }
+
   socket.on('call:offer', ({ to, threadId, type, offer, callerName }) => {
-    if (!to) return
-    socket.to(`user-${to}`).emit('call:incoming', {
+    relayIfAllowed(to, 'call:incoming', {
       from: socket.userId, fromName: callerName, threadId, type, offer,
     })
   })
 
   socket.on('call:answer', ({ to, threadId, answer }) => {
-    if (!to) return
-    socket.to(`user-${to}`).emit('call:answered', { answer, threadId })
+    relayIfAllowed(to, 'call:answered', { answer, threadId })
   })
 
   socket.on('call:ice-candidate', ({ to, candidate }) => {
-    if (!to) return
-    socket.to(`user-${to}`).emit('call:ice-candidate', { from: socket.userId, candidate })
+    relayIfAllowed(to, 'call:ice-candidate', { from: socket.userId, candidate })
   })
 
   socket.on('call:end', ({ to, threadId }) => {
-    if (!to) return
-    socket.to(`user-${to}`).emit('call:end', { from: socket.userId, threadId })
+    relayIfAllowed(to, 'call:end', { from: socket.userId, threadId })
   })
 
   socket.on('call:reject', ({ to, threadId }) => {
-    if (!to) return
-    socket.to(`user-${to}`).emit('call:rejected', { from: socket.userId, threadId })
+    relayIfAllowed(to, 'call:rejected', { from: socket.userId, threadId })
   })
 
   socket.on('disconnect', () => {

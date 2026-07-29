@@ -18,6 +18,7 @@ import {
   Play,
   Pause,
   UserPlus,
+  CircleSlash,
 } from 'lucide-react'
 import { formatListingPrice, getProductListingPrice } from '@shared/components/categoryBrowseShared'
 import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
@@ -35,6 +36,7 @@ import ReelShareModal from './ReelShareModal'
 import QuickViewModal from './QuickViewModal'
 import ReelStreamPlayer from './ReelStreamPlayer'
 import AdMoreOptionsModal from '../Profile/AdMoreOptionsModal'
+import BlockFlow from '../../../components/Block/BlockFlow'
 import useProductVideoViewTracking from '@shared/hooks/useProductVideoViewTracking'
 
 /** Keep only the first `count` words of a title (adds an ellipsis if more were dropped). */
@@ -54,6 +56,7 @@ function ProductReelCard({
   onProductArchived = null,
   onProductDeleted = null,
   onProductUpdated = null,
+  onBlockedSeller = null,
   forceOwnerMenu = false,
 }) {
   const navigate = useNavigate()
@@ -77,6 +80,7 @@ function ProductReelCard({
   const [showCommentModal, setShowCommentModal] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
   const [showQuickView, setShowQuickView] = useState(false)
+  const [showBlockFlow, setShowBlockFlow] = useState(false)
   const [drawerInitialTab, setDrawerInitialTab] = useState('comments')
   const [hasIncrementedView, setHasIncrementedView] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -771,9 +775,36 @@ function ProductReelCard({
             <button type="button" onClick={handleReport} className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-white/10">
               <Flag className="h-4 w-4" /> Report
             </button>
+            {product.seller && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowMoreMenu(false)
+                  if (!isAuthenticated || isGuest) {
+                    toast.error('Please login to block accounts')
+                    return
+                  }
+                  setShowBlockFlow(true)
+                }}
+                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-white/10"
+              >
+                <CircleSlash className="h-4 w-4" /> Block
+              </button>
+            )}
           </div>
         </>
       )}
+
+      <BlockFlow
+        open={showBlockFlow}
+        user={typeof product.seller === 'object' ? product.seller : null}
+        onClose={() => setShowBlockFlow(false)}
+        onBlocked={() => {
+          // The feed refetch drops this seller's listings server-side.
+          onBlockedSeller?.(product.seller?._id || product.seller)
+        }}
+      />
 
       {isOwner ? (
         <AdMoreOptionsModal

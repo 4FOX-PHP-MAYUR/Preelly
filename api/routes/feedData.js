@@ -10,6 +10,7 @@ const Comment = require('../models/Comment')
 const authMiddleware = require('../middleware/auth')
 const { getUserIdFromRequest } = require('../utils/authToken')
 const { enrichReelsProducts } = require('../utils/reelsProductFields')
+const { getBlockedUserIds } = require('../core/services/blockService')
 
 const router = express.Router()
 
@@ -217,7 +218,7 @@ function applyCursorToMatch (match, decodedCursor) {
   return match
 }
 
-async function buildFeedMatch ({ params, sellerIds }) {
+async function buildFeedMatch ({ params, sellerIds, viewerId = null }) {
   const adminUserIds = await getAdminUserIds()
   const query = adminUserIds.length > 0
     ? { $or: [{ status: 'active' }, { seller: { $in: adminUserIds } }] }
@@ -226,6 +227,15 @@ async function buildFeedMatch ({ params, sellerIds }) {
 
   if (sellerIds) {
     query.seller = { $in: sellerIds }
+  }
+
+  // Listings owned by accounts blocked in either direction never enter a feed.
+  // Added via `$and` so it composes with the `sellerIds` clause above.
+  if (viewerId) {
+    const blockedIds = await getBlockedUserIds(viewerId)
+    if (blockedIds.length > 0) {
+      query.$and = [...(query.$and || []), { seller: { $nin: blockedIds } }]
+    }
   }
 
   if (categoryId) {
@@ -400,8 +410,8 @@ async function createFeedResponse ({ posts, nextCursor, hasMore, feedType, page 
   }
 }
 
-async function fetchSortedVideoFeed ({ userObjectId, params, savedProductIdsSet, feedType, sellerIds = null }) {
-  const baseMatch = await buildFeedMatch({ params, sellerIds })
+async function fetchSortedVideoFeed ({ userObjectId, params, savedProductIdsSet, feedType, sellerIds = null, viewerId = null }) {
+  const baseMatch = await buildFeedMatch({ params, sellerIds, viewerId })
   const decodedCursor = decodeCursor(params.cursor)
   const match = applyCursorToMatch({ ...baseMatch }, decodedCursor)
 
@@ -508,8 +518,8 @@ function buildFeedAggregationStages ({ userObjectId }) {
   ]
 }
 
-async function fetchRandomVideoFeed ({ userObjectId, params, savedProductIdsSet, feedType = 'trending' }) {
-  const baseMatch = await buildFeedMatch({ params })
+async function fetchRandomVideoFeed ({ userObjectId, params, savedProductIdsSet, feedType = 'trending', viewerId = null }) {
+  const baseMatch = await buildFeedMatch({ params, viewerId })
   const decodedCursor = decodeCursor(params.cursor)
   const excludeIdStrings = Array.isArray(decodedCursor?.excludeIds)
     ? decodedCursor.excludeIds.map((id) => String(id).trim()).filter(Boolean).slice(0, 1000)
@@ -602,6 +612,7 @@ async function fetchFollowingFeed ({ userId, userObjectId, params }) {
     savedProductIdsSet,
     feedType: 'following',
     sellerIds: followingIds,
+    viewerId: userId,
   })
 }
 
@@ -723,11 +734,19 @@ async function fetchTrendingFeed ({ userId, userObjectId, params }) {
       params,
       savedProductIdsSet,
       feedType: 'trending',
+      viewerId: userId,
     })
   }
 
   if (sortMode === 'engagement' || sortMode === 'trending') {
-    const rankedRows = await buildTrendingRanking({ params })
+    const allRankedRows = await buildTrendingRanking({ params })
+    // The ranking cache is shared across viewers, so blocked sellers are
+    // filtered out of the cached rows here rather than inside the ranking query.
+    const blockedIds = userId ? await getBlockedUserIds(userId) : []
+    const blockedSet = new Set(blockedIds.map(String))
+    const rankedRows = blockedSet.size
+      ? allRankedRows.filter((row) => !blockedSet.has(String(row.sellerId || '')))
+      : allRankedRows
     const decodedCursor = decodeCursor(params.cursor)
     const offset = decodedCursor?.offset != null
       ? Math.max(0, Number(decodedCursor.offset) || 0)
@@ -754,6 +773,7 @@ async function fetchTrendingFeed ({ userId, userObjectId, params }) {
     params,
     savedProductIdsSet,
     feedType: 'trending',
+    viewerId: userId,
   })
 }
 
@@ -845,6 +865,11 @@ async function fetchChatsForUser ({ userId }) {
   if (supportChat) chats.push(supportChat)
   chats.sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0))
 
+  // Threads with a blocked counterparty must not contribute unread badges.
+  // (History itself stays visible, per the existing chat rules.)
+  const blockedSet = new Set((await getBlockedUserIds(userId)).map(String))
+  const idOf = (ref) => String(ref?._id || ref || '')
+
   let unreadCount = 0
   for (const chat of chats) {
     if (chat.type === 'support') {
@@ -853,7 +878,9 @@ async function fetchChatsForUser ({ userId }) {
     }
 
     if (!chat.buyer || !chat.seller) continue
-    const isBuyer = chat.buyer.toString() === userId.toString()
+    const isBuyer = idOf(chat.buyer) === String(userId)
+    const otherId = isBuyer ? idOf(chat.seller) : idOf(chat.buyer)
+    if (blockedSet.has(otherId)) continue
     unreadCount += isBuyer ? (chat.unreadForBuyer || 0) : (chat.unreadForSeller || 0)
   }
 
@@ -918,6 +945,15 @@ async function fetchReelsForUser ({ userId, userObjectId, savedProductIdsSet, pa
     query.$or = [{ status: 'active' }, { seller: { $in: adminUserIds } }]
   } else {
     query.status = 'active'
+  }
+
+  // Hide listings from blocked accounts (both directions). Added via `$and` so
+  // it survives alongside the `excludeUserId` seller clause set above.
+  if (userId) {
+    const blockedIds = await getBlockedUserIds(userId)
+    if (blockedIds.length > 0) {
+      query.$and = [...(query.$and || []), { seller: { $nin: blockedIds } }]
+    }
   }
 
   // Total count for hasMore

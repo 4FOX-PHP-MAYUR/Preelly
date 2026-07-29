@@ -5,6 +5,7 @@ const Chat = require('../models/Chat')
 const Product = require('../models/Product')
 const authMiddleware = require('../middleware/auth')
 const { resolveStoredFeaturesColumn } = require('../utils/productAttributesResolver')
+const { isBlockedBetween, getBlockedUserIds } = require('../core/services/blockService')
 
 // @route   POST /api/cart/from-offer
 // @desc    Add a product to the buyer's cart when an offer is accepted.
@@ -33,6 +34,15 @@ router.post('/from-offer', authMiddleware, async (req, res) => {
       chat.seller.toString() === requesterId.toString()
     if (!isParticipant) {
       return res.status(403).json({ success: false, message: 'Not allowed for this chat' })
+    }
+
+    // Offers cannot be accepted while a block is active in either direction.
+    if (await isBlockedBetween(chat.buyer, chat.seller)) {
+      return res.status(403).json({
+        success: false,
+        blocked: true,
+        message: 'This offer is no longer available.',
+      })
     }
 
     // unitPrice = accepted offer amount; fall back to the product price.
@@ -197,10 +207,15 @@ router.get('/', authMiddleware, async (req, res) => {
     const requestedStatus = String(req.query.cartStatus || req.query.status || '').trim().toUpperCase()
     const cartStatus = Cart.CART_STATUSES.includes(requestedStatus) ? requestedStatus : 'ACTIVE'
 
+    // Cart rows whose seller is now blocked are hidden (the row is kept, so
+    // unblocking restores it) — matching how saved/wishlist entries behave.
+    const blockedIds = await getBlockedUserIds(req.user._id)
+
     const items = await Cart.find({
       userId: req.user._id,
       cartStatus,
       deletedAt: null,
+      ...(blockedIds.length ? { sellerId: { $nin: blockedIds } } : {}),
     })
       .populate({
         path: 'productId',

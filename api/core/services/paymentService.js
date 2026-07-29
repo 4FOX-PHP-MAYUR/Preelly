@@ -17,6 +17,7 @@ const paymentEmailService = require('./paymentEmailService')
 const PaymentLog = require('../../models/PaymentLog')
 const ccavenueGateway = require('../gateways/ccavenueGateway')
 const logger = require('../../utils/paymentLogger')
+const { isBlockedBetween } = require('./blockService')
 const {
   platformToPaymentFrom,
   normalizePaymentMethod,
@@ -255,6 +256,11 @@ async function initiateCheckoutPayment({
   const cart = await Cart.findOne({ userId, productId, cartStatus: 'ACTIVE', deletedAt: null }).lean()
   const productAmount = round2(Number(cart?.unitPrice ?? cart?.totalAmount ?? 0))
   const sellerId = cart?.sellerId || product.seller || null
+
+  // A block in either direction stops the purchase before any gateway call.
+  if (sellerId && (await isBlockedBetween(userId, sellerId))) {
+    throw new AppError('This listing is no longer available', 404, 'PRODUCT_NOT_FOUND')
+  }
 
   // Validate selected checkout services are active. Client amounts are kept because
   // the Pick & Drop total includes a delivery cost that isn't a stored unit price.

@@ -482,7 +482,11 @@ export const userService = {
     api.put(`/user/saved-searches/${id}`, data, { persistAcrossRoutes: true }),
   deleteSavedSearch: (id) =>
     api.delete(`/user/saved-searches/${id}`, { persistAcrossRoutes: true }),
-  getBlockedUsers: () => api.get('/user/blocked'),
+  getBlockedUsers: (params = {}) => api.get('/user/blocked', { params }),
+  getBlockStatus: (userId) => {
+    if (!isValidObjectId(userId)) return Promise.reject({ response: { status: 400, data: { message: 'Invalid user ID' } } })
+    return api.get(`/user/${userId}/block-status`)
+  },
   getIdentityVerification: () => api.get('/user/identity-verification'),
   submitIdentityVerification: (formData) =>
     api.post('/user/identity-verification', formData, {

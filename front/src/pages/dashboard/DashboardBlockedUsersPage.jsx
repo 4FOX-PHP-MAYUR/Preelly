@@ -1,52 +1,90 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import { ArrowLeft, Plus, Search, User } from 'lucide-react'
+import { ArrowLeft, Loader2, Plus, Search, User } from 'lucide-react'
 import { userService } from '@shared/services/api'
-import { getMediaUrl } from '@shared/utils/helpers'
+import { getMediaUrl, formatDate } from '@shared/utils/helpers'
 import SettingsPageShell from '../../components/Dashboard/SettingsPageShell'
 import BlockFlow from '../../components/Block/BlockFlow'
 import SearchContactsToBlockModal from '../../components/Block/SearchContactsToBlockModal'
 import UnblockConfirmModal from '../../components/Block/UnblockConfirmModal'
-import { displayNameOf } from '../../components/Block/blockReasons'
+import { displayNameOf, usernameOf } from '../../components/Block/blockReasons'
+
+const PAGE_SIZE = 20
+const SEARCH_DEBOUNCE_MS = 300
 
 export default function DashboardBlockedUsersPage() {
   const [blockedUsers, setBlockedUsers] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
+  const [page, setPage] = useState(1)
   const [query, setQuery] = useState('')
+  const [debouncedQuery, setDebouncedQuery] = useState('')
   const [showSearch, setShowSearch] = useState(false)
   const [blockTarget, setBlockTarget] = useState(null)
   const [unblockTarget, setUnblockTarget] = useState(null)
 
-  const load = async () => {
-    setLoading(true)
-    try {
-      const res = await userService.getBlockedUsers()
-      setBlockedUsers(res?.data?.blockedUsers || [])
-    } catch {
-      toast.error('Failed to load blocked users')
-    } finally {
-      setLoading(false)
-    }
-  }
+  // Guards against a slow response for an old query overwriting a newer one.
+  const requestRef = useRef(0)
+  const sentinelRef = useRef(null)
 
   useEffect(() => {
-    load()
+    const timer = setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [query])
+
+  const load = useCallback(async ({ page: nextPage, q, append }) => {
+    const requestId = ++requestRef.current
+    if (append) setLoadingMore(true)
+    else setLoading(true)
+
+    try {
+      const res = await userService.getBlockedUsers({ page: nextPage, limit: PAGE_SIZE, q })
+      if (requestId !== requestRef.current) return // a newer request already won
+
+      const data = res?.data || {}
+      const items = data.items || data.blockedUsers || []
+      setBlockedUsers((prev) => (append ? [...prev, ...items] : items))
+      setHasMore(Boolean(data.hasMore))
+      setPage(nextPage)
+    } catch {
+      if (requestId === requestRef.current) toast.error('Failed to load blocked users')
+    } finally {
+      if (requestId === requestRef.current) {
+        setLoading(false)
+        setLoadingMore(false)
+      }
+    }
   }, [])
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    if (!q) return blockedUsers
-    return blockedUsers.filter((u) => {
-      const name = displayNameOf(u).toLowerCase()
-      const email = String(u.email || '').toLowerCase()
-      return name.includes(q) || email.includes(q)
-    })
-  }, [blockedUsers, query])
+  useEffect(() => {
+    load({ page: 1, q: debouncedQuery, append: false })
+  }, [debouncedQuery, load])
+
+  // Infinite scroll — same sentinel pattern used by the other dashboard lists.
+  useEffect(() => {
+    const node = sentinelRef.current
+    if (!node || !hasMore || loading || loadingMore) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          load({ page: page + 1, q: debouncedQuery, append: true })
+        }
+      },
+      { rootMargin: '200px' },
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [hasMore, loading, loadingMore, page, debouncedQuery, load])
 
   const excludeIds = useMemo(() => blockedUsers.map((u) => u._id), [blockedUsers])
 
   const openAdd = () => setShowSearch(true)
+
+  const isSearching = debouncedQuery.length > 0
+  const isEmpty = !loading && blockedUsers.length === 0
 
   return (
     <SettingsPageShell>
@@ -66,12 +104,13 @@ export default function DashboardBlockedUsersPage() {
         </div>
 
         {loading ? (
-          <div className="space-y-3">
+          <div className="space-y-3" aria-busy="true" aria-live="polite">
+            <span className="sr-only">Loading blocked accounts…</span>
             {[1, 2, 3].map((i) => (
               <div key={i} className="h-16 animate-pulse rounded-xl bg-slate-100" />
             ))}
           </div>
-        ) : blockedUsers.length === 0 ? (
+        ) : isEmpty && !isSearching ? (
           <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
             <button
               type="button"
@@ -90,6 +129,7 @@ export default function DashboardBlockedUsersPage() {
           <>
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center">
               <label className="relative block min-w-0 flex-1">
+                <span className="sr-only">Search blocked accounts</span>
                 <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="search"
@@ -109,35 +149,51 @@ export default function DashboardBlockedUsersPage() {
               </button>
             </div>
 
-            <div className="divide-y divide-slate-100">
-              {filtered.length === 0 ? (
-                <p className="py-10 text-center text-sm text-slate-400">No matches</p>
+            <ul className="divide-y divide-slate-100" aria-live="polite">
+              {blockedUsers.length === 0 ? (
+                <li className="py-10 text-center text-sm text-slate-400">No matches</li>
               ) : (
-                filtered.map((user) => {
+                blockedUsers.map((user) => {
                   const name = displayNameOf(user)
+                  const handle = usernameOf(user)
                   const avatarSrc = user.avatar ? getMediaUrl(user.avatar) || user.avatar : null
                   return (
-                    <div key={user._id} className="flex items-center gap-3 py-3.5">
+                    <li key={user._id} className="flex items-center gap-3 py-3.5">
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100">
                         {avatarSrc ? (
-                          <img src={avatarSrc} alt="" className="h-full w-full object-cover" />
+                          <img src={avatarSrc} alt="" loading="lazy" className="h-full w-full object-cover" />
                         ) : (
-                          <User className="h-5 w-5 text-slate-400" />
+                          <User className="h-5 w-5 text-slate-400" aria-hidden />
                         )}
                       </div>
-                      <p className="min-w-0 flex-1 truncate text-sm font-medium text-slate-900">{name}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-slate-900">{name}</p>
+                        {handle ? <p className="truncate text-xs text-slate-500">@{handle}</p> : null}
+                        {user.blockedAt ? (
+                          <p className="mt-0.5 text-xs text-slate-400">Blocked {formatDate(user.blockedAt)}</p>
+                        ) : null}
+                      </div>
                       <button
                         type="button"
                         onClick={() => setUnblockTarget(user)}
+                        aria-label={`Unblock ${name}`}
                         className="shrink-0 rounded-md bg-brand px-5 py-2 text-sm font-semibold text-white transition hover:bg-brand-700"
                       >
                         Unblock
                       </button>
-                    </div>
+                    </li>
                   )
                 })
               )}
-            </div>
+            </ul>
+
+            {hasMore ? (
+              <div ref={sentinelRef} className="flex justify-center py-6">
+                {loadingMore ? (
+                  <Loader2 className="h-5 w-5 animate-spin text-slate-400" aria-label="Loading more" />
+                ) : null}
+              </div>
+            ) : null}
           </>
         )}
       </div>

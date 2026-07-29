@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { useDispatch, useSelector } from 'react-redux'
 import {
-  fetchDynamicForm,
   fetchFieldFunctionOptions,
-  setActiveCategory,
   setFieldValue as setFieldValueAction,
   setComputedOptions,
   updateScope,
@@ -14,38 +12,15 @@ import { validateFieldValue } from '../../../shared/utils/dynamicFormValidation'
 import { hasFieldFunction, parseFunctionForFieldNames } from '../../../shared/utils/dynamicFormFieldFunction'
 import { hasNestedOptions, deriveFunctionTargetFieldName } from '../../../shared/utils/nestedFieldOptions'
 import { resolveFieldPrefillValue, isFieldEmpty } from '../../../shared/utils/dynamicFormAiPrefill'
-
-/**
- * FormField scoping is a 3-level category chain: categoryId -> categoryFilterId
- * (child of categoryId) -> childCategoryId (child of categoryFilterId) — both
- * `categoryFilterId` and `childCategoryId` are plain Category references (see the
- * admin Form Fields UI: "Category Filter" is hinted "Child of Category", and
- * "Child Category" is hinted "Child of Category Filter"). This is unrelated to a
- * field's `tableName`/options source (e.g. tableName "filters" just means this
- * field's own dropdown options come from the Filter collection).
- *
- * So the generic dependency rule is: any field whose options come from the
- * Category collection (tableName "categories"/"category") represents the user
- * picking a deeper category — feed that selection into whichever scope level
- * (categoryFilterId, then childCategoryId) hasn't been filled yet.
- */
-const CATEGORY_SOURCED_TABLES = new Set(['categories', 'category'])
-
-function isCategorySourcedField(field) {
-  return CATEGORY_SOURCED_TABLES.has(String(field?.tableName || '').trim().toLowerCase())
-}
-
-function firstScopeValue(value) {
-  const raw = Array.isArray(value) ? value[0] : value
-  return raw ? String(raw) : null
-}
+import { useDynamicFormLoader } from './useDynamicFormLoader'
+import { isScopePickerField, scopeValueOf } from '../../../shared/utils/dynamicFormScope'
 
 /**
  * Drives the admin-configured, category-scoped dynamic post-ad form for Step 4.
  * `categoryId` should be the deepest category the user picked in Step 2 (subcategory
  * if one was selected, else the root category).
  * `initialValues`, when provided (restoring a saved draft), is re-applied once right
- * after `setActiveCategory` — which otherwise wipes `values` back to `{}` on mount.
+ * after the category becomes active — which otherwise wipes `values` back to `{}`.
  * @param {{ categoryId: string, initialValues?: Record<string, unknown> }} params
  */
 export function useCategoryDynamicForm({ categoryId, initialValues, aiSignals = null }) {
@@ -56,23 +31,9 @@ export function useCategoryDynamicForm({ categoryId, initialValues, aiSignals = 
   const { categoryFilterId, childCategoryId, subStep, values, computedOptions, computedOptionsLoading } =
     dynamicFormState
 
-  const pendingInitialValuesRef = useRef(initialValues || null)
-
-  useEffect(() => {
-    dispatch(setActiveCategory({ categoryId: categoryId || null }))
-    if (categoryId && pendingInitialValuesRef.current) {
-      const toRestore = pendingInitialValuesRef.current
-      pendingInitialValuesRef.current = null
-      Object.entries(toRestore).forEach(([fieldName, value]) => {
-        dispatch(setFieldValueAction({ fieldName, value }))
-      })
-    }
-  }, [dispatch, categoryId])
-
-  useEffect(() => {
-    if (!categoryId) return
-    dispatch(fetchDynamicForm({ categoryId, categoryFilterId, childCategoryId }))
-  }, [dispatch, categoryId, categoryFilterId, childCategoryId])
+  // Loading the definition lives in a shared hook so the Summary step can load it
+  // too, without mounting this form (see useDynamicFormLoader).
+  useDynamicFormLoader({ categoryId, initialValues })
 
   const status = entry?.status || (categoryId ? 'loading' : 'idle')
   const steps = entry?.steps || []
@@ -108,15 +69,13 @@ export function useCategoryDynamicForm({ categoryId, initialValues, aiSignals = 
     (field, nextValue) => {
       dispatch(setFieldValueAction({ fieldName: field.fieldName, value: nextValue }))
 
-      // Self-contained cascades (nested-tree fields like "Make & Model", or any field
-      // that drives its own functionName computation) are NOT FormField-scope pickers
-      // — their tableName "categories" only sources their own options. Only a flat,
-      // single-level category field represents the user descending the FormField
-      // scope chain (categoryId -> categoryFilterId -> childCategoryId).
-      if (isCategorySourcedField(field) && !hasNestedOptions(field) && !hasFieldFunction(field)) {
-        const scopeValue = firstScopeValue(nextValue)
+      // Picking a deeper category descends the FormField scope chain
+      // (categoryId -> categoryFilterId -> childCategoryId), which pulls in fields
+      // the admin attached to that level. See isScopePickerField for why nested-tree
+      // and cascade-source fields are excluded.
+      if (isScopePickerField(field)) {
         const scopeKey = !categoryFilterId ? 'categoryFilterId' : 'childCategoryId'
-        dispatch(updateScope({ [scopeKey]: scopeValue }))
+        dispatch(updateScope({ [scopeKey]: scopeValueOf(nextValue) }))
       }
 
       // Case A: the field that just changed carries its own functionName (e.g. the

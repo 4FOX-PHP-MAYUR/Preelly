@@ -72,11 +72,14 @@ import {
 import { PostAdListingBreadcrumb } from '../components/PostAd/PostAdListingBreadcrumb'
 import DeleteConfirmModal from '../components/PostAd/DeleteConfirmModal'
 import { DynamicCategoryFormSection } from '../features/postAdCategoryForm/components/DynamicCategoryFormSection'
+import { useCategoryDynamicForm } from '../features/postAdCategoryForm/hooks/useCategoryDynamicForm'
+import { useDynamicFormLoader } from '../features/postAdCategoryForm/hooks/useDynamicFormLoader'
 import { FieldRenderer } from '../features/postAdCategoryForm/components/FieldRenderer'
 import { LocationMapPicker } from '../features/postAdCategoryForm/components/LocationMapPicker'
 import { FIELD_KIND, getFieldKind } from '@shared/utils/dynamicFormFieldKind'
 import { resolveFieldDisplayValue } from '@shared/utils/dynamicFormDisplay'
 import { loadPostAdDraft, clearPostAdDraft } from '@shared/utils/postAdDraftStore'
+import { restoreProductDynamicFormValues } from '@shared/utils/restoreProductDynamicFormValues'
 import {
   persistPostAdDraft,
   loadServerPostAdDraft,
@@ -2029,6 +2032,7 @@ function ReviewSectionCard({ title, onEdit, editing, children }) {
 
 function Step10Review({
   formData,
+  dynamicFormCategoryId,
   imageFiles,
   videoFile,
   categories,
@@ -2043,17 +2047,32 @@ function Step10Review({
   isEditMode,
   onBack,
 }) {
-  const dispatch = useDispatch()
-  const allDynamicFields = useSelector(selectDynamicFormAllFields)
-  const dynamicValues = useSelector(selectDynamicFormValues)
   const computedOptionsMap = useSelector((state) => state.dynamicForm.computedOptions)
 
-  const overviewFields = allDynamicFields.filter((f) => getFieldKind(f.fieldType) !== FIELD_KIND.CHECKBOX)
-  const featureFields = allDynamicFields.filter((f) => getFieldKind(f.fieldType) === FIELD_KIND.CHECKBOX)
+  // Same hook Basic Details uses, so editing a field here behaves identically:
+  // cascades fire (Make & Model repopulates Trim), dependent fields refetch their
+  // options, and picking a deeper category widens the FormField scope. A bare
+  // dispatch would set the value but skip all of that, leaving dependent dropdowns
+  // empty and un-editable.
+  const { setFieldValue: setDynamicField } = useCategoryDynamicForm({
+    categoryId: dynamicFormCategoryId,
+  })
+  const allDynamicFields = useSelector(selectDynamicFormAllFields)
+  const dynamicValues = useSelector(selectDynamicFormValues)
 
-  const setDynamicField = (field, next) => {
-    dispatch(setDynamicFieldValue({ fieldName: field.fieldName, value: next }))
+  // Live options win over whatever the initial fetch resolved, so a cascade target
+  // (Trim) is editable as soon as its options are computed.
+  const withLiveOptions = (field) => {
+    const computed = computedOptionsMap[field.fieldName]
+    return computed === undefined ? field : { ...field, options: computed }
   }
+
+  const overviewFields = allDynamicFields
+    .filter((f) => getFieldKind(f.fieldType) !== FIELD_KIND.CHECKBOX)
+    .map(withLiveOptions)
+  const featureFields = allDynamicFields
+    .filter((f) => getFieldKind(f.fieldType) === FIELD_KIND.CHECKBOX)
+    .map(withLiveOptions)
 
   const [editingOverview, setEditingOverview] = useState(false)
   const [editingDescription, setEditingDescription] = useState(false)
@@ -2282,12 +2301,16 @@ function Step10Review({
                 dynamicValues[field.fieldName],
                 computedOptionsMap[field.fieldName],
               )
-              if (!display || (Array.isArray(display) && !display.length)) return null
+              const isEmpty = !display || (Array.isArray(display) && !display.length)
+              // Editing an existing ad lists EVERY configured field, so nothing the
+              // seller could change is hidden just because it has no value yet.
+              // A brand-new ad's summary still shows only what was filled in.
+              if (isEmpty && !isEditMode) return null
               return (
                 <div key={field.id || field.fieldName}>
                   <p className="text-xs text-gray-500">{field.fieldTitle}</p>
-                  <p className="text-sm font-medium text-gray-900">
-                    {Array.isArray(display) ? display.join(', ') : display}
+                  <p className={`text-sm font-medium ${isEmpty ? 'text-gray-400' : 'text-gray-900'}`}>
+                    {isEmpty ? 'Not set' : Array.isArray(display) ? display.join(', ') : display}
                   </p>
                 </div>
               )
@@ -2345,9 +2368,10 @@ function Step10Review({
           <div className="divide-y divide-gray-100">
             {featureFields.map((field) => {
               const selected = Array.isArray(dynamicValues[field.fieldName]) ? dynamicValues[field.fieldName] : []
-              if (!selected.length) return null
+              // Same rule as Car Overview: every group is listed while editing.
+              if (!selected.length && !isEditMode) return null
               const isExpanded = expandedFeatureGroup === field.fieldName
-              const labels = resolveFieldDisplayValue(field, selected, computedOptionsMap[field.fieldName])
+              const labels = resolveFieldDisplayValue(field, selected, computedOptionsMap[field.fieldName]) || []
               return (
                 <div key={field.id || field.fieldName} className="py-3">
                   <div className="flex items-center justify-between">
@@ -2364,7 +2388,11 @@ function Step10Review({
                       />
                     </button>
                   </div>
-                  {isExpanded && <p className="mt-2 text-sm text-gray-600">{labels.join(', ')}</p>}
+                  {isExpanded && (
+                    <p className="mt-2 text-sm text-gray-600">
+                      {labels.length ? labels.join(', ') : 'None selected'}
+                    </p>
+                  )}
                 </div>
               )
             })}
@@ -2477,6 +2505,7 @@ function PostAdPage() {
   // (dynamicForm), not react-hook-form — pulled in here so onSubmit can send them.
   const allDynamicFieldsForSubmit = useSelector(selectDynamicFormAllFields)
   const dynamicFormSubmitValues = useSelector(selectDynamicFormValues)
+  const allDynamicFieldsForPage = useSelector(selectDynamicFormAllFields)
   
   const { register, handleSubmit, watch, setValue, getValues, trigger, control, reset, formState: { errors } } = useForm({
     mode: 'onChange', // Validate on change for better UX
@@ -2551,9 +2580,39 @@ function PostAdPage() {
   // dynamic-form values are handed down via ref and re-applied right after — see
   // useCategoryDynamicForm.
   const restoredDynamicFormValuesRef = useRef(null)
+  // The product being edited, so its saved dynamic-field values can be replayed
+  // into the slice once the form definition arrives (see the effect below).
+  const editedProductRef = useRef(null)
+  const editPrefillDoneRef = useRef(false)
   // Server productDraft id — kept in a ref so autosave / next / prev can update
   // the same record without re-rendering the wizard.
   const draftIdRef = useRef(null)
+
+  // The deepest category the seller picked — the scope the admin-configured
+  // fields are keyed on (same expression Basic Details passes down).
+  const dynamicFormCategoryId = watch('childCategory') || watch('subcategory') || selectedCategory
+  // Load the definition here rather than only inside Basic Details, so the
+  // Summary step can render (and inline-edit) those fields when an edit
+  // deep-link lands straight on it.
+  useDynamicFormLoader({ categoryId: dynamicFormCategoryId })
+
+  // Edit mode: replay the product's saved dynamic-field values into the slice
+  // once the field definitions have loaded, so Summary shows real data instead of
+  // blanks. Runs once per edited product.
+  // `loadingProduct` is in the deps so this still fires if the field definitions
+  // happen to resolve before the product finishes loading.
+  useEffect(() => {
+    if (!isEditMode) return
+    const product = editedProductRef.current
+    if (!product || editPrefillDoneRef.current) return
+    if (!allDynamicFieldsForPage.length) return
+
+    const values = restoreProductDynamicFormValues(product, allDynamicFieldsForPage)
+    editPrefillDoneRef.current = true
+    Object.entries(values).forEach(([fieldName, value]) => {
+      dispatch(setDynamicFieldValue({ fieldName, value }))
+    })
+  }, [isEditMode, allDynamicFieldsForPage, loadingProduct, dispatch])
 
   // Restore session from storage when entering post-ad (prevents false logout on Back).
   useEffect(() => {
@@ -2805,6 +2864,11 @@ function PostAdPage() {
           }
         }
         
+        // Kept for the dynamic-field prefill effect, which can only run once the
+        // admin-configured field definitions have loaded.
+        editedProductRef.current = product
+        editPrefillDoneRef.current = false
+
         // Populate form with the same fields used in post-ad
         const formValues = buildPostAdFormValuesFromProduct(product, user)
         Object.keys(formValues).forEach((key) => {
@@ -2916,7 +2980,10 @@ function PostAdPage() {
           })
         }
 
-        setCurrentStep(5)
+        // Editing opens the Summary/Review screen (internal step 6 -> ?step=5):
+        // every section is shown with its own inline Edit, same as the last step of
+        // posting a new ad.
+        setCurrentStep(6)
         window.scrollTo(0, 0)
       } catch (error) {
         console.error('Error loading product:', error)
@@ -3952,6 +4019,7 @@ function PostAdPage() {
         {currentStep === 6 && (
           <Step10Review
             formData={watch()}
+            dynamicFormCategoryId={dynamicFormCategoryId}
             imageFiles={imageFiles}
             videoFile={videoFile}
             categories={flatCategoriesForSteps.length ? flatCategoriesForSteps : categories}

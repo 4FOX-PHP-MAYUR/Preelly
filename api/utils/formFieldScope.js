@@ -40,9 +40,11 @@ function nullOrMissingField(fieldName) {
  * - With childCategoryId: fields for that child plus filter-level and category-wide defaults.
  * - With categoryFilterId: fields for that filter plus category-wide defaults (null filter).
  * - Without categoryFilterId: category-wide defaults on categoryId, plus any fields
- *   scoped to this category as a child filter (categoryFilterId = categoryId).
- *   The latter supports leaf categories (e.g. Residential) whose admin fields
- *   are stored under the parent (e.g. For Rent) with categoryFilterId set.
+ *   scoped to this category as a child filter (categoryFilterId = categoryId) or as
+ *   a child category (childCategoryId = categoryId). Those two bridges support leaf
+ *   categories whose admin fields are stored against an ancestor with the deeper
+ *   scope set — e.g. Residential under For Rent, or Huawei under
+ *   Mobile & Tablets -> Mobile Phones.
  */
 function buildActiveFormFieldsQuery(categoryId, categoryFilterId = null, childCategoryId = null) {
   const catObjId = new Types.ObjectId(String(categoryId))
@@ -107,6 +109,12 @@ function buildActiveFormFieldsQuery(categoryId, categoryFilterId = null, childCa
         ],
       },
       { categoryFilterId: catObjId },
+      // Same bridge one level deeper: a leaf whose admin fields are stored under
+      // the grandparent with the full chain set (e.g. Mobile & Tablets ->
+      // Mobile Phones -> Huawei). Requesting the leaf on its own must still find
+      // them, otherwise the seller — or anyone re-opening the ad to edit it —
+      // sees no fields at all.
+      { childCategoryId: catObjId },
     ],
   }
 }

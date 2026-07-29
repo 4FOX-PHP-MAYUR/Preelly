@@ -50,12 +50,36 @@
     @apply post-ad-step-shell max-w-[920px] px-3 sm:px-4 md:px-6;
   }
 
+  /* Video-upload step: wider column so the headline sits on one line and the
+     drop zone reads as the single focal point of the screen. */
+  .post-ad-step-shell-video {
+    @apply post-ad-step-shell max-w-[1200px] px-4 sm:px-6;
+  }
+
+  /* Breadcrumb, drop zone and tips share one narrower column, aligned with the
+     footer's progress bar. */
+  .post-ad-video-column {
+    @apply mx-auto w-full max-w-[860px];
+  }
+
   .post-ad-step-heading {
     @apply text-[22px] sm:text-[26px] md:text-[30px] font-bold text-gray-900 tracking-tight leading-tight;
   }
 
+  .post-ad-step-heading-lg {
+    @apply text-[26px] sm:text-[32px] md:text-[38px] lg:text-[42px] font-bold text-gray-900 tracking-tight leading-[1.15];
+  }
+
   .post-ad-step-subheading {
     @apply mt-2 sm:mt-3 text-sm sm:text-[15px] md:text-base text-gray-500;
+  }
+
+  /* Single large upload target — 4:3 like the design, capped so it never
+     pushes the tips and footer off short viewports. */
+  .post-ad-video-dropzone {
+    @apply flex w-full flex-col items-center justify-center rounded-2xl border-[1.5px] border-[#2563eb] bg-white px-4 py-10
+           transition hover:bg-blue-50/40
+           min-h-[280px] sm:aspect-[4/3] sm:min-h-0 sm:max-h-[56vh] sm:py-0;
   }
 
   .post-ad-form-nav {

@@ -16,9 +16,13 @@ import {
   ChevronLeft,
   ChevronRight,
   Home,
+  Layers,
+  ZoomIn,
+  Mic,
+  Timer,
+  Sun,
   UploadCloud,
   ChevronDown,
-  SwitchCamera,
   CheckCircle,
   AlertCircle,
   Upload,
@@ -290,6 +294,9 @@ const VIDEO_TIPS = [
   'Keep it under 2 minutes',
   'Use good lighting for a clear view',
 ]
+
+/** One icon per tip, in the same order as VIDEO_TIPS. */
+const VIDEO_TIP_ICONS = [Layers, ZoomIn, Mic, Timer, Sun]
 
 // Safe video src: use .url for existing (edit) video objects; createObjectURL only for File/Blob, with cleanup
 function useVideoPreviewSrc(videoFile) {
@@ -1218,808 +1225,818 @@ function Step3VideoUpload({
 
   const currentTipText = VIDEO_TIPS[tipIndex % VIDEO_TIPS.length]
 
+  const TipIcon = VIDEO_TIP_ICONS[tipIndex % VIDEO_TIP_ICONS.length] || Layers
+
   return (
-    <div className="post-ad-step-shell-narrow pb-32 sm:pb-36">
+    <div className="post-ad-step-shell-video pb-36 sm:pb-40">
       {onBack && (
-        <button
-          type="button"
-          onClick={onBack}
-          className="self-start mb-6 inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-800"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Back
-        </button>
+        <div className="post-ad-video-column">
+          <button
+            type="button"
+            onClick={onBack}
+            className="mb-4 inline-flex items-center gap-1 text-sm font-medium text-gray-400 transition hover:text-gray-700"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Back
+          </button>
+        </div>
       )}
 
-      <div className="text-center mb-5 sm:mb-6 w-full">
-        <h2 className="post-ad-step-heading">Create or upload your reel and watch the magic happen</h2>
-        <p className="post-ad-step-subheading">
+      {/* Headline spans the full shell so it reads as one line on desktop; the
+          rest of the step stays in the narrower upload column. */}
+      <div className="mb-7 w-full text-center sm:mb-9">
+        <h2 className="post-ad-step-heading-lg">Create or upload your reel and watch the magic happen</h2>
+        <p className="post-ad-step-subheading mx-auto max-w-[760px]">
           Upload your video and let AI auto-fill the details, so you can save time and get started faster.
         </p>
       </div>
 
-      <PostAdListingBreadcrumb items={[...breadcrumbItems, 'upload video']} />
+      <div className="post-ad-video-column">
+        <PostAdListingBreadcrumb items={[...breadcrumbItems, 'upload video']} />
 
-      <div className="space-y-5 sm:space-y-6 w-full">
-        {/* <div style={{ display: 'none' }}>
-          <label className="block text-sm font-medium text-gray-800 mb-2">
-            Title
-          </label>
-          <div className="relative">
-            <input
-              type="text"
-              {...register('title')}
-              className={`${POST_AD_INPUT} pr-11`}
-              placeholder="Enter product title"
-            />
-            <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
-          </div>
-          {errors?.title && <p className="mt-1.5 text-sm text-red-600">{errors.title.message}</p>}
-        </div> */}
-
-        {/* <div style={{ display: 'none' }}>
-          <label className="block text-sm font-medium text-gray-800 mb-2">
-            Description
-          </label>
-          <textarea
-            {...register('description')}
-            rows={6}
-            className={`${POST_AD_INPUT} resize-none min-h-[150px]`}
-            placeholder="Enter product description"
-          />
-          {errors?.description && (
-            <p className="mt-1.5 text-sm text-red-600">{errors.description.message}</p>
-          )}
-        </div> */}
-
-        {!videoFile ? (
-          <div className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:gap-4">
-            <label className="flex min-h-[200px] w-full flex-1 cursor-pointer flex-col items-center justify-center rounded-3xl border border-[#2563eb] bg-white px-3 py-8 transition hover:bg-blue-50/40 sm:min-h-[260px] sm:py-10 md:min-h-[280px]">
-              <UploadCloud className="mb-4 h-10 w-10 text-[#2563eb] sm:mb-5 sm:h-14 sm:w-14" strokeWidth={1.5} />
-              <span className="text-base font-semibold text-gray-900 sm:text-lg">Upload Video</span>
-              <span className="mt-1.5 text-xs text-gray-500 sm:text-sm">Max video duration 2 mins</span>
-              <input
-                type="file"
-                className="hidden"
-                accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,.mp4,.mov,.avi,.mkv,.webm"
-                onChange={handleVideoUpload}
-                disabled={isProcessing}
-              />
+        <div className="space-y-5 sm:space-y-6 w-full">
+          {/* <div style={{ display: 'none' }}>
+            <label className="block text-sm font-medium text-gray-800 mb-2">
+              Title
             </label>
-            <span className="shrink-0 text-center text-sm font-medium text-gray-400 sm:text-left">Or</span>
-            <button
-              type="button"
-              onClick={() => captureVideoInputRef.current?.click()}
-              disabled={isProcessing}
-              className="flex min-h-[200px] w-full flex-1 flex-col items-center justify-center rounded-3xl border border-[#2563eb] bg-white px-3 py-8 transition hover:bg-blue-50/40 disabled:opacity-50 sm:min-h-[260px] sm:py-10 md:min-h-[280px]"
-            >
-              <Camera className="mb-4 h-10 w-10 text-[#2563eb] sm:mb-5 sm:h-14 sm:w-14" strokeWidth={1.5} />
-              <span className="text-base font-semibold text-gray-900 sm:text-lg">Capture Video</span>
-              <span className="mt-1.5 text-xs text-gray-500 sm:text-sm">Max video duration 2 mins</span>
-            </button>
-            <input
-              ref={captureVideoInputRef}
-              type="file"
-              className="hidden"
-              accept="video/*"
-              capture="environment"
-              onChange={handleVideoUpload}
-            />
-          </div>
-        ) : (
-          <div className="relative overflow-hidden rounded-2xl border border-[#2563eb] bg-black">
-            <video
-              ref={videoRef}
-              src={videoPreviewSrc}
-              className="max-h-[200px] w-full object-contain sm:max-h-[220px] md:max-h-[280px]"
-              controls
-            />
-            <button
-              type="button"
-              onClick={removeVideo}
-              className="absolute right-2 top-2 rounded-full bg-red-500 p-2 text-white hover:bg-red-600"
-              aria-label="Remove video"
-            >
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-
-        <div className="pt-1">
-          <p className="mb-4 text-sm text-gray-500">Tips for a great video</p>
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#eef0f6]">
-              <SwitchCamera className="h-6 w-6 text-[#2563eb]" strokeWidth={1.75} />
-            </div>
-            <p className="text-[15px] leading-snug text-gray-800">{currentTipText}</p>
-          </div>
-          <div className="mt-5 flex justify-center gap-2">
-            {VIDEO_TIPS.map((_, i) => (
-              <button
-                key={i}
-                type="button"
-                aria-label={`Tip ${i + 1}`}
-                aria-current={i === tipIndex ? 'true' : undefined}
-                onClick={() => setTipIndex(i)}
-                className={`rounded-full transition-all ${
-                  i === tipIndex ? 'h-2 w-2 bg-[#2563eb]' : 'h-2 w-2 bg-gray-300 hover:bg-gray-400'
-                }`}
+            <div className="relative">
+              <input
+                type="text"
+                {...register('title')}
+                className={`${POST_AD_INPUT} pr-11`}
+                placeholder="Enter product title"
               />
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {videoFile && (
-        <details className="mt-8 w-full group">
-          <summary className="cursor-pointer list-none text-sm font-medium text-[#2563eb] hover:underline [&::-webkit-details-marker]:hidden">
-            Screenshots, photos &amp; auto-fill tools
-          </summary>
-          <div className="mt-4 space-y-4">
-          {/* Manual Screenshot Capture */}
-          <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-purple-900">
-                  📸 Capture Screenshots
-                </p>
-                <p className="text-xs text-purple-700 mt-1">
-                  Play the video and click the button to capture a screenshot at the current time
-                </p>
+              <ChevronDown className="pointer-events-none absolute right-4 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400" />
             </div>
-              <button
-                type="button"
-                onClick={captureScreenshot}
-                disabled={isCapturingScreenshot}
-                className="btn-primary flex w-full sm:w-auto shrink-0 items-center justify-center gap-2 px-4 py-2"
-              >
-                {isCapturingScreenshot ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Capturing...
-                  </>
-                ) : (
-                  <>
-                    <Camera className="h-4 w-4" />
-                    Capture Screenshot
-                  </>
-                )}
-              </button>
-        </div>
+            {errors?.title && <p className="mt-1.5 text-sm text-red-600">{errors.title.message}</p>}
+          </div> */}
 
-            {screenshots.length > 0 && (
-              <div className="mt-4">
-                <p className="text-xs text-purple-800 mb-2">
-                  Captured Screenshots ({screenshots.length})
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {screenshots.map((screenshot) => (
-                    <div
-                      key={screenshot.id}
-                      className="relative border-2 border-purple-300 rounded-lg overflow-hidden bg-gray-100"
-                    >
-                      <img
-                        src={screenshot.url}
-                        alt={`Screenshot at ${Math.floor(screenshot.timestamp)}s`}
-                        className="w-full h-auto object-contain"
-                      />
-                <button
-                  type="button"
-                        onClick={() => removeScreenshot(screenshot.id)}
-                  className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-                      <div className="absolute bottom-1 left-1 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
-                        {Math.floor(screenshot.timestamp)}s
-                      </div>
-              </div>
-            ))}
-                </div>
-              </div>
+          {/* <div style={{ display: 'none' }}>
+            <label className="block text-sm font-medium text-gray-800 mb-2">
+              Description
+            </label>
+            <textarea
+              {...register('description')}
+              rows={6}
+              className={`${POST_AD_INPUT} resize-none min-h-[150px]`}
+              placeholder="Enter product description"
+            />
+            {errors?.description && (
+              <p className="mt-1.5 text-sm text-red-600">{errors.description.message}</p>
             )}
-          </div>
+          </div> */}
 
-          {(isProcessing || uploadStage !== 'idle') && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
-              {[
-                { key: 'uploading', label: 'Uploading Video...', done: ['uploaded', 'transcribing', 'ready'].includes(uploadStage) },
-                { key: 'uploaded', label: 'Video Uploaded', done: ['uploaded', 'transcribing', 'ready'].includes(uploadStage) && uploadStage !== 'uploading' },
-                { key: 'transcribing', label: 'Processing Video...', active: uploadStage === 'transcribing', done: uploadStage === 'ready' },
-                { key: 'ready', label: 'Video Ready', done: uploadStage === 'ready' && !isProcessing },
-              ].map(({ key, label, active, done }) => {
-                const isActive = active || (key === 'uploading' && uploadStage === 'uploading') || (key === 'transcribing' && isProcessing)
-                const isDone = done || (key === 'uploaded' && uploadStage !== 'uploading' && uploadStage !== 'idle')
-                if (key === 'uploaded' && uploadStage === 'uploading') return null
-                if (key === 'ready' && uploadStage !== 'ready') return null
-                return (
-                  <div
-                    key={key}
-                    className={`flex items-center gap-3 text-sm ${
-                      isDone ? 'text-green-700' : isActive ? 'text-blue-900 font-medium' : 'text-gray-400'
-                    }`}
-                  >
-                    {isActive && !isDone ? (
-                      <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
-                    ) : isDone ? (
-                      <CheckCircle className="h-4 w-4 flex-shrink-0" />
-                    ) : (
-                      <div className="h-4 w-4 rounded-full border border-gray-300 flex-shrink-0" />
-                    )}
-                    <span>{label}</span>
-                    {key === 'transcribing' && isActive && (
-                      <span className="text-xs text-blue-700 font-normal">Transcribing and extracting information</span>
-                    )}
-                  </div>
-                )
-              })}
-              <p className="text-xs text-blue-600 pt-1">
-                HLS streaming files are generated in the background after you publish your listing.
-              </p>
-            </div>
-          )}
-
-          {transcript && !isProcessing && uploadStage === 'ready' && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-              <p className="text-sm font-medium text-green-900 mb-2">✓ Video transcribed successfully!</p>
-              {extractedData && (
-                <p className="text-xs text-green-800 mb-3">
-                  Form fields have been auto-filled. Please review and continue.
-                </p>
-              )}
-              <details className="mt-2">
-                <summary className="text-xs text-green-700 cursor-pointer hover:text-green-900">
-                  View transcript
-                </summary>
-                <p className="text-xs text-green-800 mt-2 p-2 bg-green-100 rounded">
-                  {transcript}
-                </p>
-              </details>
-            </div>
-          )}
-
-
-          {extractedData && !isProcessing && (
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-              <p className="text-sm font-medium text-gray-900 mb-2">Extracted Information:</p>
-              <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
-                {extractedData.title && (
-                  <div><span className="font-medium">Title:</span> {extractedData.title}</div>
-                )}
-                {extractedData.price && (
-                  <div>
-                    <span className="font-medium">Price:</span> {extractedData.currency || MARKETPLACE_CURRENCY}{' '}
-                    {extractedData.price}
-                  </div>
-                )}
-                {extractedData.currency && (
-                  <div><span className="font-medium">Currency:</span> {extractedData.currency}</div>
-                )}
-                {extractedData.condition && (
-                  <div><span className="font-medium">Condition:</span> {extractedData.condition}</div>
-                )}
-                {extractedData.brand && (
-                  <div><span className="font-medium">Brand:</span> {extractedData.brand}</div>
-                )}
-                {extractedData.color && (
-                  <div><span className="font-medium">Color:</span> {extractedData.color}</div>
-                )}
-                {extractedData.material && (
-                  <div><span className="font-medium">Material:</span> {extractedData.material}</div>
-                )}
-                {extractedData.model && (
-                  <div><span className="font-medium">Model:</span> {extractedData.model}</div>
-                )}
-                {extractedData.year && (
-                  <div><span className="font-medium">Year:</span> {extractedData.year}</div>
-                )}
-                {extractedData.mileage && (
-                  <div>
-                    <span className="font-medium">Kilometers:</span>{' '}
-                    {typeof extractedData.mileage === 'number'
-                      ? `${extractedData.mileage.toLocaleString()} km`
-                      : `${extractedData.mileage} km`}
-                  </div>
-                )}
-                {extractedData.storageCapacity && (
-                  <div><span className="font-medium">Storage:</span> {extractedData.storageCapacity}</div>
-                )}
-                {extractedData.size && (
-                  <div><span className="font-medium">Size:</span> {extractedData.size}</div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {aiListingExtraction?.enrichment && !isProcessing && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-sm font-semibold text-blue-900 mb-1">
-                    Vehicle profile enriched by AI
-                  </p>
-                  <p className="text-xs text-blue-800">
-                    Source: {aiListingExtraction.enrichment.source || 'unknown'}
-                    {typeof aiListingExtraction.enrichment.confidence === 'number'
-                      ? ` · Confidence: ${aiListingExtraction.enrichment.confidence}%`
-                      : ''}
-                  </p>
-                </div>
-              </div>
-
-              {aiListingExtraction.enrichment.profile?.variant && (
-                <p className="text-sm text-blue-900">
-                  <span className="font-medium">Identified variant:</span>{' '}
-                  {aiListingExtraction.enrichment.profile.variant}
-                  {aiListingExtraction.enrichment.profile.generation
-                    ? ` (${aiListingExtraction.enrichment.profile.generation})`
-                    : ''}
-                </p>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                {(aiListingExtraction.enrichment.transcription_fields || []).length > 0 && (
-                  <div className="bg-white rounded-md border border-green-200 p-2">
-                    <p className="font-semibold text-green-800 mb-1">From transcription</p>
-                    <p className="text-green-900">
-                      {aiListingExtraction.enrichment.transcription_fields.join(', ')}
-                    </p>
-                  </div>
-                )}
-                {(aiListingExtraction.enrichment.enriched_fields || []).length > 0 && (
-                  <div className="bg-white rounded-md border border-blue-200 p-2">
-                    <p className="font-semibold text-blue-800 mb-1">AI enriched</p>
-                    <p className="text-blue-900">
-                      {aiListingExtraction.enrichment.enriched_fields.join(', ')}
-                    </p>
-                  </div>
-                )}
-                {(aiListingExtraction.enrichment.not_found_fields || []).length > 0 && (
-                  <div className="bg-white rounded-md border border-gray-200 p-2">
-                    <p className="font-semibold text-gray-700 mb-1">Not found</p>
-                    <p className="text-gray-600">
-                      {aiListingExtraction.enrichment.not_found_fields.slice(0, 12).join(', ')}
-                      {aiListingExtraction.enrichment.not_found_fields.length > 12 ? '…' : ''}
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {Array.isArray(aiListingExtraction.enrichment.profile?.features) &&
-                aiListingExtraction.enrichment.profile.features.length > 0 && (
-                  <div className="text-xs text-blue-900">
-                    <span className="font-semibold">Detected features:</span>{' '}
-                    {aiListingExtraction.enrichment.profile.features.join(', ')}
-                  </div>
-                )}
-
-              {aiListingExtraction.enrichment.vehicleSpecifications && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-blue-900">
-                  {aiListingExtraction.enrichment.vehicleSpecifications.engineCapacity && (
-                    <div><span className="font-medium">Engine:</span> {aiListingExtraction.enrichment.vehicleSpecifications.engineCapacity}</div>
-                  )}
-                  {aiListingExtraction.enrichment.vehicleSpecifications.fuelType && (
-                    <div><span className="font-medium">Fuel:</span> {aiListingExtraction.enrichment.vehicleSpecifications.fuelType}</div>
-                  )}
-                  {aiListingExtraction.enrichment.vehicleSpecifications.transmission && (
-                    <div><span className="font-medium">Transmission:</span> {aiListingExtraction.enrichment.vehicleSpecifications.transmission}</div>
-                  )}
-                  {aiListingExtraction.enrichment.vehicleSpecifications.driveType && (
-                    <div><span className="font-medium">Drive:</span> {aiListingExtraction.enrichment.vehicleSpecifications.driveType}</div>
-                  )}
-                  {aiListingExtraction.enrichment.vehicleSpecifications.horsepower && (
-                    <div><span className="font-medium">Power:</span> {aiListingExtraction.enrichment.vehicleSpecifications.horsepower}</div>
-                  )}
-                  {aiListingExtraction.enrichment.vehicleSpecifications.seatingCapacity && (
-                    <div><span className="font-medium">Seats:</span> {aiListingExtraction.enrichment.vehicleSpecifications.seatingCapacity}</div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
-
-          {(aiListingMissingFields || []).filter((fieldKey) =>
-            ['brand', 'condition', 'price', 'currency', 'location_city'].includes(fieldKey)
-          ).length > 0 && !isProcessing && (
-            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
-              <div className="flex items-start justify-between gap-3 mb-3">
-                <div>
-                  <p className="text-sm font-semibold text-yellow-900 mb-1">
-                    AI needs a few details to complete your car listing
-                  </p>
-                  <p className="text-xs text-yellow-800">
-                    Fill the missing fields below. Low-confidence values are highlighted so you can confirm.
-                  </p>
-                </div>
-              </div>
-
-              {(() => {
-                const REQUIRED_FIELDS = [
-                  // Only show fields that are actually required by the existing UI steps.
-                  // This keeps AI auto-fill "hands-off" for car posting.
-                  'brand', // maps to `make`/`brand`
-                  'condition',
-                  'price',
-                  'currency',
-                  'location_city', // maps to `city`
-                ]
-                const missing = new Set(aiListingMissingFields || [])
-                const low = REQUIRED_FIELDS.filter((k) => {
-                  if (missing.has(k)) return false
-                  const c = aiListingConfidence?.[k]
-                  return typeof c === 'number' && c < 0.7
-                })
-                if (!low.length) return null
-                return (
-                  <div className="bg-yellow-100 border border-yellow-200 rounded-lg p-3 mb-4">
-                    <p className="text-sm font-medium text-yellow-900 mb-1">AI low-confidence fields (please review):</p>
-                    <div className="text-xs text-yellow-800">
-                      {low.map((k) => `${k} (${Math.round((aiListingConfidence?.[k] || 0) * 100)}%)`).join(', ')}
-                    </div>
-                  </div>
-                )
-              })()}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {aiListingMissingFields
-                  .filter((fieldKey) =>
-                    [
-                      'brand',
-                      'condition',
-                      'price',
-                      'currency',
-                      'location_city',
-                    ].includes(fieldKey)
-                  )
-                  .map((fieldKey) => {
-                  const conf = aiListingConfidence?.[fieldKey]
-                  const isLow = typeof conf === 'number' && conf < 0.7
-                  const ringClass = isLow ? 'ring-2 ring-yellow-400' : ''
-
-                  switch (fieldKey) {
-                    case 'brand':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Brand {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <input
-                            type="text"
-                            {...register('brand')}
-                            className={`input-field ${ringClass}`}
-                            placeholder="e.g., Toyota"
-                          />
-                        </div>
-                      )
-                    case 'model':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Model {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <input
-                            type="text"
-                            {...register('model')}
-                            className={`input-field ${ringClass}`}
-                            placeholder="e.g., Corolla"
-                          />
-                        </div>
-                      )
-                    case 'year':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Year {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <input
-                            type="number"
-                            {...register('year')}
-                            className={`input-field ${ringClass}`}
-                            placeholder="e.g., 2020"
-                            min={1900}
-                            max={new Date().getFullYear() + 1}
-                          />
-                        </div>
-                      )
-                    case 'price':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Price {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <input
-                            type="number"
-                            {...register('price')}
-                            className={`input-field ${ringClass}`}
-                            placeholder="e.g., 25000"
-                            min={0}
-                            step={0.01}
-                          />
-                        </div>
-                      )
-                    case 'currency':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Currency {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <select
-                            {...register('currency')}
-                            className={`input-field ${ringClass}`}
-                            defaultValue={watch('currency') || MARKETPLACE_CURRENCY}
-                          >
-                            <option value={MARKETPLACE_CURRENCY}>{MARKETPLACE_CURRENCY}</option>
-                          </select>
-                        </div>
-                      )
-                    case 'location_city':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            City {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <input
-                            type="text"
-                            {...register('city')}
-                            className={`input-field ${ringClass}`}
-                            placeholder="e.g., Dubai"
-                          />
-                        </div>
-                      )
-                    case 'mileage_km':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Mileage (km) {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <input
-                            type="number"
-                            {...register('mileage')}
-                            className={`input-field ${ringClass}`}
-                            placeholder="e.g., 50000"
-                            min={0}
-                          />
-                        </div>
-                      )
-                    case 'engine_cc':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Engine (cc) {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <input
-                            type="number"
-                            value={aiListingUserOverrides?.engine_cc ?? ''}
-                            onChange={(e) => {
-                              const n = e.target.value === '' ? null : Number(e.target.value)
-                              setAiListingUserOverrides((prev) => ({ ...prev, engine_cc: n }))
-                              if (n !== null && Number.isFinite(n) && !Number.isNaN(n)) {
-                                setValue('engineSize', `${n}cc`, { shouldDirty: true, shouldTouch: true })
-                              }
-                            }}
-                            className={`input-field ${ringClass}`}
-                            placeholder="e.g., 2000"
-                            min={1}
-                          />
-                        </div>
-                      )
-                    case 'horsepower':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Horsepower {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <input
-                            type="number"
-                            value={aiListingUserOverrides?.horsepower ?? ''}
-                            onChange={(e) => {
-                              const n = e.target.value === '' ? null : Number(e.target.value)
-                              setAiListingUserOverrides((prev) => ({ ...prev, horsepower: n }))
-                            }}
-                            className={`input-field ${ringClass}`}
-                            placeholder="e.g., 150"
-                            min={1}
-                          />
-                        </div>
-                      )
-                    case 'transmission':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Transmission {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <select
-                            {...register('transmission')}
-                            className={`input-field ${ringClass}`}
-                            defaultValue={watch('transmission') || ''}
-                          >
-                            <option value="">Select transmission</option>
-                            {['Manual', 'Automatic', 'CVT', 'Semi-Automatic'].map((opt) => (
-                              <option key={opt} value={opt}>
-                                {opt}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )
-                    case 'fuel_type':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Fuel Type {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <select
-                            {...register('fuelType')}
-                            className={`input-field ${ringClass}`}
-                            defaultValue={watch('fuelType') || ''}
-                          >
-                            <option value="">Select fuel type</option>
-                            {['Petrol', 'Diesel', 'Hybrid', 'Electric', 'CNG', 'LPG', 'Other'].map((opt) => (
-                              <option key={opt} value={opt}>
-                                {opt}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )
-                    case 'body_type':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Body Type {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <select
-                            {...register('bodyType')}
-                            className={`input-field ${ringClass}`}
-                            defaultValue={watch('bodyType') || ''}
-                          >
-                            <option value="">Select body type</option>
-                            {['Sedan', 'SUV', 'Hatchback', 'Coupe', 'Convertible', 'Wagon', 'Pickup'].map((opt) => (
-                              <option key={opt} value={opt}>
-                                {opt}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )
-                    case 'condition':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Condition {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <select
-                            {...register('condition')}
-                            className={`input-field ${ringClass}`}
-                            defaultValue={watch('condition') || ''}
-                          >
-                            <option value="">Select condition</option>
-                            {CONDITION_OPTIONS.map((opt) => (
-                              <option key={opt} value={opt}>
-                                {opt}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )
-                    case 'accident_free':
-                      return (
-                        <div key={fieldKey}>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            Accident Free {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
-                          </label>
-                          <select
-                            value={
-                              aiListingUserOverrides?.accident_free === null ||
-                              aiListingUserOverrides?.accident_free === undefined
-                                ? ''
-                                : aiListingUserOverrides.accident_free
-                                ? 'yes'
-                                : 'no'
-                            }
-                            onChange={(e) => {
-                              const v = e.target.value
-                              if (v === 'yes') setAiListingUserOverrides((prev) => ({ ...prev, accident_free: true }))
-                              else if (v === 'no') setAiListingUserOverrides((prev) => ({ ...prev, accident_free: false }))
-                              else setAiListingUserOverrides((prev) => ({ ...prev, accident_free: null }))
-                            }}
-                            className={`input-field ${ringClass}`}
-                          >
-                            <option value="">Select</option>
-                            <option value="yes">Yes (no accidents)</option>
-                            <option value="no">No (has accident history)</option>
-                          </select>
-                        </div>
-                      )
-                    default:
-                      return null
-                  }
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Image Upload Section */}
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="text-sm font-medium text-blue-900">
-                  📷 Upload Images
-                </p>
-                <p className="text-xs text-blue-700 mt-1">
-                  Upload additional images of your product (at least 1 image required)
-                </p>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {imageFiles.filter(file => !file.isScreenshot).map((file, index) => {
-                  // Find the actual index in imageFiles array
-                  const actualIndex = imageFiles.findIndex(f => f === file)
-                  return (
-                    <div key={actualIndex} className="relative aspect-square">
-                      <ImagePreviewImg
-                        file={file}
-                        alt={`Preview ${actualIndex + 1}`}
-                        className="w-full h-full object-cover rounded-lg"
-                      />
-                <button
-                  type="button"
-                        onClick={() => removeImage(actualIndex)}
-                  className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
-                >
-                  <X className="h-3 w-3" />
-                </button>
-                      {file?.isExisting && (
-                        <span className="absolute bottom-1 left-1 bg-blue-500 text-white text-xs px-2 py-1 rounded">
-                          Existing
-                        </span>
-                      )}
-              </div>
-                  )
-                })}
-                {imageFiles.filter(file => !file.isScreenshot).length < 20 && (
-                  <label className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary-500">
-                    <Upload className="h-8 w-8 text-gray-400 mb-2" />
-                    <span className="text-xs text-gray-500">Add Photo</span>
+          {!videoFile ? (
+            <div className="w-full">
+              <label className="post-ad-video-dropzone group cursor-pointer">
+                <UploadCloud
+                  className="h-12 w-12 text-[#2563eb] transition-transform group-hover:scale-105 sm:h-14 sm:w-14"
+                  strokeWidth={1.5}
+                />
+                <span className="mt-6 text-lg font-semibold text-gray-900 sm:text-xl">Upload Video</span>
+                <span className="mt-2 text-sm text-gray-500 sm:text-[15px]">Max video duration 2 mins</span>
                 <input
                   type="file"
                   className="hidden"
-                      accept="image/jpeg,image/png,image/jpg"
-                  multiple
-                  onChange={handleImageUpload}
+                  accept="video/mp4,video/quicktime,video/x-msvideo,video/x-matroska,video/webm,.mp4,.mov,.avi,.mkv,.webm"
+                  onChange={handleVideoUpload}
+                  disabled={isProcessing}
                 />
               </label>
-            )}
+              {/* Camera capture kept as a secondary action (primary path on mobile). */}
+              <div className="mt-4 text-center">
+                <button
+                  type="button"
+                  onClick={() => captureVideoInputRef.current?.click()}
+                  disabled={isProcessing}
+                  className="inline-flex items-center gap-2 text-sm font-medium text-[#2563eb] transition hover:text-[#1d4ed8] disabled:opacity-50"
+                >
+                  <Camera className="h-4 w-4" strokeWidth={1.75} />
+                  Or capture with your camera
+                </button>
+                <input
+                  ref={captureVideoInputRef}
+                  type="file"
+                  className="hidden"
+                  accept="video/*"
+                  capture="environment"
+                  onChange={handleVideoUpload}
+                />
               </div>
-              <p className="text-xs text-blue-800 mt-2">
-                {imageFiles.filter(file => !file.isScreenshot).length} / 20 images uploaded
-              </p>
+            </div>
+          ) : (
+            <div className="relative overflow-hidden rounded-2xl border border-[#2563eb] bg-black">
+              <video
+                ref={videoRef}
+                src={videoPreviewSrc}
+                className="max-h-[320px] w-full object-contain sm:max-h-[420px] md:max-h-[520px]"
+                controls
+              />
+              <button
+                type="button"
+                onClick={removeVideo}
+                className="absolute right-2 top-2 rounded-full bg-red-500 p-2 text-white hover:bg-red-600"
+                aria-label="Remove video"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+          )}
+
+          <div className="pt-2 text-center">
+            <p className="text-sm font-semibold text-[#1e3a5f]">Tips for a great video</p>
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <TipIcon className="h-6 w-6 shrink-0 text-[#2563eb]" strokeWidth={1.75} />
+              <p className="text-[15px] leading-snug text-[#334155]">{currentTipText}</p>
+            </div>
+            <div className="mt-5 flex justify-center gap-2">
+              {VIDEO_TIPS.map((_, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  aria-label={`Tip ${i + 1}`}
+                  aria-current={i === tipIndex ? 'true' : undefined}
+                  onClick={() => setTipIndex(i)}
+                  className={`h-1.5 w-1.5 rounded-full transition-all ${
+                    i === tipIndex ? 'bg-[#2563eb]' : 'bg-gray-300 hover:bg-gray-400'
+                  }`}
+                />
+              ))}
+            </div>
           </div>
         </div>
+
+        {videoFile && (
+          <details className="mt-8 w-full group">
+            <summary className="cursor-pointer list-none text-sm font-medium text-[#2563eb] hover:underline [&::-webkit-details-marker]:hidden">
+              Screenshots, photos &amp; auto-fill tools
+            </summary>
+            <div className="mt-4 space-y-4">
+            {/* Manual Screenshot Capture */}
+            <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-purple-900">
+                    📸 Capture Screenshots
+                  </p>
+                  <p className="text-xs text-purple-700 mt-1">
+                    Play the video and click the button to capture a screenshot at the current time
+                  </p>
+              </div>
+                <button
+                  type="button"
+                  onClick={captureScreenshot}
+                  disabled={isCapturingScreenshot}
+                  className="btn-primary flex w-full sm:w-auto shrink-0 items-center justify-center gap-2 px-4 py-2"
+                >
+                  {isCapturingScreenshot ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Capturing...
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="h-4 w-4" />
+                      Capture Screenshot
+                    </>
+                  )}
+                </button>
           </div>
-        </details>
-      )}
+
+              {screenshots.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs text-purple-800 mb-2">
+                    Captured Screenshots ({screenshots.length})
+                  </p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {screenshots.map((screenshot) => (
+                      <div
+                        key={screenshot.id}
+                        className="relative border-2 border-purple-300 rounded-lg overflow-hidden bg-gray-100"
+                      >
+                        <img
+                          src={screenshot.url}
+                          alt={`Screenshot at ${Math.floor(screenshot.timestamp)}s`}
+                          className="w-full h-auto object-contain"
+                        />
+                  <button
+                    type="button"
+                          onClick={() => removeScreenshot(screenshot.id)}
+                    className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                        <div className="absolute bottom-1 left-1 bg-black bg-opacity-50 text-white text-xs px-2 py-1 rounded">
+                          {Math.floor(screenshot.timestamp)}s
+                        </div>
+                </div>
+              ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {(isProcessing || uploadStage !== 'idle') && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+                {[
+                  { key: 'uploading', label: 'Uploading Video...', done: ['uploaded', 'transcribing', 'ready'].includes(uploadStage) },
+                  { key: 'uploaded', label: 'Video Uploaded', done: ['uploaded', 'transcribing', 'ready'].includes(uploadStage) && uploadStage !== 'uploading' },
+                  { key: 'transcribing', label: 'Processing Video...', active: uploadStage === 'transcribing', done: uploadStage === 'ready' },
+                  { key: 'ready', label: 'Video Ready', done: uploadStage === 'ready' && !isProcessing },
+                ].map(({ key, label, active, done }) => {
+                  const isActive = active || (key === 'uploading' && uploadStage === 'uploading') || (key === 'transcribing' && isProcessing)
+                  const isDone = done || (key === 'uploaded' && uploadStage !== 'uploading' && uploadStage !== 'idle')
+                  if (key === 'uploaded' && uploadStage === 'uploading') return null
+                  if (key === 'ready' && uploadStage !== 'ready') return null
+                  return (
+                    <div
+                      key={key}
+                      className={`flex items-center gap-3 text-sm ${
+                        isDone ? 'text-green-700' : isActive ? 'text-blue-900 font-medium' : 'text-gray-400'
+                      }`}
+                    >
+                      {isActive && !isDone ? (
+                        <Loader2 className="h-4 w-4 animate-spin flex-shrink-0" />
+                      ) : isDone ? (
+                        <CheckCircle className="h-4 w-4 flex-shrink-0" />
+                      ) : (
+                        <div className="h-4 w-4 rounded-full border border-gray-300 flex-shrink-0" />
+                      )}
+                      <span>{label}</span>
+                      {key === 'transcribing' && isActive && (
+                        <span className="text-xs text-blue-700 font-normal">Transcribing and extracting information</span>
+                      )}
+                    </div>
+                  )
+                })}
+                <p className="text-xs text-blue-600 pt-1">
+                  HLS streaming files are generated in the background after you publish your listing.
+                </p>
+              </div>
+            )}
+
+            {transcript && !isProcessing && uploadStage === 'ready' && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                <p className="text-sm font-medium text-green-900 mb-2">✓ Video transcribed successfully!</p>
+                {extractedData && (
+                  <p className="text-xs text-green-800 mb-3">
+                    Form fields have been auto-filled. Please review and continue.
+                  </p>
+                )}
+                <details className="mt-2">
+                  <summary className="text-xs text-green-700 cursor-pointer hover:text-green-900">
+                    View transcript
+                  </summary>
+                  <p className="text-xs text-green-800 mt-2 p-2 bg-green-100 rounded">
+                    {transcript}
+                  </p>
+                </details>
+              </div>
+            )}
+
+
+            {extractedData && !isProcessing && (
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+                <p className="text-sm font-medium text-gray-900 mb-2">Extracted Information:</p>
+                <div className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2">
+                  {extractedData.title && (
+                    <div><span className="font-medium">Title:</span> {extractedData.title}</div>
+                  )}
+                  {extractedData.price && (
+                    <div>
+                      <span className="font-medium">Price:</span> {extractedData.currency || MARKETPLACE_CURRENCY}{' '}
+                      {extractedData.price}
+                    </div>
+                  )}
+                  {extractedData.currency && (
+                    <div><span className="font-medium">Currency:</span> {extractedData.currency}</div>
+                  )}
+                  {extractedData.condition && (
+                    <div><span className="font-medium">Condition:</span> {extractedData.condition}</div>
+                  )}
+                  {extractedData.brand && (
+                    <div><span className="font-medium">Brand:</span> {extractedData.brand}</div>
+                  )}
+                  {extractedData.color && (
+                    <div><span className="font-medium">Color:</span> {extractedData.color}</div>
+                  )}
+                  {extractedData.material && (
+                    <div><span className="font-medium">Material:</span> {extractedData.material}</div>
+                  )}
+                  {extractedData.model && (
+                    <div><span className="font-medium">Model:</span> {extractedData.model}</div>
+                  )}
+                  {extractedData.year && (
+                    <div><span className="font-medium">Year:</span> {extractedData.year}</div>
+                  )}
+                  {extractedData.mileage && (
+                    <div>
+                      <span className="font-medium">Kilometers:</span>{' '}
+                      {typeof extractedData.mileage === 'number'
+                        ? `${extractedData.mileage.toLocaleString()} km`
+                        : `${extractedData.mileage} km`}
+                    </div>
+                  )}
+                  {extractedData.storageCapacity && (
+                    <div><span className="font-medium">Storage:</span> {extractedData.storageCapacity}</div>
+                  )}
+                  {extractedData.size && (
+                    <div><span className="font-medium">Size:</span> {extractedData.size}</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {aiListingExtraction?.enrichment && !isProcessing && (
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-blue-900 mb-1">
+                      Vehicle profile enriched by AI
+                    </p>
+                    <p className="text-xs text-blue-800">
+                      Source: {aiListingExtraction.enrichment.source || 'unknown'}
+                      {typeof aiListingExtraction.enrichment.confidence === 'number'
+                        ? ` · Confidence: ${aiListingExtraction.enrichment.confidence}%`
+                        : ''}
+                    </p>
+                  </div>
+                </div>
+
+                {aiListingExtraction.enrichment.profile?.variant && (
+                  <p className="text-sm text-blue-900">
+                    <span className="font-medium">Identified variant:</span>{' '}
+                    {aiListingExtraction.enrichment.profile.variant}
+                    {aiListingExtraction.enrichment.profile.generation
+                      ? ` (${aiListingExtraction.enrichment.profile.generation})`
+                      : ''}
+                  </p>
+                )}
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  {(aiListingExtraction.enrichment.transcription_fields || []).length > 0 && (
+                    <div className="bg-white rounded-md border border-green-200 p-2">
+                      <p className="font-semibold text-green-800 mb-1">From transcription</p>
+                      <p className="text-green-900">
+                        {aiListingExtraction.enrichment.transcription_fields.join(', ')}
+                      </p>
+                    </div>
+                  )}
+                  {(aiListingExtraction.enrichment.enriched_fields || []).length > 0 && (
+                    <div className="bg-white rounded-md border border-blue-200 p-2">
+                      <p className="font-semibold text-blue-800 mb-1">AI enriched</p>
+                      <p className="text-blue-900">
+                        {aiListingExtraction.enrichment.enriched_fields.join(', ')}
+                      </p>
+                    </div>
+                  )}
+                  {(aiListingExtraction.enrichment.not_found_fields || []).length > 0 && (
+                    <div className="bg-white rounded-md border border-gray-200 p-2">
+                      <p className="font-semibold text-gray-700 mb-1">Not found</p>
+                      <p className="text-gray-600">
+                        {aiListingExtraction.enrichment.not_found_fields.slice(0, 12).join(', ')}
+                        {aiListingExtraction.enrichment.not_found_fields.length > 12 ? '…' : ''}
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {Array.isArray(aiListingExtraction.enrichment.profile?.features) &&
+                  aiListingExtraction.enrichment.profile.features.length > 0 && (
+                    <div className="text-xs text-blue-900">
+                      <span className="font-semibold">Detected features:</span>{' '}
+                      {aiListingExtraction.enrichment.profile.features.join(', ')}
+                    </div>
+                  )}
+
+                {aiListingExtraction.enrichment.vehicleSpecifications && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs text-blue-900">
+                    {aiListingExtraction.enrichment.vehicleSpecifications.engineCapacity && (
+                      <div><span className="font-medium">Engine:</span> {aiListingExtraction.enrichment.vehicleSpecifications.engineCapacity}</div>
+                    )}
+                    {aiListingExtraction.enrichment.vehicleSpecifications.fuelType && (
+                      <div><span className="font-medium">Fuel:</span> {aiListingExtraction.enrichment.vehicleSpecifications.fuelType}</div>
+                    )}
+                    {aiListingExtraction.enrichment.vehicleSpecifications.transmission && (
+                      <div><span className="font-medium">Transmission:</span> {aiListingExtraction.enrichment.vehicleSpecifications.transmission}</div>
+                    )}
+                    {aiListingExtraction.enrichment.vehicleSpecifications.driveType && (
+                      <div><span className="font-medium">Drive:</span> {aiListingExtraction.enrichment.vehicleSpecifications.driveType}</div>
+                    )}
+                    {aiListingExtraction.enrichment.vehicleSpecifications.horsepower && (
+                      <div><span className="font-medium">Power:</span> {aiListingExtraction.enrichment.vehicleSpecifications.horsepower}</div>
+                    )}
+                    {aiListingExtraction.enrichment.vehicleSpecifications.seatingCapacity && (
+                      <div><span className="font-medium">Seats:</span> {aiListingExtraction.enrichment.vehicleSpecifications.seatingCapacity}</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {(aiListingMissingFields || []).filter((fieldKey) =>
+              ['brand', 'condition', 'price', 'currency', 'location_city'].includes(fieldKey)
+            ).length > 0 && !isProcessing && (
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start justify-between gap-3 mb-3">
+                  <div>
+                    <p className="text-sm font-semibold text-yellow-900 mb-1">
+                      AI needs a few details to complete your car listing
+                    </p>
+                    <p className="text-xs text-yellow-800">
+                      Fill the missing fields below. Low-confidence values are highlighted so you can confirm.
+                    </p>
+                  </div>
+                </div>
+
+                {(() => {
+                  const REQUIRED_FIELDS = [
+                    // Only show fields that are actually required by the existing UI steps.
+                    // This keeps AI auto-fill "hands-off" for car posting.
+                    'brand', // maps to `make`/`brand`
+                    'condition',
+                    'price',
+                    'currency',
+                    'location_city', // maps to `city`
+                  ]
+                  const missing = new Set(aiListingMissingFields || [])
+                  const low = REQUIRED_FIELDS.filter((k) => {
+                    if (missing.has(k)) return false
+                    const c = aiListingConfidence?.[k]
+                    return typeof c === 'number' && c < 0.7
+                  })
+                  if (!low.length) return null
+                  return (
+                    <div className="bg-yellow-100 border border-yellow-200 rounded-lg p-3 mb-4">
+                      <p className="text-sm font-medium text-yellow-900 mb-1">AI low-confidence fields (please review):</p>
+                      <div className="text-xs text-yellow-800">
+                        {low.map((k) => `${k} (${Math.round((aiListingConfidence?.[k] || 0) * 100)}%)`).join(', ')}
+                      </div>
+                    </div>
+                  )
+                })()}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {aiListingMissingFields
+                    .filter((fieldKey) =>
+                      [
+                        'brand',
+                        'condition',
+                        'price',
+                        'currency',
+                        'location_city',
+                      ].includes(fieldKey)
+                    )
+                    .map((fieldKey) => {
+                    const conf = aiListingConfidence?.[fieldKey]
+                    const isLow = typeof conf === 'number' && conf < 0.7
+                    const ringClass = isLow ? 'ring-2 ring-yellow-400' : ''
+
+                    switch (fieldKey) {
+                      case 'brand':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Brand {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <input
+                              type="text"
+                              {...register('brand')}
+                              className={`input-field ${ringClass}`}
+                              placeholder="e.g., Toyota"
+                            />
+                          </div>
+                        )
+                      case 'model':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Model {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <input
+                              type="text"
+                              {...register('model')}
+                              className={`input-field ${ringClass}`}
+                              placeholder="e.g., Corolla"
+                            />
+                          </div>
+                        )
+                      case 'year':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Year {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <input
+                              type="number"
+                              {...register('year')}
+                              className={`input-field ${ringClass}`}
+                              placeholder="e.g., 2020"
+                              min={1900}
+                              max={new Date().getFullYear() + 1}
+                            />
+                          </div>
+                        )
+                      case 'price':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Price {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <input
+                              type="number"
+                              {...register('price')}
+                              className={`input-field ${ringClass}`}
+                              placeholder="e.g., 25000"
+                              min={0}
+                              step={0.01}
+                            />
+                          </div>
+                        )
+                      case 'currency':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Currency {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <select
+                              {...register('currency')}
+                              className={`input-field ${ringClass}`}
+                              defaultValue={watch('currency') || MARKETPLACE_CURRENCY}
+                            >
+                              <option value={MARKETPLACE_CURRENCY}>{MARKETPLACE_CURRENCY}</option>
+                            </select>
+                          </div>
+                        )
+                      case 'location_city':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              City {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <input
+                              type="text"
+                              {...register('city')}
+                              className={`input-field ${ringClass}`}
+                              placeholder="e.g., Dubai"
+                            />
+                          </div>
+                        )
+                      case 'mileage_km':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Mileage (km) {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <input
+                              type="number"
+                              {...register('mileage')}
+                              className={`input-field ${ringClass}`}
+                              placeholder="e.g., 50000"
+                              min={0}
+                            />
+                          </div>
+                        )
+                      case 'engine_cc':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Engine (cc) {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <input
+                              type="number"
+                              value={aiListingUserOverrides?.engine_cc ?? ''}
+                              onChange={(e) => {
+                                const n = e.target.value === '' ? null : Number(e.target.value)
+                                setAiListingUserOverrides((prev) => ({ ...prev, engine_cc: n }))
+                                if (n !== null && Number.isFinite(n) && !Number.isNaN(n)) {
+                                  setValue('engineSize', `${n}cc`, { shouldDirty: true, shouldTouch: true })
+                                }
+                              }}
+                              className={`input-field ${ringClass}`}
+                              placeholder="e.g., 2000"
+                              min={1}
+                            />
+                          </div>
+                        )
+                      case 'horsepower':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Horsepower {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <input
+                              type="number"
+                              value={aiListingUserOverrides?.horsepower ?? ''}
+                              onChange={(e) => {
+                                const n = e.target.value === '' ? null : Number(e.target.value)
+                                setAiListingUserOverrides((prev) => ({ ...prev, horsepower: n }))
+                              }}
+                              className={`input-field ${ringClass}`}
+                              placeholder="e.g., 150"
+                              min={1}
+                            />
+                          </div>
+                        )
+                      case 'transmission':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Transmission {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <select
+                              {...register('transmission')}
+                              className={`input-field ${ringClass}`}
+                              defaultValue={watch('transmission') || ''}
+                            >
+                              <option value="">Select transmission</option>
+                              {['Manual', 'Automatic', 'CVT', 'Semi-Automatic'].map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )
+                      case 'fuel_type':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Fuel Type {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <select
+                              {...register('fuelType')}
+                              className={`input-field ${ringClass}`}
+                              defaultValue={watch('fuelType') || ''}
+                            >
+                              <option value="">Select fuel type</option>
+                              {['Petrol', 'Diesel', 'Hybrid', 'Electric', 'CNG', 'LPG', 'Other'].map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )
+                      case 'body_type':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Body Type {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <select
+                              {...register('bodyType')}
+                              className={`input-field ${ringClass}`}
+                              defaultValue={watch('bodyType') || ''}
+                            >
+                              <option value="">Select body type</option>
+                              {['Sedan', 'SUV', 'Hatchback', 'Coupe', 'Convertible', 'Wagon', 'Pickup'].map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )
+                      case 'condition':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Condition {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <select
+                              {...register('condition')}
+                              className={`input-field ${ringClass}`}
+                              defaultValue={watch('condition') || ''}
+                            >
+                              <option value="">Select condition</option>
+                              {CONDITION_OPTIONS.map((opt) => (
+                                <option key={opt} value={opt}>
+                                  {opt}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )
+                      case 'accident_free':
+                        return (
+                          <div key={fieldKey}>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              Accident Free {isLow ? <span className="text-yellow-700 text-xs ml-2">(low confidence)</span> : null}
+                            </label>
+                            <select
+                              value={
+                                aiListingUserOverrides?.accident_free === null ||
+                                aiListingUserOverrides?.accident_free === undefined
+                                  ? ''
+                                  : aiListingUserOverrides.accident_free
+                                  ? 'yes'
+                                  : 'no'
+                              }
+                              onChange={(e) => {
+                                const v = e.target.value
+                                if (v === 'yes') setAiListingUserOverrides((prev) => ({ ...prev, accident_free: true }))
+                                else if (v === 'no') setAiListingUserOverrides((prev) => ({ ...prev, accident_free: false }))
+                                else setAiListingUserOverrides((prev) => ({ ...prev, accident_free: null }))
+                              }}
+                              className={`input-field ${ringClass}`}
+                            >
+                              <option value="">Select</option>
+                              <option value="yes">Yes (no accidents)</option>
+                              <option value="no">No (has accident history)</option>
+                            </select>
+                          </div>
+                        )
+                      default:
+                        return null
+                    }
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Image Upload Section */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-sm font-medium text-blue-900">
+                    📷 Upload Images
+                  </p>
+                  <p className="text-xs text-blue-700 mt-1">
+                    Upload additional images of your product (at least 1 image required)
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {imageFiles.filter(file => !file.isScreenshot).map((file, index) => {
+                    // Find the actual index in imageFiles array
+                    const actualIndex = imageFiles.findIndex(f => f === file)
+                    return (
+                      <div key={actualIndex} className="relative aspect-square">
+                        <ImagePreviewImg
+                          file={file}
+                          alt={`Preview ${actualIndex + 1}`}
+                          className="w-full h-full object-cover rounded-lg"
+                        />
+                  <button
+                    type="button"
+                          onClick={() => removeImage(actualIndex)}
+                    className="absolute top-1 right-1 bg-red-500 text-white p-1 rounded-full hover:bg-red-600"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                        {file?.isExisting && (
+                          <span className="absolute bottom-1 left-1 bg-blue-500 text-white text-xs px-2 py-1 rounded">
+                            Existing
+                          </span>
+                        )}
+                </div>
+                    )
+                  })}
+                  {imageFiles.filter(file => !file.isScreenshot).length < 20 && (
+                    <label className="aspect-square border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-primary-500">
+                      <Upload className="h-8 w-8 text-gray-400 mb-2" />
+                      <span className="text-xs text-gray-500">Add Photo</span>
+                  <input
+                    type="file"
+                    className="hidden"
+                        accept="image/jpeg,image/png,image/jpg"
+                    multiple
+                    onChange={handleImageUpload}
+                  />
+                </label>
+              )}
+                </div>
+                <p className="text-xs text-blue-800 mt-2">
+                  {imageFiles.filter(file => !file.isScreenshot).length} / 20 images uploaded
+                </p>
+            </div>
+          </div>
+            </div>
+          </details>
+        )}
+      </div>
 
       <div className="post-ad-fixed-footer">
-        <div className="mx-auto w-full max-w-[640px] px-4 pt-4 sm:px-6 sm:pt-5">
-          <div className="mb-3 flex gap-1 sm:mb-4">
+        <div className="mx-auto w-full max-w-[860px] px-4 pt-4 sm:px-6 sm:pt-5">
+          <div className="mb-4 flex gap-1.5 sm:mb-5">
             {[0, 1, 2, 3].map((i) => (
               <div
                 key={i}
-                className="h-[3px] flex-1 rounded-full"
+                className="h-1 flex-1 rounded-full"
                 style={{ backgroundColor: i === 0 ? POST_AD_NAVY : '#e5e7eb' }}
               />
             ))}
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-gray-600">1 of 4</p>
+            <p className="text-sm font-medium text-[#1e3a5f]">1 of 4</p>
             <button
               type="button"
               onClick={handleContinue}
               disabled={isProcessing}
-              className="inline-flex w-full items-center justify-center gap-1 rounded-xl px-8 py-3.5 text-[15px] font-semibold text-white transition disabled:opacity-50 sm:w-auto sm:px-10"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white transition disabled:opacity-50 sm:w-auto sm:min-w-[320px]"
               style={{ backgroundColor: POST_AD_BLUE }}
               onMouseEnter={(e) => {
                 if (!isProcessing) e.currentTarget.style.backgroundColor = '#1d4ed8'
@@ -2029,7 +2046,7 @@ function Step3VideoUpload({
               }}
             >
               Next
-              <span className="text-lg leading-none">&gt;</span>
+              <ChevronRight className="h-4 w-4" strokeWidth={2.5} />
             </button>
           </div>
         </div>

@@ -446,10 +446,20 @@ export const userService = {
   addSavedCard: (data) => api.post('/user/saved-cards', data),
   updateSavedCard: (cardId, data) => api.put(`/user/saved-cards/${cardId}`, data),
   deleteSavedCard: (cardId) => api.delete(`/user/saved-cards/${cardId}`),
-  getSavedSearches: () => api.get('/user/saved-searches'),
-  addSavedSearch: (data) => api.post('/user/saved-searches', data),
-  updateSavedSearch: (id, data) => api.put(`/user/saved-searches/${id}`, data),
-  deleteSavedSearch: (id) => api.delete(`/user/saved-searches/${id}`),
+  getSavedSearches: () =>
+    api.get('/user/saved-searches', {
+      persistAcrossRoutes: true,
+      headers: withDeviceIdHeaders(),
+    }),
+  addSavedSearch: (data) =>
+    api.post('/user/saved-searches', data, {
+      persistAcrossRoutes: true,
+      headers: withDeviceIdHeaders(),
+    }),
+  updateSavedSearch: (id, data) =>
+    api.put(`/user/saved-searches/${id}`, data, { persistAcrossRoutes: true }),
+  deleteSavedSearch: (id) =>
+    api.delete(`/user/saved-searches/${id}`, { persistAcrossRoutes: true }),
   getBlockedUsers: () => api.get('/user/blocked'),
   getIdentityVerification: () => api.get('/user/identity-verification'),
   submitIdentityVerification: (formData) =>

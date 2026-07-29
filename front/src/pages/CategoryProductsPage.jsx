@@ -33,6 +33,10 @@ import {
   serializeFilterValues,
   serializeIdList,
 } from '@shared/utils/categorySearchParams'
+import {
+  buildCategorySearchSavePayload,
+  persistSavedSearch,
+} from '@shared/utils/persistSavedSearch'
 
 function CategoryProductsPage() {
   const { categoryId, subcategoryId: routeSubcategoryId } = useParams()
@@ -312,6 +316,67 @@ function CategoryProductsPage() {
     const maxP = q.get('maxPrice')
     setPriceRangeSelect(minP || maxP ? `${minP || 0}-${maxP || ''}` : '')
   }, [categoryId, location.search, routeSubcategoryId])
+
+  // Silent My Search upsert for listing views reached from /search (no UI change).
+  const lastListingSaveRef = useRef('')
+  useEffect(() => {
+    if (!isAuthenticated || !categoryId) return
+    const listingUrl = `${location.pathname}${location.search || ''}`
+    if (!listingUrl || listingUrl === lastListingSaveRef.current) return
+
+    const q = new URLSearchParams(location.search || '')
+    const pathIds = categoryPath.length ? categoryPath : [categoryId]
+    const pathNames = []
+    if (selectedCategory?.name) pathNames.push(selectedCategory.name)
+    const sub = (subcategories || []).find(
+      (c) => String(c._id) === String(pathIds[1] || selectedHierarchy.subcategory),
+    )
+    if (sub?.name) pathNames.push(sub.name)
+    if (!pathNames.length) pathNames.push(selectedCategory?.name || 'Search')
+
+    const minPrice = q.get('minPrice') || ''
+    const maxPrice = q.get('maxPrice') || ''
+    const cityName = selectedCityName || q.get('location') || ''
+
+    const timer = window.setTimeout(() => {
+      persistSavedSearch(
+        buildCategorySearchSavePayload({
+          selectedPath: pathIds,
+          categoryPathNames: pathNames,
+          selectedFilterIds,
+          filterValues,
+          listingUrl,
+          passthroughParams: {
+            q: keywords || q.get('q') || '',
+            location: cityName,
+            sortBy,
+            minPrice,
+            maxPrice,
+            cityId: cityId || '',
+          },
+        }),
+      ).then((res) => {
+        if (res) lastListingSaveRef.current = listingUrl
+      })
+    }, 600)
+
+    return () => window.clearTimeout(timer)
+  }, [
+    isAuthenticated,
+    categoryId,
+    location.pathname,
+    location.search,
+    categoryPath,
+    selectedCategory?.name,
+    subcategories,
+    selectedHierarchy.subcategory,
+    selectedFilterIds,
+    filterValues,
+    keywords,
+    sortBy,
+    cityId,
+    selectedCityName,
+  ])
 
   useEffect(() => {
     setApiParentId('')

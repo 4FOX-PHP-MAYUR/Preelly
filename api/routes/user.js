@@ -1314,71 +1314,135 @@ router.delete('/saved-cards/:cardId', authMiddleware, async (req, res) => {
 // ─── Saved Searches ──────────────────────────────────────────────────────────
 
 const SavedSearch = require('../models/SavedSearch')
+const { enrichSavedSearch } = require('../core/services/savedSearchMatchService')
 
-function buildProductMatchFromSavedSearch(doc) {
-  const match = { status: 'active' }
-  if (doc.categoryId) match.category = doc.categoryId
-  if (doc.subcategoryId) match.subcategory = doc.subcategoryId
-  if (doc.filters?.location) {
-    const loc = String(doc.filters.location).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    match.$and = match.$and || []
-    match.$and.push({
-      $or: [
-        { location: new RegExp(loc, 'i') },
-        { city: new RegExp(loc, 'i') },
-        { area: new RegExp(loc, 'i') },
-      ],
-    })
-  }
-  const min = doc.filters?.minPrice !== '' && doc.filters?.minPrice != null ? Number(doc.filters.minPrice) : null
-  const max = doc.filters?.maxPrice !== '' && doc.filters?.maxPrice != null ? Number(doc.filters.maxPrice) : null
-  if ((min != null && !Number.isNaN(min)) || (max != null && !Number.isNaN(max))) {
-    match.price = {}
-    if (min != null && !Number.isNaN(min)) match.price.$gte = min
-    if (max != null && !Number.isNaN(max)) match.price.$lte = max
-  }
-  if (doc.query) {
-    match.$or = [
-      { title: new RegExp(String(doc.query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
-      { description: new RegExp(String(doc.query).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
-    ]
-  }
-  return match
+const ACTIVE_SAVED_SEARCH_QUERY = {
+  isDeleted: { $ne: true },
+  status: { $ne: 'deleted' },
 }
 
-async function enrichSavedSearch(doc) {
-  const plain = doc.toObject ? doc.toObject() : { ...doc }
-  const match = buildProductMatchFromSavedSearch(plain)
-  const since = plain.lastViewedAt || plain.createdAt || new Date(0)
-
-  const [totalMatches, newAdsCount, previewProducts] = await Promise.all([
-    Product.countDocuments(match),
-    Product.countDocuments({ ...match, createdAt: { $gt: since } }),
-    Product.find(match)
-      .sort({ createdAt: -1 })
-      .limit(4)
-      .select('images title price currency')
-      .lean(),
-  ])
-
+function resolveNotifyFlags(body = {}) {
+  const hasMaster =
+    body.notificationEnabled !== undefined || body.notifyEnabled !== undefined
+  const master = hasMaster
+    ? Boolean(
+        body.notificationEnabled !== undefined ? body.notificationEnabled : body.notifyEnabled
+      )
+    : undefined
   return {
-    ...plain,
-    matchCount: totalMatches,
-    newAdsCount,
-    previewImages: (previewProducts || [])
-      .map((p) => (Array.isArray(p.images) && p.images[0] ? p.images[0] : null))
-      .filter(Boolean),
+    master,
+    email:
+      body.emailNotificationEnabled !== undefined
+        ? Boolean(body.emailNotificationEnabled)
+        : undefined,
+    push:
+      body.pushNotificationEnabled !== undefined
+        ? Boolean(body.pushNotificationEnabled)
+        : undefined,
   }
 }
 
 router.get('/saved-searches', authMiddleware, async (req, res) => {
   try {
-    const docs = await SavedSearch.find({ userId: req.user._id }).sort({ updatedAt: -1 }).lean()
+    // Sync latest keyword history into My Search so recent searches always appear.
+    try {
+      const SearchHistory = require('../models/SearchHistory')
+      const deviceId = String(req.headers['device-id'] || '').trim()
+      const historyFilter = deviceId
+        ? {
+            $or: [
+              { userId: req.user._id },
+              { deviceId, userId: null },
+              { deviceId, userId: req.user._id },
+            ],
+          }
+        : { userId: req.user._id }
+
+      const histories = await SearchHistory.find(historyFilter)
+        .sort({ createdAt: -1 })
+        .limit(15)
+        .lean()
+
+      for (const row of histories) {
+        const kw = String(row.keyword || '').trim()
+        if (!kw) continue
+        const searchUrl = `/search?q=${encodeURIComponent(kw)}`
+        const exists = await SavedSearch.findOne({
+          userId: req.user._id,
+          $or: [
+            { searchUrl },
+            { keyword: new RegExp(`^${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+            { query: new RegExp(`^${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
+          ],
+          isDeleted: { $ne: true },
+          status: { $ne: 'deleted' },
+        }).select('_id')
+
+        if (exists) {
+          // Bump latest matches to the top
+          await SavedSearch.updateOne(
+            { _id: exists._id },
+            {
+              $set: {
+                updatedAt: row.createdAt || new Date(),
+                keyword: kw,
+                query: kw,
+                searchUrl,
+              },
+            }
+          )
+          continue
+        }
+
+        await SavedSearch.create({
+          userId: req.user._id,
+          title: `My ${kw} Search`,
+          searchName: `My ${kw} Search`,
+          query: kw,
+          keyword: kw,
+          searchType: 'keyword',
+          categoryPath: [kw],
+          categoryName: kw,
+          filters: {
+            location: '',
+            minPrice: '',
+            maxPrice: '',
+            sortBy: 'newest',
+            tags: ['ALL CITIES'],
+            extra: {},
+          },
+          selectedFilters: { tags: ['ALL CITIES'], keywords: kw },
+          sortOption: 'newest',
+          location: '',
+          searchUrl,
+          notifyEnabled: true,
+          notificationEnabled: true,
+          emailNotificationEnabled: true,
+          pushNotificationEnabled: true,
+          deviceId: row.deviceId || deviceId || `user-${req.user._id}`,
+          platform: row.platform === 'mobile' ? 'mobile' : 'web',
+          isLoggedIn: true,
+          status: 'active',
+          isDeleted: false,
+          lastViewedAt: row.createdAt || new Date(),
+        })
+      }
+    } catch (syncErr) {
+      console.warn('Saved-search history sync skipped:', syncErr.message)
+    }
+
+    const docs = await SavedSearch.find({
+      userId: req.user._id,
+      ...ACTIVE_SAVED_SEARCH_QUERY,
+    })
+      .sort({ updatedAt: -1 })
+      .lean()
+
     const enriched = await Promise.all(docs.map((d) => enrichSavedSearch(d)))
 
     const tabsMap = new Map()
     enriched.forEach((s) => {
-      const root = s.categoryPath?.[0] || 'Other'
+      const root = s.categoryPath?.[0] || s.categoryName || 'Other'
       tabsMap.set(root, (tabsMap.get(root) || 0) + 1)
     })
     const tabs = [
@@ -1399,63 +1463,230 @@ router.get('/saved-searches', authMiddleware, async (req, res) => {
 
 router.post('/saved-searches', authMiddleware, async (req, res) => {
   try {
+    const body = req.body || {}
     const {
       title,
+      searchName,
       categoryPath,
       categoryId,
+      categoryName,
       subcategoryId,
+      subCategoryId,
+      subCategoryName,
       query,
+      keyword,
       filters,
+      selectedFilters,
+      sortOption,
+      location,
       searchUrl,
+      searchType,
       notifyEnabled,
-    } = req.body || {}
+      notificationEnabled,
+      emailNotificationEnabled,
+      pushNotificationEnabled,
+      deviceId,
+      platform,
+      isLoggedIn,
+    } = body
 
-    const trimmedTitle = String(title || '').trim()
+    const trimmedTitle = String(searchName || title || '').trim()
     if (!trimmedTitle) return res.status(400).json({ message: 'Title is required' })
 
-    const doc = await SavedSearch.create({
-      userId: req.user._id,
+    const queryText = String(query || keyword || '').trim().slice(0, 300)
+    const mongoose = require('mongoose')
+    const toObjectIdOrNull = (value) => {
+      if (value == null || value === '') return null
+      const str = String(value)
+      return mongoose.Types.ObjectId.isValid(str) ? str : null
+    }
+    const catId = toObjectIdOrNull(categoryId)
+    const subId = toObjectIdOrNull(subcategoryId || subCategoryId)
+    const pathNames = Array.isArray(categoryPath)
+      ? categoryPath.map((s) => String(s).trim()).filter(Boolean)
+      : []
+    const loc = String(location || filters?.location || '').trim()
+    const sort = String(sortOption || filters?.sortBy || 'newest').trim() || 'newest'
+    const masterNotify =
+      notificationEnabled !== undefined
+        ? Boolean(notificationEnabled)
+        : notifyEnabled !== false
+    const resolvedUrl = String(searchUrl || '/search').slice(0, 2000)
+    const resolvedDeviceId = String(deviceId || req.headers['device-id'] || `user-${req.user._id}`)
+      .trim()
+      .slice(0, 128)
+    const resolvedPlatform = platform === 'mobile' ? 'mobile' : 'web'
+    const resolvedType = ['keyword', 'category', 'filtered', 'mixed'].includes(searchType)
+      ? searchType
+      : queryText && (catId || subId)
+        ? 'mixed'
+        : catId || subId
+          ? 'category'
+          : queryText
+            ? 'keyword'
+            : 'filtered'
+
+    const filtersPayload = {
+      location: loc,
+      minPrice: filters?.minPrice != null ? String(filters.minPrice) : '',
+      maxPrice: filters?.maxPrice != null ? String(filters.maxPrice) : '',
+      sortBy: sort,
+      tags: Array.isArray(filters?.tags) ? filters.tags.map(String).slice(0, 20) : [],
+      extra: filters?.extra && typeof filters.extra === 'object' ? filters.extra : {},
+    }
+    const selectedPayload =
+      selectedFilters && typeof selectedFilters === 'object'
+        ? selectedFilters
+        : {
+            location: loc,
+            minPrice: filters?.minPrice ?? '',
+            maxPrice: filters?.maxPrice ?? '',
+            sortBy: sort,
+            tags: Array.isArray(filters?.tags) ? filters.tags : [],
+            keywords: filters?.extra?.keywords || '',
+            ...(filters?.extra && typeof filters.extra === 'object' ? filters.extra : {}),
+          }
+
+    const sharedFields = {
       title: trimmedTitle.slice(0, 120),
-      categoryPath: Array.isArray(categoryPath) ? categoryPath.map((s) => String(s).trim()).filter(Boolean) : [],
-      categoryId: categoryId || null,
-      subcategoryId: subcategoryId || null,
-      query: String(query || '').trim().slice(0, 300),
-      filters: {
-        location: String(filters?.location || '').trim(),
-        minPrice: filters?.minPrice != null ? String(filters.minPrice) : '',
-        maxPrice: filters?.maxPrice != null ? String(filters.maxPrice) : '',
-        sortBy: String(filters?.sortBy || 'newest'),
-        tags: Array.isArray(filters?.tags) ? filters.tags.map(String).slice(0, 12) : [],
-        extra: filters?.extra && typeof filters.extra === 'object' ? filters.extra : {},
-      },
-      searchUrl: String(searchUrl || '/search').slice(0, 2000),
-      notifyEnabled: notifyEnabled !== false,
-      lastViewedAt: new Date(),
+      searchName: trimmedTitle.slice(0, 120),
+      categoryPath: pathNames,
+      categoryId: catId,
+      categoryName: String(categoryName || pathNames[0] || '').trim().slice(0, 120),
+      subcategoryId: subId,
+      subCategoryId: subId,
+      subCategoryName: String(subCategoryName || pathNames[1] || '').trim().slice(0, 120),
+      query: queryText,
+      keyword: queryText,
+      searchType: resolvedType,
+      filters: filtersPayload,
+      selectedFilters: selectedPayload,
+      sortOption: sort,
+      location: loc,
+      searchUrl: resolvedUrl,
+      deviceId: resolvedDeviceId,
+      platform: resolvedPlatform,
+      isLoggedIn: isLoggedIn !== false,
+      status: 'active',
+      isDeleted: false,
+      deletedAt: null,
+    }
+
+    let doc = await SavedSearch.findOne({
+      userId: req.user._id,
+      searchUrl: resolvedUrl,
+      isDeleted: { $ne: true },
+      status: { $ne: 'deleted' },
     })
+    let created = false
+
+    if (doc) {
+      Object.assign(doc, sharedFields)
+      if (notificationEnabled !== undefined || notifyEnabled !== undefined) {
+        doc.notifyEnabled = masterNotify
+        doc.notificationEnabled = masterNotify
+      }
+      if (emailNotificationEnabled !== undefined) {
+        doc.emailNotificationEnabled = Boolean(emailNotificationEnabled)
+      }
+      if (pushNotificationEnabled !== undefined) {
+        doc.pushNotificationEnabled = Boolean(pushNotificationEnabled)
+      }
+      await doc.save()
+    } else {
+      created = true
+      doc = await SavedSearch.create({
+        userId: req.user._id,
+        ...sharedFields,
+        notifyEnabled: masterNotify,
+        notificationEnabled: masterNotify,
+        emailNotificationEnabled:
+          emailNotificationEnabled !== undefined ? Boolean(emailNotificationEnabled) : true,
+        pushNotificationEnabled:
+          pushNotificationEnabled !== undefined ? Boolean(pushNotificationEnabled) : true,
+        lastViewedAt: new Date(),
+        newAdsCount: 0,
+        totalMatchingAdsCount: 0,
+        latestMatchingImages: [],
+      })
+    }
+
+    if (queryText) {
+      try {
+        const searchRepository = require('../core/repositories/searchRepository')
+        await searchRepository.recordSearchActivity({
+          keyword: queryText,
+          deviceId: resolvedDeviceId || `user-${req.user._id}`,
+          userId: req.user._id,
+          platform: resolvedPlatform,
+          isLoggedIn: true,
+        })
+      } catch (histErr) {
+        console.warn('Saved search created but history record failed:', histErr.message)
+      }
+    }
 
     const enriched = await enrichSavedSearch(doc)
-    res.status(201).json({ savedSearch: enriched })
+    res.status(created ? 201 : 200).json({ savedSearch: enriched })
   } catch (error) {
     console.error('Error saving search:', error)
-    res.status(500).json({ message: 'Error saving search' })
+    res.status(500).json({ message: error?.message || 'Error saving search' })
   }
 })
 
 router.put('/saved-searches/:id', authMiddleware, validateObjectId('id'), async (req, res) => {
   try {
-    const doc = await SavedSearch.findOne({ _id: req.params.id, userId: req.user._id })
+    const doc = await SavedSearch.findOne({
+      _id: req.params.id,
+      userId: req.user._id,
+      ...ACTIVE_SAVED_SEARCH_QUERY,
+    })
     if (!doc) return res.status(404).json({ message: 'Saved search not found' })
 
-    if (req.body.title != null) doc.title = String(req.body.title).trim().slice(0, 120) || doc.title
-    if (req.body.notifyEnabled !== undefined) doc.notifyEnabled = Boolean(req.body.notifyEnabled)
-    if (req.body.markViewed) doc.lastViewedAt = new Date()
-    if (req.body.filters && typeof req.body.filters === 'object') {
-      doc.filters = {
-        ...doc.filters.toObject?.() || doc.filters,
-        ...req.body.filters,
-      }
+    const body = req.body || {}
+
+    if (body.title != null || body.searchName != null) {
+      const nextName = String(body.searchName != null ? body.searchName : body.title)
+        .trim()
+        .slice(0, 120)
+      if (!nextName) return res.status(400).json({ message: 'Search name is required' })
+      doc.title = nextName
+      doc.searchName = nextName
     }
-    if (req.body.searchUrl != null) doc.searchUrl = String(req.body.searchUrl).slice(0, 2000)
+
+    const flags = resolveNotifyFlags(body)
+    if (flags.master !== undefined) {
+      doc.notifyEnabled = flags.master
+      doc.notificationEnabled = flags.master
+      // Turning master off leaves channel prefs intact so they restore when re-enabled
+    }
+    if (flags.email !== undefined) doc.emailNotificationEnabled = flags.email
+    if (flags.push !== undefined) doc.pushNotificationEnabled = flags.push
+
+    if (body.markViewed) {
+      doc.lastViewedAt = new Date()
+      doc.newAdsCount = 0
+    }
+    if (body.filters && typeof body.filters === 'object') {
+      doc.filters = {
+        ...(doc.filters.toObject?.() || doc.filters || {}),
+        ...body.filters,
+      }
+      if (body.filters.location != null) doc.location = String(body.filters.location)
+      if (body.filters.sortBy != null) doc.sortOption = String(body.filters.sortBy)
+    }
+    if (body.selectedFilters && typeof body.selectedFilters === 'object') {
+      doc.selectedFilters = body.selectedFilters
+    }
+    if (body.location != null) {
+      doc.location = String(body.location).trim()
+      if (doc.filters) doc.filters.location = doc.location
+    }
+    if (body.sortOption != null) {
+      doc.sortOption = String(body.sortOption).trim()
+      if (doc.filters) doc.filters.sortBy = doc.sortOption
+    }
+    if (body.searchUrl != null) doc.searchUrl = String(body.searchUrl).slice(0, 2000)
     await doc.save()
 
     const enriched = await enrichSavedSearch(doc)
@@ -1468,9 +1699,22 @@ router.put('/saved-searches/:id', authMiddleware, validateObjectId('id'), async 
 
 router.delete('/saved-searches/:id', authMiddleware, validateObjectId('id'), async (req, res) => {
   try {
-    const doc = await SavedSearch.findOneAndDelete({ _id: req.params.id, userId: req.user._id })
+    const doc = await SavedSearch.findOne({
+      _id: req.params.id,
+      userId: req.user._id,
+      ...ACTIVE_SAVED_SEARCH_QUERY,
+    })
     if (!doc) return res.status(404).json({ message: 'Saved search not found' })
-    res.json({ message: 'Saved search deleted' })
+
+    // Soft delete only — preserve historical record
+    doc.isDeleted = true
+    doc.status = 'deleted'
+    doc.deletedAt = new Date()
+    doc.notificationEnabled = false
+    doc.notifyEnabled = false
+    await doc.save()
+
+    res.json({ message: 'Saved search deleted', softDeleted: true })
   } catch (error) {
     console.error('Error deleting saved search:', error)
     res.status(500).json({ message: 'Error deleting saved search' })

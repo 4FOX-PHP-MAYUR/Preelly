@@ -14,6 +14,10 @@ import PriceFilterPanel from '../components/Listing/PriceFilterPanel'
 import useFilterPanelSlide from '../hooks/useFilterPanelSlide'
 import toast from 'react-hot-toast'
 import { BookmarkPlus } from 'lucide-react'
+import {
+  buildResultsSearchSavePayload,
+  persistSavedSearch,
+} from '@shared/utils/persistSavedSearch'
 
 function resolveCategoryFromQuery(query, rootCategories) {
   const q = String(query || '').trim().toLowerCase()
@@ -274,6 +278,69 @@ function SearchResultsPage() {
       ? 'Loading listings…'
       : `${products.length} result${products.length !== 1 ? 's' : ''} found`
 
+  const buildSavedSearchPayload = useCallback(() => {
+    const catName = categoryForUi?.name || searchQuery || 'Search'
+    const pathNames = []
+    if (matchedCategory?.name) pathNames.push(matchedCategory.name)
+    else if (selectedCategory?.name) pathNames.push(selectedCategory.name)
+    let subName = ''
+    if (subcategoryId && selectedCategory?.children) {
+      const sub = (selectedCategory.children || []).find((c) => String(c._id) === String(subcategoryId))
+      if (sub?.name) {
+        pathNames.push(sub.name)
+        subName = sub.name
+      }
+    }
+
+    const qs = searchParams.toString()
+    return buildResultsSearchSavePayload({
+      searchQuery,
+      categoryId: categoryId || null,
+      subcategoryId: subcategoryId || null,
+      categoryName: catName,
+      categoryPathNames: pathNames.length
+        ? pathNames
+        : [catName, subName].filter(Boolean),
+      city,
+      minPrice,
+      maxPrice,
+      keywords,
+      sortBy,
+      searchUrl: qs ? `/search?${qs}` : '/search',
+      urlParams: Object.fromEntries(searchParams.entries()),
+    })
+  }, [
+    categoryForUi?.name,
+    searchQuery,
+    matchedCategory?.name,
+    selectedCategory,
+    subcategoryId,
+    city,
+    minPrice,
+    maxPrice,
+    keywords,
+    sortBy,
+    searchParams,
+    categoryId,
+  ])
+
+  // Persist every /search results view for logged-in users (silent — no UI change).
+  const lastAutoSavedUrlRef = useRef('')
+  useEffect(() => {
+    if (!isAuthenticated) return
+    if (!searchQuery && !categoryId) return
+    const payload = buildSavedSearchPayload()
+    if (!payload.searchUrl || payload.searchUrl === lastAutoSavedUrlRef.current) return
+
+    const timer = window.setTimeout(() => {
+      persistSavedSearch(payload).then((res) => {
+        if (res) lastAutoSavedUrlRef.current = payload.searchUrl
+      })
+    }, 500)
+
+    return () => window.clearTimeout(timer)
+  }, [isAuthenticated, searchQuery, categoryId, city, minPrice, maxPrice, keywords, sortBy, subcategoryId, buildSavedSearchPayload])
+
   const handleSaveSearch = async () => {
     if (!isAuthenticated) {
       navigate('/login')
@@ -285,36 +352,7 @@ function SearchResultsPage() {
     }
     setSavingSearch(true)
     try {
-      const catName = categoryForUi?.name || searchQuery || 'Search'
-      const pathNames = []
-      if (matchedCategory?.name) pathNames.push(matchedCategory.name)
-      else if (selectedCategory?.name) pathNames.push(selectedCategory.name)
-      if (subcategoryId && selectedCategory?.children) {
-        const sub = (selectedCategory.children || []).find((c) => String(c._id) === String(subcategoryId))
-        if (sub?.name) pathNames.push(sub.name)
-      }
-
-      const tags = []
-      tags.push(city ? city.toUpperCase() : 'ALL CITIES')
-      if (minPrice || maxPrice) tags.push(`PRICE: ${minPrice || '0'}–${maxPrice || '∞'}`)
-
-      const qs = searchParams.toString()
-      await userService.addSavedSearch({
-        title: `My ${catName} Search`,
-        categoryPath: pathNames.length ? pathNames : [catName],
-        categoryId: categoryId || null,
-        subcategoryId: subcategoryId || null,
-        query: searchQuery,
-        filters: {
-          location: city,
-          minPrice,
-          maxPrice,
-          sortBy,
-          tags,
-        },
-        searchUrl: qs ? `/search?${qs}` : '/search',
-        notifyEnabled: true,
-      })
+      await userService.addSavedSearch(buildSavedSearchPayload())
       toast.success('Search saved')
       navigate('/dashboard/my-search')
     } catch (err) {

@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import { Search, X, Clock, TrendingUp, Tag } from 'lucide-react'
-import { globalSearchService } from '@shared/services/api'
+import { globalSearchService, userService } from '@shared/services/api'
+import { selectIsAuthenticated } from '@shared/store/slices/authSlice'
 
 const SUGGESTION_MIN_LENGTH = 2
 
@@ -39,6 +41,7 @@ function SearchBar({
   defaultQuery = '',
 }) {
   const navigate = useNavigate()
+  const isAuthenticated = useSelector(selectIsAuthenticated)
   const styles = VARIANT_STYLES[variant] || VARIANT_STYLES.default
   const [searchQuery, setSearchQuery] = useState(defaultQuery)
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -141,12 +144,58 @@ function SearchBar({
 
     setShowSuggestions(false)
 
+    const trimmed = query.trim()
     const params = new URLSearchParams()
-    params.set('q', query.trim())
+    params.set('q', trimmed)
+    const searchUrl = `/search?${params.toString()}`
 
-    navigate(`/search?${params.toString()}`)
+    // Persist before navigate so My Search / history are not aborted by route change.
+    const persistJobs = [
+      globalSearchService
+        .search({ keyword: trimmed, limit: 1, type: 'products' }, { persistAcrossRoutes: true })
+        .catch(() => {}),
+    ]
+
+    if (isAuthenticated) {
+      persistJobs.push(
+        userService
+          .addSavedSearch({
+            title: `My ${trimmed} Search`,
+            searchName: `My ${trimmed} Search`,
+            query: trimmed,
+            keyword: trimmed,
+            searchType: 'keyword',
+            categoryPath: [trimmed],
+            categoryName: trimmed,
+            filters: {
+              location: '',
+              minPrice: '',
+              maxPrice: '',
+              sortBy: 'newest',
+              tags: ['ALL CITIES'],
+              extra: {},
+            },
+            selectedFilters: { tags: ['ALL CITIES'], keywords: trimmed },
+            sortOption: 'newest',
+            location: '',
+            searchUrl,
+            notifyEnabled: true,
+            notificationEnabled: true,
+            emailNotificationEnabled: true,
+            pushNotificationEnabled: true,
+            platform: 'web',
+            isLoggedIn: true,
+          })
+          .catch((err) => {
+            console.warn('Save search failed:', err?.response?.data?.message || err.message)
+          })
+      )
+    }
+
+    Promise.all(persistJobs).finally(() => setTimeout(refreshRecentSearches, 400))
+
+    navigate(searchUrl)
     setSearchQuery('')
-    setTimeout(refreshRecentSearches, 500)
   }
 
   const handleSuggestionClick = (suggestion) => {

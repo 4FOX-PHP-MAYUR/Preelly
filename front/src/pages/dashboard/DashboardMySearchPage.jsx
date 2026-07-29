@@ -1,160 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
-import {
-  ArrowLeft,
-  Bell,
-  BellOff,
-  MoreVertical,
-  Search,
-  Trash2,
-  ExternalLink,
-  Pencil,
-} from 'lucide-react'
+import { ArrowLeft, Search } from 'lucide-react'
 import SettingsPageShell from '../../components/Dashboard/SettingsPageShell'
+import SavedSearchCard, { SavedSearchCardSkeleton } from '../../components/MySearch/SavedSearchCard'
+import NotificationSettingsModal from '../../components/MySearch/NotificationSettingsModal'
+import MoreOptionsModal from '../../components/MySearch/MoreOptionsModal'
+import ShareSearchModal from '../../components/MySearch/ShareSearchModal'
+import RenameSearchModal from '../../components/MySearch/RenameSearchModal'
+import DeleteSearchModal from '../../components/MySearch/DeleteSearchModal'
 import { userService } from '@shared/services/api'
-import { getMediaUrl } from '@shared/utils/helpers'
-
-function formatSavedDate(value) {
-  if (!value) return '—'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return '—'
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function SavedSearchCard({ item, onOpen, onToggleNotify, onRename, onDelete }) {
-  const [menuOpen, setMenuOpen] = useState(false)
-  const menuRef = useRef(null)
-
-  useEffect(() => {
-    if (!menuOpen) return undefined
-    const onDown = (e) => {
-      if (!menuRef.current?.contains(e.target)) setMenuOpen(false)
-    }
-    document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
-  }, [menuOpen])
-
-  const crumbs = (item.categoryPath || []).join(' > ')
-  const title = item.title || 'My Search'
-  const countSuffix = typeof item.matchCount === 'number' ? ` (${item.matchCount})` : ''
-  const tags = item.filters?.tags?.length
-    ? item.filters.tags
-    : [
-        item.filters?.location ? String(item.filters.location).toUpperCase() : 'ALL CITIES',
-        item.filters?.minPrice || item.filters?.maxPrice
-          ? `PRICE: ${item.filters.minPrice || '0'}–${item.filters.maxPrice || '∞'}`
-          : null,
-      ].filter(Boolean)
-
-  const previews = (item.previewImages || []).slice(0, 4)
-
-  return (
-    <div className="rounded-[16px] border border-[#E5E7EB] bg-white p-4 shadow-[0_2px_10px_rgba(15,23,42,0.04)] transition duration-200 hover:border-brand/25 sm:p-5">
-      <div className="flex items-start gap-3">
-        <button type="button" onClick={() => onOpen(item)} className="min-w-0 flex-1 text-left">
-          {crumbs ? <p className="text-xs text-slate-400">{crumbs}</p> : null}
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-bold text-slate-900 sm:text-lg">
-              {title}
-              {countSuffix}
-            </h3>
-            {item.newAdsCount > 0 ? (
-              <span className="rounded-full bg-brand px-2.5 py-0.5 text-[11px] font-semibold text-white">
-                {item.newAdsCount} new ads
-              </span>
-            ) : null}
-          </div>
-          {tags.length ? (
-            <div className="mt-2 flex flex-wrap gap-2">
-              {tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-slate-600"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          ) : null}
-        </button>
-
-        <div className="flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            aria-label={item.notifyEnabled ? 'Mute notifications' : 'Enable notifications'}
-            onClick={() => onToggleNotify(item)}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition duration-200 hover:bg-slate-100 hover:text-brand"
-          >
-            {item.notifyEnabled ? <Bell className="h-4 w-4" /> : <BellOff className="h-4 w-4" />}
-          </button>
-          <div className="relative" ref={menuRef}>
-            <button
-              type="button"
-              aria-label="More options"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((v) => !v)}
-              className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition duration-200 hover:bg-slate-100"
-            >
-              <MoreVertical className="h-4 w-4" />
-            </button>
-            {menuOpen ? (
-              <div className="absolute right-0 z-20 mt-1 w-44 overflow-hidden rounded-[12px] border border-[#E5E7EB] bg-white py-1 shadow-lg">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onOpen(item)
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
-                >
-                  <ExternalLink className="h-4 w-4" /> Open search
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onRename(item)
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-slate-700 hover:bg-slate-50"
-                >
-                  <Pencil className="h-4 w-4" /> Rename
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenuOpen(false)
-                    onDelete(item)
-                  }}
-                  className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm text-red-500 hover:bg-red-50"
-                >
-                  <Trash2 className="h-4 w-4" /> Delete
-                </button>
-              </div>
-            ) : null}
-          </div>
-        </div>
-      </div>
-
-      <div className="mt-4 flex items-end justify-between gap-3">
-        <p className="text-xs text-slate-400">Saved on: {formatSavedDate(item.createdAt)}</p>
-        {previews.length > 0 ? (
-          <div className="flex -space-x-2">
-            {previews.map((src, i) => (
-              <img
-                key={`${src}-${i}`}
-                src={getMediaUrl(src) || src}
-                alt=""
-                loading="lazy"
-                className="h-9 w-9 rounded-full border-2 border-white object-cover"
-              />
-            ))}
-          </div>
-        ) : null}
-      </div>
-    </div>
-  )
-}
 
 export default function DashboardMySearchPage() {
   const navigate = useNavigate()
@@ -163,6 +18,14 @@ export default function DashboardMySearchPage() {
   const [activeTab, setActiveTab] = useState('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+
+  const [activeItem, setActiveItem] = useState(null)
+  const [notifyOpen, setNotifyOpen] = useState(false)
+  const [moreOpen, setMoreOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [renameOpen, setRenameOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [actionSaving, setActionSaving] = useState(false)
 
   const load = async () => {
     setLoading(true)
@@ -186,56 +49,104 @@ export default function DashboardMySearchPage() {
     if (activeTab === 'all') return items
     const tab = tabs.find((t) => t.key === activeTab)
     if (!tab || tab.key === 'all') return items
-    return items.filter((s) => (s.categoryPath?.[0] || 'Other') === tab.label)
+    return items.filter((s) => {
+      const root = s.categoryPath?.[0] || s.categoryName || 'Other'
+      return root === tab.label
+    })
   }, [items, activeTab, tabs])
+
+  const patchItem = (id, next) => {
+    setItems((prev) => prev.map((s) => (s._id === id ? { ...s, ...next } : s)))
+  }
 
   const handleOpen = async (item) => {
     try {
       await userService.updateSavedSearch(item._id, { markViewed: true })
-      setItems((prev) =>
-        prev.map((s) => (s._id === item._id ? { ...s, newAdsCount: 0, lastViewedAt: new Date().toISOString() } : s))
-      )
+      patchItem(item._id, { newAdsCount: 0, lastViewedAt: new Date().toISOString() })
     } catch {
       /* still navigate */
     }
-    navigate(item.searchUrl || `/search?q=${encodeURIComponent(item.query || '')}`)
+    navigate(item.searchUrl || `/search?q=${encodeURIComponent(item.query || item.keyword || '')}`)
   }
 
-  const handleToggleNotify = async (item) => {
+  const openNotifications = (item) => {
+    setActiveItem(item)
+    setNotifyOpen(true)
+  }
+
+  const openMore = (item) => {
+    setActiveItem(item)
+    setMoreOpen(true)
+  }
+
+  const afterMore = (openNext) => {
+    setMoreOpen(false)
+    window.setTimeout(openNext, 220)
+  }
+
+  const handleSaveNotifications = async (payload) => {
+    if (!activeItem) return
+    setActionSaving(true)
     try {
-      const res = await userService.updateSavedSearch(item._id, { notifyEnabled: !item.notifyEnabled })
-      setItems((prev) => prev.map((s) => (s._id === item._id ? { ...s, ...res.data.savedSearch } : s)))
-      toast.success(item.notifyEnabled ? 'Notifications muted' : 'Notifications enabled')
+      const res = await userService.updateSavedSearch(activeItem._id, payload)
+      const updated = res?.data?.savedSearch || { ...activeItem, ...payload }
+      patchItem(activeItem._id, updated)
+      setActiveItem(updated)
+      setNotifyOpen(false)
+      toast.success('Notification settings updated')
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to update notifications')
+    } finally {
+      setActionSaving(false)
     }
   }
 
-  const handleRename = async (item) => {
-    const next = window.prompt('Rename saved search', item.title)
-    if (next == null) return
-    const title = next.trim()
-    if (!title) {
-      toast.error('Title is required')
-      return
-    }
+  const handleRename = async (title) => {
+    if (!activeItem) return
+    setActionSaving(true)
     try {
-      const res = await userService.updateSavedSearch(item._id, { title })
-      setItems((prev) => prev.map((s) => (s._id === item._id ? { ...s, ...res.data.savedSearch } : s)))
+      const res = await userService.updateSavedSearch(activeItem._id, { title, searchName: title })
+      const updated = res?.data?.savedSearch || { ...activeItem, title, searchName: title }
+      patchItem(activeItem._id, updated)
+      setActiveItem(updated)
+      setRenameOpen(false)
       toast.success('Search renamed')
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to rename')
+    } finally {
+      setActionSaving(false)
     }
   }
 
-  const handleDelete = async (item) => {
-    if (!window.confirm(`Delete “${item.title}”?`)) return
+  const handleDelete = async () => {
+    if (!activeItem) return
+    setActionSaving(true)
     try {
-      await userService.deleteSavedSearch(item._id)
-      setItems((prev) => prev.filter((s) => s._id !== item._id))
+      await userService.deleteSavedSearch(activeItem._id)
+      setItems((prev) => prev.filter((s) => s._id !== activeItem._id))
+      setTabs((prev) => {
+        const nextItems = items.filter((s) => s._id !== activeItem._id)
+        const tabsMap = new Map()
+        nextItems.forEach((s) => {
+          const root = s.categoryPath?.[0] || s.categoryName || 'Other'
+          tabsMap.set(root, (tabsMap.get(root) || 0) + 1)
+        })
+        return [
+          { key: 'all', label: 'All', count: nextItems.length },
+          ...Array.from(tabsMap.entries()).map(([label, count]) => ({
+            key: label.toLowerCase().replace(/\s+/g, '-'),
+            label,
+            count,
+          })),
+        ]
+      })
+      setDeleteOpen(false)
+      setActiveItem(null)
       toast.success('Saved search deleted')
     } catch (err) {
       toast.error(err?.response?.data?.message || 'Failed to delete')
+    } finally {
+      setActionSaving(false)
     }
   }
 
@@ -245,7 +156,7 @@ export default function DashboardMySearchPage() {
         <div className="mb-6 flex flex-wrap items-start justify-between gap-3 sm:mb-8">
           <div>
             <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">My Search</h1>
-            <p className="mt-1 text-sm text-slate-500">Resume your ads journey from here</p>
+            <p className="mt-1 text-sm text-slate-500">Resume your ads journey form here</p>
           </div>
           <Link
             to="/"
@@ -256,13 +167,19 @@ export default function DashboardMySearchPage() {
           </Link>
         </div>
 
-        <div className="mb-5 flex gap-5 overflow-x-auto border-b border-[#E5E7EB]">
+        <div
+          className="mb-5 flex gap-5 overflow-x-auto border-b border-[#E5E7EB]"
+          role="tablist"
+          aria-label="Saved search categories"
+        >
           {tabs.map((tab) => {
             const active = activeTab === tab.key
             return (
               <button
                 key={tab.key}
                 type="button"
+                role="tab"
+                aria-selected={active}
                 onClick={() => setActiveTab(tab.key)}
                 className={`shrink-0 border-b-2 pb-3 text-sm font-semibold transition duration-200 ${
                   active
@@ -277,9 +194,9 @@ export default function DashboardMySearchPage() {
         </div>
 
         {loading ? (
-          <div className="space-y-3">
+          <div className="space-y-3" aria-busy="true" aria-label="Loading saved searches">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-32 animate-pulse rounded-[16px] bg-slate-100" />
+              <SavedSearchCardSkeleton key={i} />
             ))}
           </div>
         ) : error ? (
@@ -294,8 +211,8 @@ export default function DashboardMySearchPage() {
             </button>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-[16px] border border-dashed border-[#E5E7EB] px-4 py-14 text-center">
-            <Search className="h-10 w-10 text-slate-300" />
+          <div className="flex flex-col items-center justify-center rounded-[16px] border border-dashed border-[#E5E7EB] px-4 py-14 text-center animate-fade-in">
+            <Search className="h-10 w-10 text-slate-300" aria-hidden />
             <p className="mt-3 text-sm font-semibold text-slate-700">No saved searches yet</p>
             <p className="mt-1 max-w-sm text-xs text-slate-400">
               Run a search, then tap “Save search” to track new matching ads here.
@@ -309,20 +226,63 @@ export default function DashboardMySearchPage() {
             </button>
           </div>
         ) : (
-          <div className="space-y-3">
-            {filtered.map((item) => (
-              <SavedSearchCard
+          <div className="space-y-3" role="list">
+            {filtered.map((item, index) => (
+              <div
                 key={item._id}
-                item={item}
-                onOpen={handleOpen}
-                onToggleNotify={handleToggleNotify}
-                onRename={handleRename}
-                onDelete={handleDelete}
-              />
+                role="listitem"
+                className="animate-fade-in"
+                style={{ animationDelay: `${Math.min(index, 6) * 40}ms` }}
+              >
+                <SavedSearchCard
+                  item={item}
+                  onOpen={handleOpen}
+                  onOpenNotifications={openNotifications}
+                  onOpenMore={openMore}
+                />
+              </div>
             ))}
           </div>
         )}
       </div>
+
+      <NotificationSettingsModal
+        open={notifyOpen}
+        item={activeItem}
+        saving={actionSaving}
+        onClose={() => setNotifyOpen(false)}
+        onSave={handleSaveNotifications}
+      />
+
+      <MoreOptionsModal
+        open={moreOpen}
+        onClose={() => setMoreOpen(false)}
+        onRename={() => afterMore(() => setRenameOpen(true))}
+        onShare={() => afterMore(() => setShareOpen(true))}
+        onDelete={() => afterMore(() => setDeleteOpen(true))}
+      />
+
+      <ShareSearchModal
+        open={shareOpen}
+        item={activeItem}
+        onClose={() => setShareOpen(false)}
+      />
+
+      <RenameSearchModal
+        open={renameOpen}
+        item={activeItem}
+        saving={actionSaving}
+        onClose={() => setRenameOpen(false)}
+        onSave={handleRename}
+      />
+
+      <DeleteSearchModal
+        open={deleteOpen}
+        item={activeItem}
+        saving={actionSaving}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={handleDelete}
+      />
     </SettingsPageShell>
   )
 }

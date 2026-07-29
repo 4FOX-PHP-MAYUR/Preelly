@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSelector } from 'react-redux'
 import { ChevronLeft, Home, Loader2, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import useCategoryDrilldown, { MAX_CATEGORY_PATH_LENGTH } from '@shared/hooks/useCategoryDrilldown'
@@ -10,6 +11,11 @@ import { buildListingUrl } from '@shared/utils/categorySearchParams'
 import { getLevelLabels } from '@shared/utils/categoryFields'
 import { PanelSection, ChipRow } from '@shared/components/FilterPanelSection'
 import CategoryIconGrid from '../components/Listing/CategoryIconGrid'
+import { selectIsAuthenticated } from '@shared/store/slices/authSlice'
+import {
+  buildCategorySearchSavePayload,
+  persistSavedSearch,
+} from '@shared/utils/persistSavedSearch'
 
 /**
  * Hierarchical category search (/search).
@@ -25,6 +31,7 @@ import CategoryIconGrid from '../components/Listing/CategoryIconGrid'
 function CategorySearchPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const isAuthenticated = useSelector(selectIsAuthenticated)
   const {
     levelOptions,
     selectedPath,
@@ -118,14 +125,28 @@ function CategorySearchPage() {
       return
     }
 
-    navigate(
-      buildListingUrl({
-        categoryPath: selectedPath,
-        filterIds: selectedFilterIds,
-        filterValues,
-        extraParams: passthroughParams,
-      }),
-    )
+    const listingUrl = buildListingUrl({
+      categoryPath: selectedPath,
+      filterIds: selectedFilterIds,
+      filterValues,
+      extraParams: passthroughParams,
+    })
+
+    // Persist full category search into My Search (no UI change).
+    if (isAuthenticated) {
+      persistSavedSearch(
+        buildCategorySearchSavePayload({
+          selectedPath,
+          categoryPathNames,
+          selectedFilterIds,
+          filterValues,
+          listingUrl,
+          passthroughParams,
+        }),
+      )
+    }
+
+    navigate(listingUrl)
   }
 
   return (

@@ -195,6 +195,18 @@ router.put('/products/:id/approve', adminMiddleware, async (req, res) => {
       }
     }
 
+    // Match newly active ads against My Search bookmarks (non-blocking).
+    try {
+      const { matchProductAgainstSavedSearches } = require('../core/services/savedSearchMatchService')
+      matchProductAgainstSavedSearches(product.toObject ? product.toObject() : product).catch(
+        (matchErr) => {
+          console.error('Saved-search match after approve failed:', matchErr.message)
+        }
+      )
+    } catch (matchImportErr) {
+      console.error('Saved-search match hook unavailable:', matchImportErr.message)
+    }
+
     res.json({
       message: 'Product approved successfully',
       product,

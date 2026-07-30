@@ -837,6 +837,22 @@ export const adminService = {
 }
 
 // Video service
+/**
+ * A new ad holds the video as a File; editing an existing ad holds a `{ url }`
+ * pointer to the copy already on the server. Appending that object to FormData sent
+ * "[object Object]", so multer saw no file and the request failed with "No video file
+ * uploaded" — send a `videoPath` for stored videos instead, which also avoids
+ * re-uploading tens of MB to read a single frame.
+ */
+const appendVideoSource = (formData, videoFile) => {
+  if (videoFile instanceof File || videoFile instanceof Blob) {
+    formData.append('video', videoFile)
+    return
+  }
+  const storedPath = videoFile?.originalUrl || videoFile?.url
+  if (storedPath) formData.append('videoPath', String(storedPath))
+}
+
 export const videoService = {
   transcribeVideo: (videoFile, category, subcategory, { categoryId, subcategoryId, childCategoryId } = {}) => {
     const formData = new FormData()
@@ -851,9 +867,20 @@ export const videoService = {
       timeout: 300000,
     })
   },
+  /** Trim a video to [startTime, endTime] seconds server-side; returns the shorter clip. */
+  trimVideo: (videoFile, startTime, endTime) => {
+    const formData = new FormData()
+    appendVideoSource(formData, videoFile)
+    formData.append('startTime', String(startTime))
+    formData.append('endTime', String(endTime))
+    return api.post('/video/trim', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 300000,
+    })
+  },
   captureScreenshot: (videoFile, timestamp) => {
     const formData = new FormData()
-    formData.append('video', videoFile)
+    appendVideoSource(formData, videoFile)
     formData.append('timestamp', timestamp.toString())
     return api.post('/video/screenshot', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

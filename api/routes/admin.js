@@ -1200,12 +1200,52 @@ function flattenCategoryTreeInOrder(nodes) {
 // Fetch all matching categories, build tree by parent_id, flatten in hierarchy order, then paginate
 router.get('/categories', adminMiddleware, async (req, res) => {
   try {
-    const { page = 1, limit = 100, search, parentId: filterParentId, rootOnly } = req.query
+    const {
+      page = 1,
+      limit = 100,
+      search,
+      parentId: filterParentId,
+      rootOnly,
+      // 'active' | 'inactive' — anything else means no status filter.
+      status,
+      // Exact tree depth (0 = root). Empty/absent means every level.
+      level,
+      // With a parentId: 'true' restricts to direct children instead of the
+      // whole subtree (the default).
+      directOnly,
+    } = req.query
     const skip = Math.max(0, (Number(page) - 1) * Number(limit))
     const limitNum = Math.max(1, Math.min(500, Number(limit)))
     const query = { isDeleted: false }
-    if (search && String(search).trim()) {
-      query.name = new RegExp(String(search).trim(), 'i')
+
+    const searchTerm = String(search || '').trim()
+    if (searchTerm) {
+      // Category names legitimately contain regex metacharacters ("AMG C 63 S
+      // 4MATIC+", "Engine Capacity (cc)"), so the term must be escaped — an
+      // unescaped one silently matches the wrong rows or throws outright.
+      const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+      const rx = new RegExp(escaped, 'i')
+      query.$or = [{ name: rx }, { slug: rx }]
+    }
+
+    if (status === 'active') query.isActive = { $ne: false }
+    else if (status === 'inactive') query.isActive = false
+
+    const levelNum = Number(level)
+    if (level !== undefined && level !== '' && Number.isInteger(levelNum) && levelNum >= 0) {
+      query.level = levelNum
+    }
+
+    // Scope to a category: its whole subtree by default (`path` holds every
+    // ancestor), so picking "Motors" shows all 12k descendants rather than only
+    // its 7 direct children. `directOnly` narrows that to one level down.
+    if (filterParentId && filterParentId !== 'all' && Types.ObjectId.isValid(String(filterParentId))) {
+      const parentObjId = new Types.ObjectId(String(filterParentId))
+      query.$and = [
+        directOnly === 'true' || directOnly === true
+          ? { parentId: parentObjId }
+          : { $or: [{ path: parentObjId }, { parentId: parentObjId }, { _id: parentObjId }] },
+      ]
     }
     // Fetch all matching categories (no skip/limit yet) so we can build full tree order
     const categories = await Category.find(query).lean()
@@ -1263,14 +1303,37 @@ router.get('/categories', adminMiddleware, async (req, res) => {
     // Filter to root categories only, if requested
     if (rootOnly === 'true' || rootOnly === true) {
       ordered = ordered.filter((c) => !c.parentId)
-    } else if (filterParentId && filterParentId !== 'all' && filterParentId !== '') {
-      // Filter by parent category if requested
-      ordered = ordered.filter((c) => c.parentId && String(c.parentId) === String(filterParentId))
     }
+    // The parent/status/level filters are applied in the DB query above, so the
+    // count and the page slice always agree.
     const total = ordered.length
     const categoriesPage = ordered.slice(skip, skip + limitNum)
+
+    // Ancestor names for the rows on this page. Search promotes deep matches to
+    // the top of a flat list, so without this a result like "Camry" gives no clue
+    // which brand it belongs to. Only the page's ancestors are looked up.
+    const ancestorIds = new Set()
+    categoriesPage.forEach((c) => {
+      ;(c.path || []).forEach((id) => id && ancestorIds.add(String(id)))
+      if (c.parentId) ancestorIds.add(String(c.parentId))
+    })
+    let nameById = new Map()
+    if (ancestorIds.size) {
+      const ancestors = await Category.find({
+        _id: { $in: [...ancestorIds].filter((id) => Types.ObjectId.isValid(id)).map((id) => new Types.ObjectId(id)) },
+      })
+        .select('name')
+        .lean()
+      nameById = new Map(ancestors.map((a) => [String(a._id), a.name]))
+    }
+    const withPathNames = categoriesPage.map((c) => ({
+      ...c,
+      parentName: c.parentId ? nameById.get(String(c.parentId)) || null : null,
+      pathNames: (c.path || []).map((id) => nameById.get(String(id))).filter(Boolean),
+    }))
+
     res.json({
-      categories: categoriesPage,
+      categories: withPathNames,
       page: Number(page),
       limit: limitNum,
       total,

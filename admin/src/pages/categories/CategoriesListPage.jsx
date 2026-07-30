@@ -22,7 +22,10 @@ function CategoriesListPage() {
   const [search, setSearch] = useState('')
   const [filterParentId, setFilterParentId] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
+  const [levelFilter, setLevelFilter] = useState('')
   const [rootOnly, setRootOnly] = useState(false)
+  // Every category (not just roots) so any level can be filtered on.
+  const [allCategoryOptions, setAllCategoryOptions] = useState([])
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
 
@@ -50,12 +53,18 @@ function CategoriesListPage() {
     }
   }, [])
 
+  /**
+   * Every filter is applied server-side, so `total` and the page slice always
+   * agree. (Status used to be filtered client-side over the fetched page only,
+   * which left the count wrong and later pages unfiltered.)
+   */
   const fetchCategories = async (
     p = 1,
-    searchTerm = '',
+    searchTerm = search,
     parentId = filterParentId,
     status = statusFilter,
-    rootOnlyFilter = rootOnly
+    rootOnlyFilter = rootOnly,
+    level = levelFilter
   ) => {
     try {
       setLoading(true)
@@ -64,15 +73,14 @@ function CategoriesListPage() {
       if (rootOnlyFilter) {
         params.rootOnly = 'true'
       } else if (parentId) {
+        // Whole subtree, so picking a root shows everything beneath it.
         params.parentId = parentId
       }
+      if (status && status !== 'all') params.status = status
+      if (level !== '' && level !== null && level !== undefined) params.level = level
       const res = await adminService.getAdminCategories(params)
       const data = res.data || {}
-      let items = data.categories || data.data || []
-      if (status && status !== 'all') {
-        const wantActive = status === 'active'
-        items = items.filter((c) => (c.isActive !== false) === wantActive)
-      }
+      const items = data.categories || data.data || []
       const totalCount = Number(data.total ?? data.meta?.total ?? items.length)
       setCategories(items)
       setTotal(totalCount)
@@ -85,10 +93,46 @@ function CategoriesListPage() {
     }
   }
 
+  // Flatten the nested tree into indented options so any level can be picked as
+  // the filter scope — previously only root categories were offered.
+  const fetchAllCategoryOptions = useCallback(async () => {
+    try {
+      const res = await adminService.getAdminCategoryNestedForFilters()
+      const roots = res.data?.categories || []
+      const flat = []
+      // `hint` carries the ancestor trail so a typed match ("Corolla") can be
+      // told apart from the same name under a different parent.
+      const walk = (nodes, depth, trail) => {
+        nodes.forEach((n) => {
+          flat.push({ value: n.id || n._id, label: `${'\u00a0\u00a0'.repeat(depth)}${depth ? '└ ' : ''}${n.name}`, hint: trail.join(' › ') })
+          const kids = n.subcategories || n.children || []
+          if (kids.length) walk(kids, depth + 1, [...trail, n.name])
+        })
+      }
+      walk(roots, 0, [])
+      setAllCategoryOptions(flat)
+    } catch {
+      setAllCategoryOptions([])
+    }
+  }, [])
+
   useEffect(() => {
     fetchCategories(1)
     fetchParentRoots()
+    fetchAllCategoryOptions()
   }, [])
+
+  // Debounced search-as-you-type; the form's submit still works for Enter.
+  const didMountRef = useRef(false)
+  useEffect(() => {
+    if (!didMountRef.current) {
+      didMountRef.current = true
+      return undefined
+    }
+    const id = setTimeout(() => fetchCategories(1, search), 350)
+    return () => clearTimeout(id)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search])
 
   useEffect(() => {
     let cancelled = false
@@ -128,27 +172,43 @@ function CategoriesListPage() {
 
   const handleSearch = (e) => {
     e.preventDefault()
-    fetchCategories(1, search, filterParentId, statusFilter, rootOnly)
+    fetchCategories(1, search, filterParentId, statusFilter, rootOnly, levelFilter)
   }
 
   const clearFilters = () => {
     setSearch('')
     setFilterParentId('')
     setStatusFilter('all')
+    setLevelFilter('')
     setRootOnly(false)
-    fetchCategories(1, '', '', 'all', false)
+    fetchCategories(1, '', '', 'all', false, '')
   }
 
   const handleRootOnlyChange = (e) => {
     const value = e.target.value === 'root'
     setRootOnly(value)
+    const nextParent = value ? '' : filterParentId
     if (value) setFilterParentId('')
+    fetchCategories(1, search, nextParent, statusFilter, value, levelFilter)
   }
 
   const handleParentFilterChange = (e) => {
     const value = e.target.value
     setFilterParentId(value)
     if (value) setRootOnly(false)
+    fetchCategories(1, search, value, statusFilter, value ? false : rootOnly, levelFilter)
+  }
+
+  const handleStatusFilterChange = (e) => {
+    const value = e.target.value
+    setStatusFilter(value)
+    fetchCategories(1, search, filterParentId, value, rootOnly, levelFilter)
+  }
+
+  const handleLevelFilterChange = (e) => {
+    const value = e.target.value
+    setLevelFilter(value)
+    fetchCategories(1, search, filterParentId, statusFilter, rootOnly, value)
   }
 
   const handleToggleStatus = async (row) => {
@@ -157,7 +217,7 @@ function CategoriesListPage() {
       setLoading(true)
       await adminService.updateAdminCategory(row._id, { isActive: !isActive })
       toast.success(isActive ? 'Category set to inactive' : 'Category set to active')
-      await fetchCategories(page, search, filterParentId, statusFilter)
+      await fetchCategories(page, search, filterParentId, statusFilter, rootOnly, levelFilter)
     } catch (err) {
       toast.error(err.response?.data?.message || 'Failed to update status')
     } finally {
@@ -172,7 +232,7 @@ function CategoriesListPage() {
       await adminService.deleteAdminCategory(row._id)
       toast.success('Deleted')
       await Promise.all([
-        fetchCategories(page, search, filterParentId, statusFilter),
+        fetchCategories(page, search, filterParentId, statusFilter, rootOnly, levelFilter),
         fetchParentRoots(),
       ])
     } catch (err) {
@@ -211,7 +271,7 @@ function CategoriesListPage() {
           : d.message || 'Categories imported successfully'
       toast.success(summary)
       await Promise.all([
-        fetchCategories(1, search, filterParentId, statusFilter),
+        fetchCategories(1, search, filterParentId, statusFilter, rootOnly, levelFilter),
         fetchParentRoots(),
       ])
     } catch (err) {
@@ -225,11 +285,22 @@ function CategoriesListPage() {
     }
   }
 
-  const hasActiveFilters = search || filterParentId || statusFilter !== 'all' || rootOnly
+  const hasActiveFilters = search || filterParentId || statusFilter !== 'all' || rootOnly || levelFilter !== ''
 
   const parentFilterOptions = [
-    { value: '', label: 'All parent categories' },
-    ...importRootCategoryOptions.map((c) => ({ value: c._id, label: c.name })),
+    { value: '', label: 'All categories' },
+    ...(allCategoryOptions.length
+      ? allCategoryOptions
+      : importRootCategoryOptions.map((c) => ({ value: c._id, label: c.name }))),
+  ]
+
+  const levelFilterOptions = [
+    { value: '', label: 'All levels' },
+    { value: '0', label: 'Level 0 — Root' },
+    { value: '1', label: 'Level 1' },
+    { value: '2', label: 'Level 2' },
+    { value: '3', label: 'Level 3' },
+    { value: '4', label: 'Level 4' },
   ]
 
   return (
@@ -310,11 +381,13 @@ function CategoriesListPage() {
         filters={[
           {
             key: 'parent',
-            type: 'select',
-            label: 'Parent category',
+            type: 'searchable-select',
+            label: 'Within category',
             value: filterParentId,
             onChange: handleParentFilterChange,
             options: parentFilterOptions,
+            placeholder: 'All categories',
+            searchPlaceholder: 'Type a category name…',
           },
           {
             key: 'rootOnly',
@@ -332,12 +405,20 @@ function CategoriesListPage() {
             type: 'select',
             label: 'Status',
             value: statusFilter,
-            onChange: (e) => setStatusFilter(e.target.value),
+            onChange: handleStatusFilterChange,
             options: [
               { value: 'all', label: 'All statuses' },
               { value: 'active', label: 'Active' },
               { value: 'inactive', label: 'Inactive' },
             ],
+          },
+          {
+            key: 'level',
+            type: 'select',
+            label: 'Depth',
+            value: levelFilter,
+            onChange: handleLevelFilterChange,
+            options: levelFilterOptions,
           },
         ]}
         actions={
@@ -368,11 +449,17 @@ function CategoriesListPage() {
                     ? r.path.length
                     : 0
               const indent = level > 0 ? '│   '.repeat(Math.max(0, level - 1)) + '└─ ' : ''
+              const trail = Array.isArray(r.pathNames) ? r.pathNames.join(' › ') : ''
               return (
-                <span className="font-medium text-gray-900 whitespace-pre dark:text-slate-100">
-                  <span className="text-gray-400">{indent}</span>
-                  {r.name}
-                </span>
+                <div className="min-w-0">
+                  <span className="font-medium text-gray-900 whitespace-pre dark:text-slate-100">
+                    <span className="text-gray-400">{indent}</span>
+                    {r.name}
+                  </span>
+                  {trail ? (
+                    <div className="mt-0.5 truncate text-xs text-gray-400 dark:text-slate-500">{trail}</div>
+                  ) : null}
+                </div>
               )
             },
           },
@@ -380,14 +467,36 @@ function CategoriesListPage() {
             key: 'parent',
             title: 'Parent',
             render: (r) => {
+              if (!r.parentId) return 'Root'
+              // parentName comes from the API; falling back to the page only works
+              // when the parent happens to be on it.
+              if (r.parentName) return r.parentName
               const p = categories.find((c) => String(c._id) === String(r.parentId))
-              return p ? p.name : 'Root'
+              return p ? p.name : '—'
             },
           },
           {
             key: 'order',
             title: 'Order',
             render: (r) => r.xOrder ?? 0,
+          },
+          {
+            key: 'isChild',
+            title: 'Is Child',
+            render: (r) => {
+              // The list is lean-queried, so rows never backfilled show no value
+              // at all — worth distinguishing from an explicit 0.
+              if (r.isChild === undefined || r.isChild === null) {
+                return <span className="text-slate-400 dark:text-slate-500">—</span>
+              }
+              const isChild = Number(r.isChild) === 1
+              return (
+                <StatusBadge
+                  status={isChild ? 'active' : 'inactive'}
+                  label={isChild ? 'Yes (1)' : 'No (0)'}
+                />
+              )
+            },
           },
           {
             key: 'status',
@@ -413,7 +522,8 @@ function CategoriesListPage() {
           page,
           limit: LIMIT,
           total,
-          onPageChange: (p) => fetchCategories(p, search, filterParentId, statusFilter),
+          onPageChange: (p) =>
+            fetchCategories(p, search, filterParentId, statusFilter, rootOnly, levelFilter),
         }}
         onEdit={canEdit ? (row) => navigate(`${LIST_PATH}/${row._id}/edit`) : undefined}
         onDelete={canDelete ? handleDelete : undefined}

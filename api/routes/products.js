@@ -171,7 +171,11 @@ function savedExists (productId, storage) {
  */
 function withSaved (product, storage) {
   if (!product) return { saved: false }
-  const item = typeof product.toObject === 'function' ? product.toObject() : { ...product }
+  // flattenMaps is essential: `additionalFields` is a schema Map, and a bare
+  // toObject() leaves it as a JS Map. JSON.stringify turns a Map into `{}`, so every
+  // dynamic field value silently vanished on the way to the client — which is what
+  // left the edit form's admin-configured fields blank.
+  const item = typeof product.toObject === 'function' ? product.toObject({ flattenMaps: true }) : { ...product }
   item.saved = savedExists(product._id, storage)
   return item
 }

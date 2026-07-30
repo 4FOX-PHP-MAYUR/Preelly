@@ -17,6 +17,29 @@ import { FIELD_KIND, getFieldKind } from './dynamicFormFieldKind'
  * @param {Array<{ fieldName: string, fieldTitle?: string, fieldType?: string }>} fields
  * @returns {Record<string, string|string[]>} values keyed by fieldName
  */
+/**
+ * GET /api/products/:id serves `features` as a display presentation — same
+ * `{ title, values }` shape, but `values` holds human labels ("4 Wheel Drive")
+ * instead of the Filter ids the form stores. Restoring those labels verbatim gave
+ * the right selection COUNT while no pill matched, since a pill compares against
+ * its option's id. Translate anything that isn't already an option value.
+ */
+function toOptionValues(field, values) {
+  const options = Array.isArray(field.options) ? field.options : []
+  if (!options.length) return values.map(String)
+
+  const valueSet = new Set(options.map((o) => String(o.value)))
+  const idByLabel = new Map(
+    options.map((o) => [String(o.label ?? '').trim().toLowerCase(), String(o.value)]),
+  )
+
+  return values.map((raw) => {
+    const value = String(raw)
+    if (valueSet.has(value)) return value
+    return idByLabel.get(value.trim().toLowerCase()) || value
+  })
+}
+
 export function restoreProductDynamicFormValues(product, fields) {
   if (!product || !Array.isArray(fields) || !fields.length) return {}
 
@@ -65,7 +88,7 @@ export function restoreProductDynamicFormValues(product, fields) {
       const title = String(field.fieldTitle || field.fieldName).trim().toLowerCase()
       const grouped = featuresByTitle.get(title)
       if (Array.isArray(grouped) && grouped.length) {
-        restored[fieldName] = grouped.map(String)
+        restored[fieldName] = toOptionValues(field, grouped)
         return
       }
     }

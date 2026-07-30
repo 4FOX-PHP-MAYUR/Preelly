@@ -16,6 +16,8 @@ import {
 } from '../components/Categories/categoryBrowseShared'
 import AdvancedFilterPanel from '../components/Listing/AdvancedFilterPanel'
 import PriceFilterPanel from '../components/Listing/PriceFilterPanel'
+import RegionFilterPanel from '../components/Listing/RegionFilterPanel'
+import KilometresFilterPanel from '../components/Listing/KilometresFilterPanel'
 import ListingToolbar from '../components/Listing/ListingToolbar'
 import ProductGrid from '../components/Listing/ProductGrid'
 import { useCategoryApiTree } from '../hooks/useCategoryApiTree'
@@ -37,6 +39,21 @@ import {
   buildCategorySearchSavePayload,
   persistSavedSearch,
 } from '@shared/utils/persistSavedSearch'
+
+/**
+ * Toolbar quick-filter label → its own side panel. One map drives both opening the
+ * panel and highlighting the chip, so the two can't disagree. A label that isn't
+ * here has no dedicated panel and is only editable inside the Advanced panel.
+ */
+const QUICK_FILTER_PANELS = {
+  Price: 'price',
+  Region: 'region',
+  Kilometres: 'kilometres',
+}
+
+const QUICK_FILTER_LABEL_BY_PANEL = Object.fromEntries(
+  Object.entries(QUICK_FILTER_PANELS).map(([label, panel]) => [panel, label]),
+)
 
 function CategoryProductsPage() {
   const { categoryId, subcategoryId: routeSubcategoryId } = useParams()
@@ -315,6 +332,11 @@ function CategoryProductsPage() {
     const minP = q.get('minPrice')
     const maxP = q.get('maxPrice')
     setPriceRangeSelect(minP || maxP ? `${minP || 0}-${maxP || ''}` : '')
+    // Mileage is URL-backed like price, so the Kilometres panel's selection
+    // survives a refresh instead of silently resetting.
+    const minK = q.get('minMileage')
+    const maxK = q.get('maxMileage')
+    setKms(minK || maxK ? `${minK || 0}-${maxK || ''}` : '')
   }, [categoryId, location.search, routeSubcategoryId])
 
   // Silent My Search upsert for listing views reached from /search (no UI change).
@@ -702,15 +724,10 @@ function CategoryProductsPage() {
 
   const handleQuickFilter = useCallback(
     (label) => {
-      const typeMap = {
-        Price: 'price',
-        Region: 'region',
-        Kilometres: 'kilometres',
-        Years: 'years',
-      }
-      const type = typeMap[label]
+      const type = QUICK_FILTER_PANELS[label]
+      // Labels without a dedicated panel (Years) stay in the Advanced panel only.
       if (!type) return
-      if (type === 'price') toggleRightPanel('price')
+      toggleRightPanel(type)
     },
     [toggleRightPanel],
   )
@@ -875,6 +892,27 @@ function CategoryProductsPage() {
   const handleKmsRangeChange = (lo, hi) => {
     setKms(`${lo}-${hi}`)
   }
+
+  // Applying from the dedicated panels commits immediately (and to the URL, so a
+  // refresh keeps the filter) rather than waiting for the Advanced panel's Apply.
+  const handleKmsApply = useCallback(
+    (lo, hi) => {
+      const isFullRange = lo <= kmsBounds.min && hi >= kmsBounds.max
+      setKms(isFullRange ? '' : `${lo}-${hi}`)
+      patchUrl({
+        minMileage: isFullRange ? '' : lo,
+        maxMileage: isFullRange ? '' : hi,
+      })
+      fetchWithFilters(1, false)
+    },
+    [fetchWithFilters, patchUrl, kmsBounds.min, kmsBounds.max],
+  )
+
+  const handleRegionApply = useCallback(() => {
+    // Chips already patched the URL as they were toggled; this just refetches.
+    fetchWithFilters(1, false)
+    handleCloseRightPanel()
+  }, [fetchWithFilters, handleCloseRightPanel])
 
   const handleCategorySelect = (id) => {
     const next = String(id || '').trim()
@@ -1070,6 +1108,31 @@ function CategoryProductsPage() {
         valueMax={priceMinMax.max}
         onApply={handlePriceApply}
       />
+    ) : panelType === 'region' ? (
+      <RegionFilterPanel
+        className="h-full"
+        showClose
+        closing={rightPanelClosing}
+        onClose={handleCloseRightPanel}
+        categoryPath={categoryPath.length ? categoryPath : [categoryId]}
+        selectedFilterIds={selectedFilterIds}
+        filterValues={filterValues}
+        onFilterIdsChange={handleFilterIdsChange}
+        onFilterValuesChange={handleFilterValuesChange}
+        onApply={handleRegionApply}
+      />
+    ) : panelType === 'kilometres' ? (
+      <KilometresFilterPanel
+        className="h-full"
+        showClose
+        closing={rightPanelClosing}
+        onClose={handleCloseRightPanel}
+        min={kmsBounds.min}
+        max={kmsBounds.max}
+        valueMin={kmsMin}
+        valueMax={kmsMax}
+        onApply={handleKmsApply}
+      />
     ) : (
       <AdvancedFilterPanel
         className="h-full"
@@ -1106,7 +1169,7 @@ function CategoryProductsPage() {
               onQuickFilterClick={handleQuickFilter}
               quickFilters={quickFilterLabels}
               filtersOpen={panelType === 'advanced' && rightPanelOpen}
-              activeQuickFilter={panelType === 'price' && rightPanelOpen ? 'Price' : null}
+              activeQuickFilter={rightPanelOpen ? QUICK_FILTER_LABEL_BY_PANEL[panelType] || null : null}
             />
           </div>
 

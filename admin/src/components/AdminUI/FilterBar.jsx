@@ -2,6 +2,7 @@ import React from 'react'
 import { Search } from 'lucide-react'
 import Input from './Input'
 import Select from './Select'
+import SearchableSelect from './SearchableSelect'
 import Button from './Button'
 
 function FilterBar({
@@ -24,7 +25,7 @@ function FilterBar({
         {onSearchChange !== undefined && (
           <div className="w-full min-w-0">
             <Input
-              icon={Search}
+              iconRight={Search}
               value={searchValue}
               onChange={(e) => onSearchChange(e.target.value)}
               placeholder={searchPlaceholder}
@@ -37,7 +38,16 @@ function FilterBar({
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-3">
             {filters.map((filter) => (
               <div key={filter.key || filter.label} className="w-full min-w-0">
-                {filter.type === 'select' ? (
+                {filter.type === 'searchable-select' ? (
+                  <SearchableSelect
+                    label={filter.label}
+                    value={filter.value}
+                    onChange={filter.onChange}
+                    options={filter.options}
+                    placeholder={filter.placeholder}
+                    searchPlaceholder={filter.searchPlaceholder}
+                  />
+                ) : filter.type === 'select' ? (
                   <Select
                     label={filter.label}
                     value={filter.value}

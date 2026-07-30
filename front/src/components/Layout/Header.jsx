@@ -110,6 +110,11 @@ function Header() {
   const isMyProfile = location.pathname === '/my-profile'
   const isUserProfilePage = /^\/user\/[^/]+$/.test(location.pathname)
   const isCartPage = location.pathname === '/cart'
+  // The payment result screens (both the post-ad and cart variants render
+  // PaymentResultPage) bring their own MarketplaceTopBar — this header would sit
+  // on top of it as a second one.
+  const isPaymentResultPage =
+    location.pathname.startsWith('/post-ad/payment') || location.pathname.startsWith('/cart/payment')
   const isPostAdFlow =
     location.pathname === '/post-ad' ||
     location.pathname === '/post-ad/select-package' ||
@@ -129,7 +134,7 @@ function Header() {
 
   return (
     <>
-      {isAuthRoute || isHomePage || isSearchPage || isCategoryProductsPage || isProductDetailPage || isChatPage || isDashboardSettings || isMyProfile || isUserProfilePage || isCartPage ? null : isPostAdFlow ? (
+      {isAuthRoute || isHomePage || isSearchPage || isCategoryProductsPage || isProductDetailPage || isChatPage || isDashboardSettings || isMyProfile || isUserProfilePage || isCartPage || isPaymentResultPage ? null : isPostAdFlow ? (
         <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
           <div className="w-full px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
             {/* Tagline is part of the logo artwork — do not add a text one. */}

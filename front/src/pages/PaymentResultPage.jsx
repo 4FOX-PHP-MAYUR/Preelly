@@ -4,12 +4,22 @@ import { CheckCircle2, XCircle, Loader2, Download } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { paymentService } from '@shared/services/api'
 import MarketplaceTopBar from '../components/Layout/MarketplaceTopBar'
+import MarketplaceLogoBlock from '../components/Layout/MarketplaceLogoBlock'
+import { MARKETPLACE_LOGO_CELL } from '../components/Layout/marketplaceLayoutStyles'
 
-// Same top header as the homepage (logo + search + nav), wrapping the page content.
+// Same top header as the homepage: logo block on the left, marketplace top bar
+// (search + nav + user) filling the rest. MarketplaceTopBar only carries a logo in
+// its mobile block, so on desktop the logo has to come from this grid cell.
 function PageWithHeader({ children }) {
+  const navigate = useNavigate()
   return (
     <div className="min-h-screen bg-white">
-      <MarketplaceTopBar topBarColSpan="" className="border-b border-slate-200" />
+      <div className="grid grid-cols-1 lg:grid-cols-[270px_minmax(0,1fr)]">
+        <div className={MARKETPLACE_LOGO_CELL}>
+          <MarketplaceLogoBlock />
+        </div>
+        <MarketplaceTopBar topBarColSpan="" onToggleMobileMenu={() => navigate('/')} />
+      </div>
       {children}
     </div>
   )

@@ -13,6 +13,7 @@ const {
   getFfmpegInstallHint,
   resolveScreenshotSize,
 } = require('../services/ffmpegConfig')
+const { trimVideo } = require('../services/videoTrimService')
 
 configureFfmpeg()
 const ffmpegAvailable = isFfmpegAvailable()
@@ -59,6 +60,60 @@ const upload = multer({
 // OpenAI Whisper caps uploads at 25MB. Videos are larger than that, so we send only
 // the extracted audio track — which is a fraction of the size.
 const WHISPER_MAX_BYTES = 25 * 1024 * 1024
+
+const safeUnlinkFile = (p) => {
+  try {
+    if (p && fs.existsSync(p)) fs.unlinkSync(p)
+  } catch {
+    // best-effort
+  }
+}
+
+const UPLOADS_ROOT = path.resolve(__dirname, '../uploads')
+
+/**
+ * Resolve a client-supplied pointer to a video ALREADY stored on this server.
+ *
+ * Editing an existing listing holds the video as a `{ url }` reference, not a File,
+ * so there is nothing to upload — and re-uploading tens of MB just to read one frame
+ * would be wasteful anyway. Callers send `videoPath` instead.
+ *
+ * Only paths under /uploads are addressable, and anything that resolves outside that
+ * directory is rejected, so a crafted `../../` value can't reach the filesystem.
+ * Returns null when the pointer is unusable; callers must never delete this path —
+ * it is the listing's own file, not a disposable temp upload.
+ */
+function resolveStoredVideoPath(raw) {
+  if (!raw) return null
+  let value = String(raw).trim()
+  if (!value) return null
+
+  if (/^https?:\/\//i.test(value)) {
+    try {
+      value = new URL(value).pathname
+    } catch {
+      return null
+    }
+  }
+
+  try {
+    value = decodeURIComponent(value)
+  } catch {
+    return null
+  }
+
+  const relative = value.replace(/^\/+/, '')
+  if (!relative.startsWith('uploads/')) return null
+
+  const resolved = path.resolve(UPLOADS_ROOT, relative.slice('uploads/'.length))
+  if (resolved !== UPLOADS_ROOT && !resolved.startsWith(UPLOADS_ROOT + path.sep)) return null
+
+  try {
+    return fs.existsSync(resolved) && fs.statSync(resolved).isFile() ? resolved : null
+  } catch {
+    return null
+  }
+}
 
 /** Extracts a small mono 16kHz mp3 audio track from a video, for transcription. */
 function extractAudioForTranscription(videoPath) {
@@ -777,18 +832,24 @@ router.post('/transcribe', authMiddleware, upload.single('video'), async (req, r
 // @desc    Extract a screenshot from uploaded video at specific timestamp
 // @access  Private
 router.post('/screenshot', authMiddleware, upload.single('video'), async (req, res) => {
+  // Only a freshly uploaded temp file may ever be deleted — `videoPath` can also be
+  // the listing's own stored video, which must survive.
+  const uploadedPath = req.file?.path || null
   let videoPath = null
-  
+
   try {
     if (!requireFfmpeg(res)) {
+      safeUnlinkFile(uploadedPath)
       return
     }
 
-    if (!req.file) {
+    // A new ad posts the File; editing an existing ad points at the stored copy.
+    videoPath = uploadedPath || resolveStoredVideoPath(req.body?.videoPath || req.body?.videoUrl)
+
+    if (!videoPath) {
       return res.status(400).json({ message: 'No video file uploaded' })
     }
 
-    videoPath = req.file.path
     const { timestamp } = req.body
     
     if (!timestamp && timestamp !== 0) {
@@ -840,11 +901,10 @@ router.post('/screenshot', authMiddleware, upload.single('video'), async (req, r
     })
   } catch (error) {
     console.error('Error extracting screenshot:', error)
-    
-    // Clean up temporary video file on error
-    if (videoPath && fs.existsSync(videoPath)) {
-      fs.unlinkSync(videoPath)
-    }
+
+    // Only the temp upload — deleting a resolved stored path would destroy the
+    // listing's video.
+    safeUnlinkFile(uploadedPath)
 
     const isFfmpegMissing =
       !ffmpegAvailable ||
@@ -857,6 +917,81 @@ router.post('/screenshot', authMiddleware, upload.single('video'), async (req, r
       hint: isFfmpegMissing ? getFfmpegInstallHint() : undefined,
       error: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     })
+  }
+})
+
+// POST /api/video/trim — cut a video down to [startTime, endTime].
+// Used by the post-ad "Crop video" screen. The response points at the trimmed file,
+// which the client re-uploads with the listing.
+router.post('/trim', authMiddleware, upload.single('video'), async (req, res) => {
+  // Same rule as /screenshot: only the temp upload is ever deleted.
+  const uploadedPath = req.file?.path || null
+
+  try {
+    if (!requireFfmpeg(res)) {
+      safeUnlinkFile(uploadedPath)
+      return
+    }
+
+    const inputPath = uploadedPath || resolveStoredVideoPath(req.body?.videoPath || req.body?.videoUrl)
+    if (!inputPath) {
+      return res.status(400).json({ message: 'No video file uploaded' })
+    }
+
+    const { startTime, endTime } = req.body
+    if (startTime === undefined || endTime === undefined) {
+      return res.status(400).json({ message: 'startTime and endTime are required' })
+    }
+
+    const trimmedDir = path.join(__dirname, '../uploads/videos/trimmed')
+    const result = await trimVideo({
+      inputPath,
+      startTime,
+      endTime,
+      outputDir: trimmedDir,
+    })
+
+    console.log(
+      `[video] trimmed ${result.startTime.toFixed(1)}s-${result.endTime.toFixed(1)}s via ${result.mode}: ` +
+        `${(result.sourceSize / 1024 / 1024).toFixed(2)}MB -> ${(result.size / 1024 / 1024).toFixed(2)}MB`,
+    )
+
+    res.json({
+      success: true,
+      video: {
+        url: `/uploads/videos/trimmed/${result.name}`,
+        name: result.name,
+        size: result.size,
+        originalSize: result.sourceSize,
+        duration: result.duration,
+        originalDuration: result.sourceDuration,
+        startTime: result.startTime,
+        endTime: result.endTime,
+        // 'copy' means no re-encode happened, so the trimmed clip is bit-for-bit
+        // identical to the matching stretch of the source.
+        mode: result.mode,
+        smallerThanSource: result.smallerThanSource,
+      },
+    })
+  } catch (error) {
+    console.error('Error trimming video:', error)
+
+    const status =
+      error.code === 'INVALID_RANGE' || error.code === 'TOO_SHORT' || error.code === 'UNREADABLE'
+        ? 400
+        : error.code === 'FFMPEG_MISSING'
+          ? 503
+          : 500
+
+    res.status(status).json({
+      message: error.message || 'Error trimming video',
+      hint: error.code === 'FFMPEG_MISSING' ? getFfmpegInstallHint() : undefined,
+      error: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    })
+  } finally {
+    // The trimmed copy is what the client keeps; the uploaded source is disposable.
+    // A stored path is never touched — that's the listing's own video.
+    safeUnlinkFile(uploadedPath)
   }
 })
 

@@ -58,8 +58,21 @@ export function restoreProductFilterSelections(product, setValue) {
   })
 }
 
+/**
+ * LocationMapPicker only treats a pin as saved when latitude/longitude read back as
+ * numbers, and some listings store them as strings.
+ */
+function toCoordinate(value) {
+  if (value === null || value === undefined || value === '') return undefined
+  const n = Number(value)
+  return Number.isFinite(n) ? n : undefined
+}
+
 /** Build react-hook-form values from an existing product (edit mode). */
 export function buildPostAdFormValuesFromProduct(product, user) {
+  const latitude = toCoordinate(product.latitude)
+  const longitude = toCoordinate(product.longitude)
+
   const formValues = {
     title: product.title || '',
     description: product.description || '',
@@ -71,6 +84,11 @@ export function buildPostAdFormValuesFromProduct(product, user) {
     country: product.country || '',
     city: product.city || '',
     area: product.area || product.location || '',
+    // The map picker writes exactly these three keys, so edit has to read them back
+    // or the pin is lost and the summary map reads "No location picked yet".
+    ...(latitude !== undefined ? { latitude } : {}),
+    ...(longitude !== undefined ? { longitude } : {}),
+    locationAddress: product.locationAddress || product.location || '',
     brand: product.brand || '',
     condition: product.condition ? toFilterArray(product.condition) : [],
     material: product.material || '',

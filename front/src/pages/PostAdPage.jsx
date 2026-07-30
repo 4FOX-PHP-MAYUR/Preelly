@@ -292,6 +292,10 @@ function Step2Subcategory({
 }
 
 const POST_AD_BLUE = '#2563eb'
+
+// Listings require at least this much video; the upload middleware rejects shorter
+// clips, so both the upload check and the trim editor hold to the same floor.
+const MIN_VIDEO_SECONDS = 15
 const POST_AD_NAVY = '#1e3a5f'
 const POST_AD_INPUT =
   'w-full rounded-xl border-0 bg-[#eef0f6] px-4 py-3.5 text-[15px] text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563eb]/25 focus:outline-none'
@@ -448,9 +452,9 @@ function Step3VideoUpload({
             videoEl.preload = 'metadata'
             videoEl.onloadedmetadata = () => {
               const duration = Number(videoEl.duration || 0)
-              if (duration < 15) {
+              if (duration < MIN_VIDEO_SECONDS) {
                 durationValid = false
-                toast.error('Video must be at least 15 seconds long.')
+                toast.error(`Video must be at least ${MIN_VIDEO_SECONDS} seconds long.`)
                 setVideoFile(null)
                 setValue('video', null)
               }
@@ -1397,29 +1401,27 @@ function Step3VideoUpload({
 // replacing whichever photo tile's pencil icon was clicked.
 const CROP_THUMBNAIL_COUNT = 10
 
-function PhotoCropFromVideo({ videoFile, onBack, onCrop }) {
-  const videoRef = useRef(null)
+/**
+ * Generate a filmstrip of evenly-spaced frames client-side (canvas capture from a
+ * hidden video element) so the user can tap a frame instead of dragging a bare
+ * slider. Yields no thumbnails if the canvas capture is blocked (tainted canvas on
+ * a cross-origin video source) — callers fall back to a plain slider.
+ *
+ * Render the returned ref as a hidden <video src={videoSrc} muted playsInline />.
+ */
+function useVideoFilmstrip(videoSrc, duration) {
   const thumbVideoRef = useRef(null)
-  const videoSrc = useVideoPreviewSrc(videoFile)
-  const [duration, setDuration] = useState(0)
-  const [currentTime, setCurrentTime] = useState(0)
-  const [isPlaying, setIsPlaying] = useState(false)
-  const [isCropping, setIsCropping] = useState(false)
   const [thumbnails, setThumbnails] = useState([])
-  const [thumbsLoading, setThumbsLoading] = useState(false)
+  const [loading, setLoading] = useState(false)
 
-  // Generate a filmstrip of evenly-spaced frames client-side (canvas capture from a
-  // hidden video element) so the user can tap a frame instead of dragging a bare slider.
-  // Falls back to the plain slider below if the canvas capture is blocked (tainted
-  // canvas on a cross-origin video source).
   useEffect(() => {
-    if (!duration || !videoSrc) return
+    if (!duration || !videoSrc) return undefined
     let cancelled = false
 
     const generateThumbnails = async () => {
       const video = thumbVideoRef.current
       if (!video) return
-      setThumbsLoading(true)
+      setLoading(true)
       const canvas = document.createElement('canvas')
       const ctx = canvas.getContext('2d')
       const results = []
@@ -1452,7 +1454,7 @@ function PhotoCropFromVideo({ videoFile, onBack, onCrop }) {
 
       if (!cancelled) {
         setThumbnails(results)
-        setThumbsLoading(false)
+        setLoading(false)
       }
     }
 
@@ -1461,6 +1463,18 @@ function PhotoCropFromVideo({ videoFile, onBack, onCrop }) {
       cancelled = true
     }
   }, [duration, videoSrc])
+
+  return { thumbVideoRef, thumbnails, loading }
+}
+
+function PhotoCropFromVideo({ videoFile, onBack, onCrop, onEditVideo }) {
+  const videoRef = useRef(null)
+  const videoSrc = useVideoPreviewSrc(videoFile)
+  const [duration, setDuration] = useState(0)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [isCropping, setIsCropping] = useState(false)
+  const { thumbVideoRef, thumbnails, loading: thumbsLoading } = useVideoFilmstrip(videoSrc, duration)
 
   const seekTo = (time) => {
     setCurrentTime(time)
@@ -1614,6 +1628,11 @@ function PhotoCropFromVideo({ videoFile, onBack, onCrop }) {
         <button type="button" onClick={onBack} className="btn-secondary flex-1">
           Back
         </button>
+        {onEditVideo && (
+          <button type="button" onClick={onEditVideo} disabled={isCropping} className="btn-secondary flex-1">
+            Edit Video
+          </button>
+        )}
         <button
           type="button"
           onClick={handleCropThis}
@@ -1628,23 +1647,271 @@ function PhotoCropFromVideo({ videoFile, onBack, onCrop }) {
   )
 }
 
-function Step4TitlePhotosReview({ register, errors, imageFiles, setImageFiles, videoFile, breadcrumbItems = [], onBack, onNext }) {
+const formatClock = (seconds) => {
+  const total = Math.max(0, Math.round(Number(seconds) || 0))
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
+
+const formatMb = (bytes) => `${(Math.max(0, Number(bytes) || 0) / (1024 * 1024)).toFixed(1)}MB`
+
+// Sub-view of Step4TitlePhotosReview: pick a start/end point and trim the clip to
+// that span. The server does the actual cut (stream copy where possible, so the
+// picture is bit-for-bit identical to the source), and the shorter result replaces
+// the video for the rest of the flow.
+function VideoCropEditor({ videoFile, onBack, onCropped }) {
+  const videoRef = useRef(null)
+  const videoSrc = useVideoPreviewSrc(videoFile)
+  const [duration, setDuration] = useState(0)
+  const [start, setStart] = useState(0)
+  const [end, setEnd] = useState(0)
+  const [currentTime, setCurrentTime] = useState(0)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  const { thumbVideoRef, thumbnails, loading: thumbsLoading } = useVideoFilmstrip(videoSrc, duration)
+
+  // Start with the whole clip selected.
+  useEffect(() => {
+    if (!duration) return
+    setStart(0)
+    setEnd(duration)
+  }, [duration])
+
+  const selectedSeconds = Math.max(0, end - start)
+  // Trimming below the platform minimum would only fail later, at upload.
+  const canTrim = duration >= MIN_VIDEO_SECONDS && selectedSeconds >= MIN_VIDEO_SECONDS - 0.05
+  const isWholeClip = duration > 0 && start <= 0.05 && end >= duration - 0.05
+
+  const seekTo = (time) => {
+    const clamped = Math.min(Math.max(time, start), end || duration)
+    setCurrentTime(clamped)
+    if (videoRef.current) {
+      videoRef.current.pause()
+      videoRef.current.currentTime = clamped
+    }
+  }
+
+  const handleStartChange = (e) => {
+    // Keep the handles at least the minimum apart, pushing the other one along.
+    const value = Math.min(Number(e.target.value), Math.max(0, end - MIN_VIDEO_SECONDS))
+    setStart(value)
+    if (currentTime < value) seekTo(value)
+  }
+
+  const handleEndChange = (e) => {
+    const value = Math.max(Number(e.target.value), Math.min(duration, start + MIN_VIDEO_SECONDS))
+    setEnd(value)
+    if (currentTime > value) seekTo(value)
+  }
+
+  const togglePlay = () => {
+    const video = videoRef.current
+    if (!video) return
+    if (video.paused) {
+      // Always preview the selection, not the parts being cut away.
+      if (video.currentTime < start || video.currentTime >= end) video.currentTime = start
+      video.play()
+    } else {
+      video.pause()
+    }
+  }
+
+  const handleTimeUpdate = (e) => {
+    const video = e.currentTarget
+    if (end && video.currentTime >= end) {
+      video.pause()
+      video.currentTime = start
+      setCurrentTime(start)
+      return
+    }
+    setCurrentTime(video.currentTime)
+  }
+
+  const handleCrop = async () => {
+    setIsSaving(true)
+    try {
+      toast.loading('Trimming video...', { id: 'crop-video' })
+      // videoService handles both shapes: a File is uploaded, an existing `{ url }`
+      // is sent as a path so the server reuses the copy it already has.
+      const res = await videoService.trimVideo(videoFile, start, end)
+      const { video } = res.data
+      // The rest of the flow submits the video as a file upload, so pull the
+      // trimmed result back down as a File rather than keeping just its URL.
+      const trimmedRes = await fetch(getMediaUrl(video.url))
+      if (!trimmedRes.ok) throw new Error('Trimmed video could not be downloaded')
+      const blob = await trimmedRes.blob()
+      const trimmedFile = new File([blob], video.name || 'trimmed-video.mp4', {
+        type: blob.type || 'video/mp4',
+      })
+      onCropped(trimmedFile)
+      toast.success(`Video trimmed to ${formatClock(video.duration)} — ${formatMb(video.size)}, was ${formatMb(video.originalSize)}`, {
+        id: 'crop-video',
+      })
+    } catch (error) {
+      toast.error(error?.response?.data?.message || error.message || 'Failed to trim video', { id: 'crop-video' })
+    } finally {
+      setIsSaving(false)
+    }
+  }
+
+  return (
+    <div className="post-ad-step-shell-narrow pb-32 sm:pb-36">
+      <div className="text-center mb-5 sm:mb-6 w-full">
+        <h2 className="post-ad-step-heading">Crop video</h2>
+        <p className="post-ad-step-subheading">Move the sliders to trim the video</p>
+      </div>
+
+      <div className="relative w-full aspect-[4/3] rounded-2xl overflow-hidden bg-black">
+        <video
+          ref={videoRef}
+          src={videoSrc}
+          className="w-full h-full object-cover"
+          onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+          onTimeUpdate={handleTimeUpdate}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => setIsPlaying(false)}
+          playsInline
+        />
+        <button
+          type="button"
+          onClick={togglePlay}
+          disabled={!duration}
+          className="absolute inset-0 flex items-center justify-center"
+          aria-label={isPlaying ? 'Pause video' : 'Play video'}
+        >
+          {!isPlaying && (
+            <span className="flex h-14 w-14 items-center justify-center rounded-full bg-black/50 text-white">
+              <Play className="h-6 w-6 translate-x-0.5" fill="currentColor" />
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* Hidden video used only to extract frame thumbnails for the filmstrip below. */}
+      <video ref={thumbVideoRef} src={videoSrc} className="hidden" playsInline muted />
+
+      {thumbnails.length > 0 ? (
+        <div className="w-full mt-4 flex gap-1 overflow-x-auto pb-1">
+          {thumbnails.map((thumb) => {
+            const inRange = thumb.time >= start - 0.01 && thumb.time <= end + 0.01
+            return (
+              <button
+                key={thumb.time}
+                type="button"
+                onClick={() => seekTo(thumb.time)}
+                className={`relative shrink-0 h-16 w-16 overflow-hidden rounded-lg border-2 transition-all sm:h-20 sm:w-20 ${
+                  inRange ? 'border-blue-600 opacity-100' : 'border-transparent opacity-30'
+                }`}
+                aria-label={`Seek to ${formatClock(thumb.time)}`}
+              >
+                <img src={thumb.dataUrl} alt="" className="w-full h-full object-cover" />
+              </button>
+            )
+          })}
+        </div>
+      ) : thumbsLoading ? (
+        <div className="w-full mt-4 flex gap-1 overflow-x-auto pb-1">
+          {Array.from({ length: CROP_THUMBNAIL_COUNT }).map((_, i) => (
+            <div key={i} className="h-16 w-16 shrink-0 animate-pulse rounded-lg bg-gray-200 sm:h-20 sm:w-20" />
+          ))}
+        </div>
+      ) : null}
+
+      <div className="w-full mt-5 space-y-4">
+        <div className="flex items-center justify-between text-sm">
+          <span className="font-medium text-gray-900">
+            {formatClock(start)} – {formatClock(end)}
+          </span>
+          <span className={selectedSeconds < MIN_VIDEO_SECONDS ? 'text-red-600' : 'text-gray-500'}>
+            {formatClock(selectedSeconds)} selected
+          </span>
+        </div>
+
+        <label className="block">
+          <span className="text-xs font-medium text-gray-500">Start</span>
+          <input
+            type="range"
+            min={0}
+            max={duration || 0}
+            step={0.1}
+            value={start}
+            onChange={handleStartChange}
+            disabled={!duration}
+            className="w-full accent-blue-600"
+          />
+        </label>
+
+        <label className="block">
+          <span className="text-xs font-medium text-gray-500">End</span>
+          <input
+            type="range"
+            min={0}
+            max={duration || 0}
+            step={0.1}
+            value={end}
+            onChange={handleEndChange}
+            disabled={!duration}
+            className="w-full accent-blue-600"
+          />
+        </label>
+
+        {duration > 0 && duration < MIN_VIDEO_SECONDS ? (
+          <p className="text-xs text-gray-500">
+            This clip is only {formatClock(duration)} long, so it cannot be trimmed any further.
+          </p>
+        ) : isWholeClip ? (
+          <p className="text-xs text-gray-500">
+            Move a slider to choose a shorter section — the whole clip is selected right now.
+          </p>
+        ) : (
+          <p className="text-xs text-gray-500">
+            Listings need at least {MIN_VIDEO_SECONDS} seconds of video, so the selection cannot be shorter than that.
+          </p>
+        )}
+      </div>
+
+      <div className="w-full flex gap-3 mt-6">
+        <button type="button" onClick={onBack} disabled={isSaving} className="btn-secondary flex-1">
+          Back
+        </button>
+        <button
+          type="button"
+          onClick={handleCrop}
+          disabled={isSaving || !duration || !canTrim || isWholeClip}
+          className="flex-1 rounded-xl px-8 py-3.5 text-[15px] font-semibold text-white transition disabled:opacity-50"
+          style={{ backgroundColor: POST_AD_BLUE }}
+        >
+          {isSaving ? 'Cropping...' : 'Crop'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Photos accepted by the post-ad flow: images only, 10MB each. Shared so the
+ * Title & Photos step and the Summary's photo editor can't drift apart.
+ */
+function filterValidPhotoFiles(fileList) {
+  return Array.from(fileList || []).filter((file) => {
+    if (!file.type.startsWith('image/')) return false
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error(`${file.name} exceeds 10MB limit`)
+      return false
+    }
+    return true
+  })
+}
+
+function Step4TitlePhotosReview({ register, errors, imageFiles, setImageFiles, videoFile, setVideoFile, setValue, breadcrumbItems = [], onBack, onNext }) {
   const [isAutoCapturing, setIsAutoCapturing] = useState(false)
   const [editingIndex, setEditingIndex] = useState(null)
   // Index of the thumbnail pending delete confirmation (null = modal closed).
   const [deleteIndex, setDeleteIndex] = useState(null)
+  const [isEditingVideo, setIsEditingVideo] = useState(false)
 
   const handleAddPhotos = (e) => {
-    const files = Array.from(e.target.files)
-    const newImageFiles = files.filter((file) => {
-      if (!file.type.startsWith('image/')) return false
-      if (file.size > 10 * 1024 * 1024) {
-        toast.error(`${file.name} exceeds 10MB limit`)
-        return false
-      }
-      return true
-    })
-    setImageFiles((prev) => [...prev, ...newImageFiles])
+    setImageFiles((prev) => [...prev, ...filterValidPhotoFiles(e.target.files)])
   }
 
   const handleScreenGrab = async () => {
@@ -1681,11 +1948,37 @@ function Step4TitlePhotosReview({ register, errors, imageFiles, setImageFiles, v
     setImageFiles((prev) => prev.filter((_, i) => i !== index))
   }
 
+  if (isEditingVideo) {
+    return (
+      <VideoCropEditor
+        videoFile={videoFile}
+        // Back out of the editor and land on this step's own screen.
+        onBack={() => setIsEditingVideo(false)}
+        onCropped={(trimmedFile) => {
+          setVideoFile?.(trimmedFile)
+          // Keep the form's own copy in step, or submit would upload the original.
+          setValue?.('video', trimmedFile)
+          setIsEditingVideo(false)
+        }}
+      />
+    )
+  }
+
   if (editingIndex !== null) {
     return (
       <PhotoCropFromVideo
         videoFile={videoFile}
         onBack={() => setEditingIndex(null)}
+        // "Edit Video" swaps the photo cropper for the video trimmer. Hidden when
+        // this step has no way to replace the video.
+        onEditVideo={
+          setVideoFile
+            ? () => {
+                setEditingIndex(null)
+                setIsEditingVideo(true)
+              }
+            : undefined
+        }
         onCrop={(newImage) => {
           setImageFiles((prev) => prev.map((f, i) => (i === editingIndex ? newImage : f)))
           setEditingIndex(null)
@@ -2034,6 +2327,7 @@ function Step10Review({
   formData,
   dynamicFormCategoryId,
   imageFiles,
+  setImageFiles,
   videoFile,
   categories,
   selectedCategory,
@@ -2082,9 +2376,26 @@ function Step10Review({
   const [descriptionExpanded, setDescriptionExpanded] = useState(false)
   const [activeImageIndex, setActiveImageIndex] = useState(0)
   const [requestPreview, setRequestPreview] = useState(null)
+  const [editingPhotos, setEditingPhotos] = useState(false)
+  // Thumbnail index being re-cropped from the video (null = not cropping).
+  const [photoCropIndex, setPhotoCropIndex] = useState(null)
+  // Thumbnail index pending delete confirmation (null = modal closed).
+  const [photoDeleteIndex, setPhotoDeleteIndex] = useState(null)
 
   const totalImages = imageFiles.length
   const activeImage = imageFiles[Math.min(activeImageIndex, Math.max(totalImages - 1, 0))]
+  const canEditPhotos = typeof setImageFiles === 'function'
+
+  const addPhotos = (e) => {
+    setImageFiles((prev) => [...prev, ...filterValidPhotoFiles(e.target.files)])
+    e.target.value = ''
+  }
+
+  const removePhoto = (index) => {
+    setImageFiles((prev) => prev.filter((_, i) => i !== index))
+    // Keep the carousel on a real photo after the list shrinks.
+    setActiveImageIndex((i) => Math.max(0, Math.min(i, imageFiles.length - 2)))
+  }
 
   const locationSummary =
     watch('locationAddress') || [formData.area, formData.city, formData.country].filter(Boolean).join(', ')
@@ -2189,8 +2500,32 @@ function Step10Review({
   const descriptionPreview =
     description.length > 180 && !descriptionExpanded ? `${description.slice(0, 180)}...` : description
 
+  // Re-cropping a thumbnail takes over the screen, same as it does on the Title &
+  // Photos step, then drops back into the Summary.
+  if (photoCropIndex !== null) {
+    return (
+      <PhotoCropFromVideo
+        videoFile={videoFile}
+        onBack={() => setPhotoCropIndex(null)}
+        onCrop={(newImage) => {
+          setImageFiles((prev) => prev.map((f, i) => (i === photoCropIndex ? newImage : f)))
+          setPhotoCropIndex(null)
+        }}
+      />
+    )
+  }
+
   return (
     <div className="post-ad-step-shell-wide pb-32 sm:pb-36">
+      <DeleteConfirmModal
+        open={photoDeleteIndex !== null}
+        onConfirm={() => {
+          removePhoto(photoDeleteIndex)
+          setPhotoDeleteIndex(null)
+        }}
+        onCancel={() => setPhotoDeleteIndex(null)}
+      />
+
       {onBack && (
         <button
           type="button"
@@ -2246,6 +2581,18 @@ function Step10Review({
           </>
         )}
 
+        {canEditPhotos && (
+          <button
+            type="button"
+            onClick={() => setEditingPhotos((v) => !v)}
+            className="absolute top-3 left-3 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-3 py-1.5 text-xs font-semibold shadow hover:bg-white"
+            style={{ color: POST_AD_BLUE }}
+          >
+            <Pencil className="h-3 w-3" />
+            {editingPhotos ? 'Done' : 'Edit Photos'}
+          </button>
+        )}
+
         <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
           <span
             className="inline-flex items-center rounded-full px-3 py-1.5 text-sm font-semibold text-white"
@@ -2258,6 +2605,83 @@ function Step10Review({
           </span>
         </div>
       </div>
+
+      {canEditPhotos && editingPhotos && (
+        <div className="w-full bg-white rounded-xl border border-gray-200 p-5 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-gray-900">Photos ({totalImages})</h3>
+            <button
+              type="button"
+              onClick={() => setEditingPhotos(false)}
+              className="text-sm font-medium hover:underline"
+              style={{ color: POST_AD_BLUE }}
+            >
+              Done
+            </button>
+          </div>
+
+          {totalImages ? (
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {imageFiles.map((file, index) => (
+                <div
+                  key={index}
+                  className={`relative aspect-square overflow-hidden rounded-lg border-2 ${
+                    index === activeImageIndex ? 'border-blue-600' : 'border-transparent'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setActiveImageIndex(index)}
+                    className="block h-full w-full"
+                    aria-label={`Show photo ${index + 1} above`}
+                  >
+                    <ImagePreviewImg file={file} alt={`Photo ${index + 1}`} className="h-full w-full object-cover" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (!videoFile) {
+                        toast.error('No video available to crop from')
+                        return
+                      }
+                      setPhotoCropIndex(index)
+                    }}
+                    className="absolute bottom-1 left-1 rounded-full bg-gray-900/70 p-1.5 text-white hover:bg-gray-900"
+                    aria-label={`Re-crop photo ${index + 1} from the video`}
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPhotoDeleteIndex(index)}
+                    className="absolute top-1 right-1 rounded-full bg-gray-900/70 p-1.5 text-white hover:bg-red-600"
+                    aria-label={`Delete photo ${index + 1}`}
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-400">No photos yet.</p>
+          )}
+
+          <label className="btn-secondary mt-4 flex cursor-pointer items-center justify-center gap-2">
+            <Upload className="h-4 w-4" />
+            Add Photos
+            <input
+              type="file"
+              className="hidden"
+              accept="image/jpeg,image/png,image/jpg"
+              multiple
+              onChange={addPhotos}
+            />
+          </label>
+          <p className="mt-2 text-xs text-gray-500">
+            Tap a photo to preview it above, the pencil to re-crop it from your video, or the cross to remove it.
+          </p>
+        </div>
+      )}
 
       <div className="w-full mb-4">
         <h3 className="text-xl font-bold text-gray-900">{formData.title}</h3>
@@ -2889,8 +3313,21 @@ function PostAdPage() {
         if (product.category) {
           const categoryId = product.category._id || product.category
           setSelectedCategory(categoryId)
+          // `product.category` is the ROOT, so resolving the path from it returns
+          // just [root] — which blanked `subcategory` below and left the dynamic
+          // form pointed at a category with no configured fields (empty Car
+          // Overview / Features). The leaf lives at the end of categoryPath, or in
+          // `subcategory` for older listings saved without a path.
+          const productPathIds = (Array.isArray(product.categoryPath) ? product.categoryPath : [])
+            .map((c) => c?._id || c)
+            .filter(Boolean)
+          const deepestCategoryId =
+            productPathIds[productPathIds.length - 1] ||
+            product.subcategory?._id ||
+            product.subcategory ||
+            categoryId
           try {
-            const pathRes = await categoryService.getCategoryPath(categoryId)
+            const pathRes = await categoryService.getCategoryPath(deepestCategoryId)
             const pathCategories = pathRes.data?.categories || []
             if (pathCategories.length > 0) {
               const MAX_CATEGORY_LEVEL_INDEX = 2
@@ -2899,9 +3336,19 @@ function PostAdPage() {
 
               setSelectedPath(truncatedPathCategories.map((c) => c._id))
               const level1SubcategoryId = truncatedPathCategories[1]?._id || ''
-              const level2ChildCategoryId = truncatedPathCategories[2]?._id || ''
-              setValue('subcategory', level1SubcategoryId)
-              setValue('childCategory', level2ChildCategoryId)
+              // `childCategory` is the scope the dynamic form is fetched against, and a
+              // listing can sit DEEPER than the 3-level picker cap (Gadgets > Mobile &
+              // Tablets > Mobile Phones > Apple). Truncating it to level 2 fetched a
+              // sibling scope whose filter options don't contain the saved ids, so every
+              // dropdown fell back to printing the raw ObjectId and no <option> matched
+              // on edit. The picker path stays capped; only this scope follows the real
+              // depth — matching the interactive path, which also uses the deepest pick.
+              const deepestChildCategoryId =
+                pathCategories.length >= 3 ? pathCategories[pathCategories.length - 1]?._id || '' : ''
+              // Only overwrite what the path actually resolved — an empty value here
+              // would discard the ids already restored from the product itself.
+              if (level1SubcategoryId) setValue('subcategory', level1SubcategoryId)
+              if (deepestChildCategoryId) setValue('childCategory', deepestChildCategoryId)
               const rootsRes = await categoryService.getCategoryChildren(null)
               const roots = Array.isArray(rootsRes.data) ? rootsRes.data : []
               const opts = [roots]
@@ -3575,7 +4022,21 @@ function PostAdPage() {
       }
       
       // Build the full category hierarchy path (IDs + names)
-      const pathIds = selectedPath.filter(Boolean)
+      const pickedPathIds = selectedPath.filter(Boolean).map(String)
+      // `selectedPath` is capped at 3 levels for the picker, but a listing can be
+      // deeper (Gadgets > Mobile & Tablets > Mobile Phones > Apple). Submitting the
+      // capped path would overwrite the stored one and drop the deepest level — the
+      // very scope the saved filter values belong to — so the next edit would show
+      // raw ids again. Keep the product's own path when the category wasn't changed.
+      const savedPathIds = (editedProductRef.current?.categoryPath || [])
+        .map((c) => c?._id || c)
+        .filter(Boolean)
+        .map(String)
+      const keepSavedPath =
+        isEditMode &&
+        savedPathIds.length > pickedPathIds.length &&
+        pickedPathIds.every((id, i) => savedPathIds[i] === id)
+      const pathIds = keepSavedPath ? savedPathIds : pickedPathIds
       const pathNames = selectedPath
         .map((id, i) => levelOptions[i]?.find((c) => String(c._id) === String(id))?.name)
         .filter(Boolean)
@@ -3994,6 +4455,8 @@ function PostAdPage() {
             imageFiles={imageFiles}
             setImageFiles={setImageFiles}
             videoFile={videoFile}
+            setVideoFile={setVideoFile}
+            setValue={setValue}
             breadcrumbItems={categoryPathNames}
             onBack={prevStep}
             onNext={nextStep}
@@ -4021,6 +4484,7 @@ function PostAdPage() {
             formData={watch()}
             dynamicFormCategoryId={dynamicFormCategoryId}
             imageFiles={imageFiles}
+            setImageFiles={setImageFiles}
             videoFile={videoFile}
             categories={flatCategoriesForSteps.length ? flatCategoriesForSteps : categories}
             selectedCategory={selectedCategoryForSteps || selectedCategory}

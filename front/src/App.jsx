@@ -18,6 +18,7 @@ const ProductDetailPage = lazy(() => import('@shared/pages/ProductDetailPage'))
 const PostAdPage = lazy(() => import('./pages/PostAdPage'))
 const SelectPackagePage = lazy(() => import('./pages/SelectPackagePage'))
 const StorageCheckoutPage = lazy(() => import('./pages/StorageCheckoutPage'))
+const CartCheckoutPage = lazy(() => import('./pages/CartCheckoutPage'))
 const PaymentResultPage = lazy(() => import('./pages/PaymentResultPage'))
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const DashboardLayout = lazy(() => import('./components/Dashboard/DashboardLayout'))
@@ -159,6 +160,14 @@ function App() {
             element={
               <PrivateRoute>
                 <ChatInboxPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/cart"
+            element={
+              <PrivateRoute>
+                <CartCheckoutPage />
               </PrivateRoute>
             }
           />

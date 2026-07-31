@@ -1,10 +1,14 @@
+import { assetUrl } from '@shared/utils/constants'
+
 function BrandLogo({
   className = '',
   alt = 'Preelly',
   variant = 'light',
 }) {
-  const blueLogoSrc = '/images/preelly-logo-blue.png'
-  const whiteLogoSrc = '/images/preelly-logo-white-transparent.png'
+  // Resolved against the site URL so the logo also loads in the admin app, which Vite
+  // serves under the /admin/ base — a root-relative path 404s there.
+  const blueLogoSrc = assetUrl('/images/preelly-logo-blue.png')
+  const whiteLogoSrc = assetUrl('/images/preelly-logo-white-transparent.png')
 
   if (variant === 'auto') {
     return (

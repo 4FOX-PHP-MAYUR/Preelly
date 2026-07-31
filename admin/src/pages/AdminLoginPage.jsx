@@ -11,7 +11,7 @@ import {
   selectUser,
 } from '@shared/store/slices/authSlice'
 import toast from 'react-hot-toast'
-import { Mail, Shield, LogIn, ArrowLeft } from 'lucide-react'
+import { Mail, LogIn, ArrowLeft } from 'lucide-react'
 import Button from '../components/AdminUI/Button'
 import Input from '../components/AdminUI/Input'
 import Panel from '../components/AdminUI/Panel'
@@ -101,9 +101,6 @@ function AdminLoginPage() {
         <div className="text-center">
           <BrandLogo variant="light" className="h-10 w-auto mx-auto mb-6 dark:hidden" />
           <BrandLogo variant="dark" className="h-10 w-auto mx-auto mb-6 hidden dark:block" />
-          <div className="inline-flex h-14 w-14 rounded-2xl bg-primary-100 dark:bg-primary-900/40 items-center justify-center mb-4">
-            <Shield className="h-7 w-7 text-primary-600 dark:text-primary-400" />
-          </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">Admin Console</h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-2">
             Sign in with your admin email. We will send you a one-time code.

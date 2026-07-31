@@ -32,6 +32,17 @@ export const ADMIN_PANEL_URL = /\/admin\/?$/.test(ADMIN_URL)
   ? ADMIN_URL.replace(/\/?$/, '/')
   : `${ADMIN_URL.replace(/\/$/, '')}/admin/`
 
+// Public base URL this app is served from — used to resolve bundled assets in
+// public/images. VITE_SITE_URL from .env wins; otherwise the app's own Vite base is
+// used, which is '/' for the front app and '/admin/' for the admin app. Without this,
+// a root-relative "/images/x.png" 404s inside admin, whose base is /admin/.
+export const SITE_URL =
+  import.meta.env.VITE_SITE_URL || import.meta.env.BASE_URL || '/'
+
+/** public/ asset path → URL that resolves under this app's base. */
+export const assetUrl = (path) =>
+  `${String(SITE_URL).replace(/\/+$/, '')}/${String(path || '').replace(/^\/+/, '')}`
+
 // Product Conditions
 export const PRODUCT_CONDITIONS = [
   'New',

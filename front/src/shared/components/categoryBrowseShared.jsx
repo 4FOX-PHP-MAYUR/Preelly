@@ -9,7 +9,7 @@ import {
   Sofa,
 } from 'lucide-react'
 import { formatPrice, getCategoryImageUrl, getMediaUrl } from '@shared/utils/helpers'
-import { productHasVideo } from '@shared/utils/videoHelpers'
+import { getListingPosterUrl, productHasVideo } from '@shared/utils/videoHelpers'
 import ListingVideoPreview from '@shared/components/Video/ListingVideoPreview'
 
 export const categoryIconMap = [
@@ -124,7 +124,38 @@ export function CategoryBadge({ category, compact = false }) {
   )
 }
 
-export function ListingMedia({ product, className, showVideoBadge = true, interactive = true }) {
+/**
+ * Still image for a listing — first photo, else the video's generated thumbnail.
+ * Falls back to the neutral placeholder when the file is missing, so a dead upload
+ * path shows an empty tile instead of a broken-image icon with visible alt text.
+ */
+function ListingPosterImage({ product, className }) {
+  const [failed, setFailed] = useState(false)
+  const posterSrc = failed ? null : getListingPosterUrl(product)
+
+  if (!posterSrc) {
+    return <div className={`${className} bg-gradient-to-br from-primary-100 to-slate-100`} />
+  }
+
+  return (
+    <img
+      src={posterSrc}
+      alt={product?.title || 'Listing'}
+      className={className}
+      onError={() => setFailed(true)}
+    />
+  )
+}
+
+/**
+ * @param {boolean} [imageOnly] Render a still image even when the listing has a video —
+ *   for compact rails where an inline player would compete with the page's own media.
+ */
+export function ListingMedia({ product, className, showVideoBadge = true, interactive = true, imageOnly = false }) {
+  if (imageOnly) {
+    return <ListingPosterImage product={product} className={className} />
+  }
+
   if (productHasVideo(product)) {
     return (
       <ListingVideoPreview

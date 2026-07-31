@@ -9,21 +9,26 @@ function ListingToolbar({
   quickFilters = [],
   filtersOpen = false,
   activeQuickFilter = null,
+  // Listings that aren't category-scoped (e.g. Featured) have no filter panel to open,
+  // so they hide the button rather than render a dead one.
+  showAdvanceFilter = true,
 }) {
   return (
     <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-      <button
-        type="button"
-        onClick={onOpenFilters}
-        aria-pressed={filtersOpen}
-        className={`inline-flex items-center rounded-xl px-5 py-2.5 text-sm font-semibold transition ${
-          filtersOpen
-            ? 'bg-brand text-white shadow-sm shadow-brand/25 hover:bg-brand-700'
-            : 'bg-[#F1F3F7] text-[#475569] hover:bg-[#E4E7EF] hover:text-brand'
-        }`}
-      >
-        Advance Filter
-      </button>
+      {showAdvanceFilter ? (
+        <button
+          type="button"
+          onClick={onOpenFilters}
+          aria-pressed={filtersOpen}
+          className={`inline-flex items-center rounded-xl px-5 py-2.5 text-sm font-semibold transition ${
+            filtersOpen
+              ? 'bg-brand text-white shadow-sm shadow-brand/25 hover:bg-brand-700'
+              : 'bg-[#F1F3F7] text-[#475569] hover:bg-[#E4E7EF] hover:text-brand'
+          }`}
+        >
+          Advance Filter
+        </button>
+      ) : null}
 
       {quickFilters.map((label) => {
         const isActive = activeQuickFilter === label

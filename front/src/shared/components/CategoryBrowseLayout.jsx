@@ -14,14 +14,14 @@ import BrandLogo from '@shared/components/BrandLogo'
 import MarketplaceTopBar from '../../components/Layout/MarketplaceTopBar'
 import MarketplaceLogoBlock from '../../components/Layout/MarketplaceLogoBlock'
 import { MARKETPLACE_LOGO_CELL } from '../../components/Layout/marketplaceLayoutStyles'
-import MobileAppPromoCard from '@shared/components/ProductDetail/MobileAppPromoCard'
+import AvailabilityBadge from '@shared/components/ProductDetail/AvailabilityBadge'
 import SidebarCategoryList from '../../components/Layout/SidebarCategoryList'
 import { fetchRootCategories } from '@shared/store/slices/categorySlice'
 import { selectIsAuthenticated, selectUser } from '@shared/store/slices/authSlice'
 import { getMediaUrl, truncate } from '@shared/utils/helpers'
+import { FEATURED_LISTINGS_PATH, FEATURED_LISTINGS_TITLE } from '@shared/utils/featuredListings'
 import { useChat } from '@shared/components/Chat/ChatContext'
 import {
-  buildSpecsLine,
   formatListingPrice,
   formatTimeAgo,
   ListingMedia,
@@ -39,7 +39,6 @@ function CategoryBrowseLayout({
   layoutPreset = 'default',
   filterPanel = null,
   filterPanelOpen = false,
-  showMobileAppPromo = false,
   adminMode = false,
 }) {
   const dispatch = useDispatch()
@@ -359,40 +358,48 @@ function CategoryBrowseLayout({
 
           <div className={showTrending ? 'mt-8' : ''}>
             <div className="mb-4 flex items-center justify-between gap-3">
-              <p className="text-base font-semibold text-slate-900">Featured Listings</p>
+              <p className="text-base font-semibold text-slate-900">{FEATURED_LISTINGS_TITLE}</p>
               <Link
-                to="/reels"
-                className={`text-sm font-semibold transition ${
-                  isListingVariant ? 'text-brand hover:text-brand-700' : 'text-primary-700 hover:text-primary-800'
-                }`}
+                to={FEATURED_LISTINGS_PATH}
+                className="inline-flex items-center gap-0.5 text-sm font-semibold text-slate-900 transition hover:text-brand"
               >
                 See all
+                <ChevronRight className="h-4 w-4" />
               </Link>
             </div>
             <div className="space-y-3">
+              {/* Image-first tiles: title over the top of the photo, availability + price
+                  over the bottom — same treatment as the Similar listings rail. */}
               {featuredItems.map((product) => (
                 <Link
                   key={product._id}
                   to={`/products/${product._id}`}
-                  className="block overflow-hidden rounded-xl border border-[#E8EBF2] bg-white shadow-[0_1px_4px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-md"
+                  className="group relative block aspect-[3/4] overflow-hidden rounded-xl focus:outline-none focus:ring-2 focus:ring-brand/40"
+                  aria-label={`View ${product.title || 'listing'}`}
                 >
-                  <div className="h-32 overflow-hidden">
-                    <ListingMedia product={product} className="h-full w-full object-cover" />
+                  <ListingMedia
+                    product={product}
+                    imageOnly
+                    className="absolute inset-0 h-full w-full object-cover transition duration-300 group-hover:scale-105"
+                  />
+
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-[42%] bg-gradient-to-b from-black/60 via-black/25 to-transparent" />
+                  <div className="pointer-events-none absolute inset-x-0 bottom-0 h-[38%] bg-gradient-to-t from-black/70 via-black/30 to-transparent" />
+
+                  <div className="absolute inset-x-0 top-0 p-3">
+                    <p className="line-clamp-2 text-sm font-semibold leading-snug text-white">
+                      {truncate(product.title || 'Listing', 60)}
+                    </p>
                   </div>
-                  <div className="p-3.5">
-                    <p className="text-sm font-semibold leading-snug text-slate-900">{truncate(product.title || 'Listing', 42)}</p>
-                    <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                      {[buildSpecsLine(product), product.location].filter(Boolean).join(' · ') ||
-                        product.category?.name ||
-                        'Live on marketplace'}
-                    </p>
-                    <p
-                      className={`mt-2.5 text-base font-bold ${
-                        isListingVariant ? 'text-brand' : 'text-primary-700'
-                      }`}
-                    >
+
+                  <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-2 p-3">
+                    <AvailabilityBadge
+                      product={product}
+                      className="!rounded-full !px-2.5 !py-1 !text-[10px] !font-semibold"
+                    />
+                    <span className="inline-flex shrink-0 rounded-full bg-brand px-2.5 py-1 text-[11px] font-bold leading-none text-white">
                       {formatListingPrice(product)}
-                    </p>
+                    </span>
                   </div>
                 </Link>
               ))}
@@ -403,8 +410,6 @@ function CategoryBrowseLayout({
               )}
             </div>
           </div>
-
-          {showMobileAppPromo ? <MobileAppPromoCard className="mt-6" /> : null}
 
           {showMessages && isAuthenticated ? (
             <div className="mt-8">

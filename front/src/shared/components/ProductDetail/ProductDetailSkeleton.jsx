@@ -10,7 +10,7 @@ import {
 
 function ProductDetailSkeleton() {
   return (
-    <CategoryBrowseLayout variant="listing" layoutPreset="detail" showMobileAppPromo showTrending={false} showMessages={false}>
+    <CategoryBrowseLayout variant="listing" layoutPreset="detail" showTrending={false} showMessages={false}>
       <div className={`flex-1 overflow-y-auto bg-[#F7F8FC] ${DETAIL_PAGE_PADDING}`}>
         <div className={`w-full ${DETAIL_SECTION_GAP}`}>
           <div className="relative">

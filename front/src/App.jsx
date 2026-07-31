@@ -14,6 +14,7 @@ const CategoriesPage = lazy(() => import('./pages/CategoriesPage'))
 const SubcategoriesPage = lazy(() => import('./pages/SubcategoriesPage'))
 const HomePage = lazy(() => import('./pages/HomePage'))
 const ReelsFeedPage = lazy(() => import('./pages/ReelsFeedPage'))
+const FeaturedListingsPage = lazy(() => import('./pages/FeaturedListingsPage'))
 const ProductDetailPage = lazy(() => import('@shared/pages/ProductDetailPage'))
 const PostAdPage = lazy(() => import('./pages/PostAdPage'))
 const SelectPackagePage = lazy(() => import('./pages/SelectPackagePage'))
@@ -117,6 +118,7 @@ function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/reels" element={<ReelsFeedPage />} />
+          <Route path="/featured" element={<FeaturedListingsPage />} />
           <Route path="/categories" element={<CategoriesPage />} />
           <Route path="/categories/:categoryId" element={<SubcategoriesPage />} />
           <Route path="/categories/:categoryId/subcategory/:subcategoryId" element={<CategoryProductsPage />} />

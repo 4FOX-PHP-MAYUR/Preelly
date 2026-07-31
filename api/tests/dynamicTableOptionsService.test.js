@@ -9,6 +9,7 @@ const {
   resolveTableConfig,
   validateTableConfig,
   isValidTableName,
+  resolveLegacyCategoryParentId,
 } = require('../core/services/dynamicTableOptionsService')
 
 function testNormalizeColumnName() {
@@ -65,10 +66,35 @@ function testLegacyFiltersDefaults() {
   console.log('✓ legacy filters defaults preserved')
 }
 
+function testLegacyCategoryParentId() {
+  const categoryId = '64b7f1e2c3d4e5f6a7b8c9d0'
+  const childCategoryId = '64b7f1e2c3d4e5f6a7b8c9d1'
+
+  // No childCategoryId → existing categoryId behaviour
+  assert.strictEqual(resolveLegacyCategoryParentId({ categoryId }), categoryId)
+  assert.strictEqual(
+    resolveLegacyCategoryParentId({ categoryId, childCategoryId: null }),
+    categoryId
+  )
+  assert.strictEqual(resolveLegacyCategoryParentId({ categoryId, childCategoryId: '' }), categoryId)
+
+  // childCategoryId present → wins over categoryId
+  assert.strictEqual(
+    resolveLegacyCategoryParentId({ categoryId, childCategoryId }),
+    childCategoryId
+  )
+  assert.strictEqual(
+    resolveLegacyCategoryParentId({ categoryId, childCategoryId: { _id: childCategoryId } }),
+    childCategoryId
+  )
+  console.log('✓ legacy category parent id prefers childCategoryId')
+}
+
 testNormalizeColumnName()
 testResolveEmiratesConfig()
 testValidateEmiratesConfig()
 testRejectInvalidColumn()
 testRejectUnregisteredTable()
 testLegacyFiltersDefaults()
+testLegacyCategoryParentId()
 console.log('\nAll dynamicTableOptionsService tests passed.')

@@ -56,6 +56,15 @@ export function LocationMapPicker({ setValue, watch, onAddressChange, readOnly =
     )
   }, [readOnly])
 
+  // Coordinates written from outside — e.g. an address chosen in the Location
+  // autocomplete — move the pin so the map keeps matching the address shown.
+  useEffect(() => {
+    if (readOnly || !hasSavedPosition) return
+    setPosition((current) =>
+      current.lat === savedLat && current.lng === savedLng ? current : { lat: savedLat, lng: savedLng },
+    )
+  }, [readOnly, hasSavedPosition, savedLat, savedLng])
+
   // Reverse geocode via Google; if that fails (e.g. the Geocoding API isn't
   // enabled on the key), fall back to OpenStreetMap's free Nominatim service.
   const geocodeGoogle = useCallback(

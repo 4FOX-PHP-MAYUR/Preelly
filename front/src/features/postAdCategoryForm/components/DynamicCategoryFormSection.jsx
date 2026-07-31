@@ -58,6 +58,17 @@ export function DynamicCategoryFormSection({ categoryId, onAdvancePastForm, setV
 
   if (!categoryId) return null
 
+  // An address picked from the autocomplete dropdown is the same kind of answer the
+  // map pin produces, so it feeds the same fields — and moves the pin when the
+  // suggestion came with coordinates.
+  const handleAddressSelect = ({ address, coordinates }) => {
+    if (address) setValue('locationAddress', address, { shouldDirty: true })
+    if (coordinates) {
+      setValue('latitude', coordinates.lat, { shouldDirty: true })
+      setValue('longitude', coordinates.lng, { shouldDirty: true })
+    }
+  }
+
   const handleNext = () => {
     setAttempted(true)
     const result = goNext()
@@ -101,6 +112,7 @@ export function DynamicCategoryFormSection({ categoryId, onAdvancePastForm, setV
                 value={values[field.fieldName]}
                 error={attempted ? stepErrors[field.fieldName] : null}
                 onChange={(next) => setFieldValue(field, next)}
+                onAddressSelect={handleAddressSelect}
               />
             </div>
           ))}

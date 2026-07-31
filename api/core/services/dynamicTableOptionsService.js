@@ -343,6 +343,19 @@ async function buildLegacyFilterOptionsMap(filterFields) {
   return filterChildrenMap
 }
 
+/**
+ * Parent category a legacy `categories` dropdown loads its options from.
+ * A field scoped to a child category resolves against that child; otherwise the
+ * original categoryId is used, so existing fields behave exactly as before.
+ */
+function resolveLegacyCategoryParentId(field = {}) {
+  const childCategoryId = field.childCategoryId?._id || field.childCategoryId
+  if (childCategoryId && Types.ObjectId.isValid(String(childCategoryId))) {
+    return String(childCategoryId)
+  }
+  return String(field.categoryId || '')
+}
+
 async function buildLegacyCategoryOptionsMap(categoryFields, { useBridgeLogic = false } = {}) {
   const catOptionsMap = new Map()
 
@@ -401,7 +414,7 @@ async function buildLegacyCategoryOptionsMap(categoryFields, { useBridgeLogic = 
   }
 
   const uniqueCategoryIds = [
-    ...new Set(categoryFields.map((f) => String(f.categoryId)).filter(Boolean)),
+    ...new Set(categoryFields.map((f) => resolveLegacyCategoryParentId(f)).filter(Boolean)),
   ]
 
   const allDescendants = await fetchCategoryDescendants(uniqueCategoryIds)
@@ -422,7 +435,7 @@ function resolveLegacyCategoryOptions(field, catOptionsMap, { useBridgeLogic = f
     const key = `${String(field.categoryId)}_${(field.fieldTitle || '').toLowerCase().trim()}`
     return catOptionsMap.get(key) || []
   }
-  return catOptionsMap.get(String(field.categoryId)) || []
+  return catOptionsMap.get(resolveLegacyCategoryParentId(field)) || []
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -567,4 +580,5 @@ module.exports = {
   isSelectionFieldType,
   clearOptionsCache,
   usesLegacyHandler,
+  resolveLegacyCategoryParentId,
 }

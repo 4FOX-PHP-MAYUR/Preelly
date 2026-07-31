@@ -72,15 +72,12 @@ function CategoryProductsPage() {
   const didFetchRootsRef = useRef(false)
   const [priceRange, setPriceRange] = useState({ min: 0, max: 100000 })
   const [facetCities, setFacetCities] = useState([])
-  const [facetYears, setFacetYears] = useState([])
   const [facetMileageRange, setFacetMileageRange] = useState({ min: 0, max: 0 })
 
   // Location filter (emirates / cities table id)
   const [cityId, setCityId] = useState('')
   const [makeModel, setMakeModel] = useState('')
   const [priceRangeSelect, setPriceRangeSelect] = useState('')
-  const [year, setYear] = useState('')
-  const [yearSel, setYearSel] = useState(null)
   const [kms, setKms] = useState('')
   const [sortBy, setSortBy] = useState('newest')
   const [showMobileFilters, setShowMobileFilters] = useState(false)
@@ -185,14 +182,6 @@ function CategoryProductsPage() {
     return { min: priceRange.min, max: priceRange.max }
   }, [priceRangeSelect, priceRange])
 
-  const yearBounds = useMemo(() => {
-    const nums = (facetYears || [])
-      .map((y) => Number(y?.value))
-      .filter((n) => Number.isFinite(n) && n > 0)
-    if (!nums.length) return { min: 1990, max: new Date().getFullYear() }
-    return { min: Math.min(...nums), max: Math.max(...nums) }
-  }, [facetYears])
-
   const kmsBounds = useMemo(() => {
     const max = Number(facetMileageRange?.max)
     return { min: 0, max: Number.isFinite(max) && max > 0 ? max : 500000 }
@@ -205,8 +194,6 @@ function CategoryProductsPage() {
     return null
   }, [kms])
 
-  const yearMin = yearSel?.min ?? yearBounds.min
-  const yearMax = yearSel?.max ?? yearBounds.max
   const kmsMin = kmsSel?.min ?? kmsBounds.min
   const kmsMax = kmsSel?.max ?? kmsBounds.max
 
@@ -519,13 +506,11 @@ function CategoryProductsPage() {
         if (cancelled) return
         const data = res?.data || {}
         setFacetCities(Array.isArray(data.cities) ? data.cities : [])
-        setFacetYears(Array.isArray(data.years) ? data.years : [])
         setFacetMileageRange(data.mileageRange || { min: 0, max: 0 })
       } catch (e) {
         if (cancelled) return
         console.error('Error fetching facets:', e)
         setFacetCities([])
-        setFacetYears([])
         setFacetMileageRange({ min: 0, max: 0 })
       }
     }
@@ -570,10 +555,6 @@ function CategoryProductsPage() {
         if (!isNaN(minP)) params.minPrice = minP
         if (!isNaN(maxP)) params.maxPrice = maxP
       }
-      if (yearSel && (yearSel.min > yearBounds.min || yearSel.max < yearBounds.max)) {
-        params.minYear = yearSel.min
-        params.maxYear = yearSel.max
-      }
       if (kms) {
         const [minK, maxK] = kms.split('-').map(Number)
         if (!isNaN(minK)) params.minMileage = minK
@@ -599,8 +580,6 @@ function CategoryProductsPage() {
       makeModel,
       keywords,
       priceRangeSelect,
-      yearSel,
-      yearBounds,
       kms,
       condition,
       transmission,
@@ -632,7 +611,6 @@ function CategoryProductsPage() {
     subcategoryFilterId,
     cityId,
     priceRangeSelect,
-    yearSel,
     kms,
     condition,
     transmission,
@@ -725,7 +703,7 @@ function CategoryProductsPage() {
   const handleQuickFilter = useCallback(
     (label) => {
       const type = QUICK_FILTER_PANELS[label]
-      // Labels without a dedicated panel (Years) stay in the Advanced panel only.
+      // Labels without a dedicated panel stay in the Advanced panel only.
       if (!type) return
       toggleRightPanel(type)
     },
@@ -885,10 +863,6 @@ function CategoryProductsPage() {
     setPriceRangeSelect(`${lo}-${hi}`)
   }
 
-  const handleYearRangeChange = (lo, hi) => {
-    setYearSel({ min: lo, max: hi })
-  }
-
   const handleKmsRangeChange = (lo, hi) => {
     setKms(`${lo}-${hi}`)
   }
@@ -934,8 +908,6 @@ function CategoryProductsPage() {
     setBedrooms('')
     setPriceRangeSelect('')
     setCityId('')
-    setYear('')
-    setYearSel(null)
     setKms('')
     setShowMobileFilters(false)
     // Drop every filter from the URL too, so a refresh doesn't bring them back.
@@ -972,7 +944,7 @@ function CategoryProductsPage() {
       : `${filteredProducts.length} listing${filteredProducts.length !== 1 ? 's' : ''} found`
 
   const quickFilterLabels = isVehicleCategory
-    ? ['Region', 'Price', 'Kilometres', 'Years']
+    ? ['Region', 'Price', 'Kilometres']
     : ['Region', 'Price']
 
   const gridColumns = rightPanelVisible ? 2 : 3
@@ -1022,9 +994,6 @@ function CategoryProductsPage() {
       priceRange,
       priceMin: priceMinMax.min,
       priceMax: priceMinMax.max,
-      yearRange: yearBounds,
-      yearMin,
-      yearMax,
       kmsRange: kmsBounds,
       kmsMin,
       kmsMax,
@@ -1057,9 +1026,6 @@ function CategoryProductsPage() {
       emiratesError,
       priceRange,
       priceMinMax,
-      yearBounds,
-      yearMin,
-      yearMax,
       kmsBounds,
       kmsMin,
       kmsMax,
@@ -1082,7 +1048,6 @@ function CategoryProductsPage() {
     onMakeModelChange: setMakeModel,
     onTrimChange: handleTrimChange,
     onPriceRangeChange: handlePriceRangeChange,
-    onYearRangeChange: handleYearRangeChange,
     onKmsRangeChange: handleKmsRangeChange,
     onConditionChange: handleConditionChange,
     onTransmissionChange: handleTransmissionChange,

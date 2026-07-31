@@ -41,10 +41,6 @@ function AdvancedFilterPanel({
   priceMin,
   priceMax,
   onPriceRangeChange,
-  yearRange,
-  yearMin,
-  yearMax,
-  onYearRangeChange,
   kmsRange,
   kmsMin,
   kmsMax,
@@ -178,10 +174,6 @@ function AdvancedFilterPanel({
           priceMin={priceMin}
           priceMax={priceMax}
           onPriceRangeChange={onPriceRangeChange}
-          yearRange={yearRange}
-          yearMin={yearMin}
-          yearMax={yearMax}
-          onYearRangeChange={onYearRangeChange}
           kmsRange={kmsRange}
           kmsMin={kmsMin}
           kmsMax={kmsMax}

@@ -79,10 +79,6 @@ export function VehiclePropertyFilterSections({
   priceMin,
   priceMax,
   onPriceRangeChange,
-  yearRange,
-  yearMin,
-  yearMax,
-  onYearRangeChange,
   kmsRange,
   kmsMin,
   kmsMax,
@@ -157,21 +153,6 @@ export function VehiclePropertyFilterSections({
           onChange={onPriceRangeChange}
         />
       </PanelSection>
-
-      {/* Year */}
-      {showVehicleExtras && yearRange ? (
-        <PanelSection title="Year">
-          <DualRangeSlider
-            min={yearRange?.min ?? 1990}
-            max={yearRange?.max ?? new Date().getFullYear()}
-            valueMin={yearMin}
-            valueMax={yearMax}
-            onChange={onYearRangeChange}
-            prefix=""
-            step={1}
-          />
-        </PanelSection>
-      ) : null}
 
       {/* Kilometres */}
       {showVehicleExtras && kmsRange ? (

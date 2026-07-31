@@ -71,11 +71,9 @@ function CategorySearchPage() {
   const [fuelType, setFuelType] = useState('')
   const [bedrooms, setBedrooms] = useState('')
   const [priceRangeSelect, setPriceRangeSelect] = useState('')
-  const [yearSel, setYearSel] = useState(null)
   const [kms, setKms] = useState('')
   const [priceRange, setPriceRange] = useState({ min: 0, max: 100000 })
   const [facetCities, setFacetCities] = useState([])
-  const [facetYears, setFacetYears] = useState([])
   const [facetMileageRange, setFacetMileageRange] = useState({ min: 0, max: 0 })
 
   const { emirates, loading: citiesLoading, error: citiesError } = useEmirateCities()
@@ -100,14 +98,6 @@ function CategorySearchPage() {
     return { min: priceRange.min, max: priceRange.max }
   }, [priceRangeSelect, priceRange])
 
-  const yearBounds = useMemo(() => {
-    const nums = (facetYears || [])
-      .map((y) => Number(y?.value))
-      .filter((n) => Number.isFinite(n) && n > 0)
-    if (!nums.length) return { min: 1990, max: new Date().getFullYear() }
-    return { min: Math.min(...nums), max: Math.max(...nums) }
-  }, [facetYears])
-
   const kmsBounds = useMemo(() => {
     const max = Number(facetMileageRange?.max)
     return { min: 0, max: Number.isFinite(max) && max > 0 ? max : 500000 }
@@ -120,8 +110,6 @@ function CategorySearchPage() {
     return null
   }, [kms])
 
-  const yearMin = yearSel?.min ?? yearBounds.min
-  const yearMax = yearSel?.max ?? yearBounds.max
   const kmsMin = kmsSel?.min ?? kmsBounds.min
   const kmsMax = kmsSel?.max ?? kmsBounds.max
 
@@ -152,14 +140,12 @@ function CategorySearchPage() {
         if (cancelled) return
         const data = res?.data || {}
         setFacetCities(Array.isArray(data.cities) ? data.cities : [])
-        setFacetYears(Array.isArray(data.years) ? data.years : [])
         setFacetMileageRange(data.mileageRange || { min: 0, max: 0 })
       })
       .catch((e) => {
         if (cancelled) return
         console.error('Error fetching facets:', e)
         setFacetCities([])
-        setFacetYears([])
         setFacetMileageRange({ min: 0, max: 0 })
       })
     return () => {
@@ -177,7 +163,6 @@ function CategorySearchPage() {
     setFuelType('')
     setBedrooms('')
     setPriceRangeSelect('')
-    setYearSel(null)
     setKms('')
   }
 
@@ -227,7 +212,6 @@ function CategorySearchPage() {
   }
 
   const handlePriceRangeChange = (lo, hi) => setPriceRangeSelect(`${lo}-${hi}`)
-  const handleYearRangeChange = (lo, hi) => setYearSel({ min: lo, max: hi })
   const handleKmsRangeChange = (lo, hi) => setKms(`${lo}-${hi}`)
 
   const handleBack = () => {
@@ -264,8 +248,8 @@ function CategorySearchPage() {
 
     // Same URL keys the listing page itself reads on load (cityId, q, condition,
     // transmission, fuelType, bedrooms, minPrice, maxPrice) — so these filters
-    // are already applied the moment the results page opens. Make & Model, Trim,
-    // Year and Kilometres aren't included: the listing page doesn't persist
+    // are already applied the moment the results page opens. Make & Model, Trim
+    // and Kilometres aren't included: the listing page doesn't persist
     // those to its URL either (they're session-only there too), so there is no
     // existing contract to hand them off through.
     const [minP, maxP] = priceRangeSelect ? priceRangeSelect.split('-') : [null, null]
@@ -398,7 +382,7 @@ function CategorySearchPage() {
               </div>
             ) : null}
 
-            {/* Search / Make & Model / Trim / Price / Year / Kilometres /
+            {/* Search / Make & Model / Trim / Price / Kilometres /
                 Transmission / Fuel / Condition / Bedrooms — same sections, same
                 order, same category-type gating as the listing page's panel. */}
             {isComplete ? (
@@ -417,10 +401,6 @@ function CategorySearchPage() {
                 priceMin={priceMinMax.min}
                 priceMax={priceMinMax.max}
                 onPriceRangeChange={handlePriceRangeChange}
-                yearRange={yearBounds}
-                yearMin={yearMin}
-                yearMax={yearMax}
-                onYearRangeChange={handleYearRangeChange}
                 kmsRange={kmsBounds}
                 kmsMin={kmsMin}
                 kmsMax={kmsMax}

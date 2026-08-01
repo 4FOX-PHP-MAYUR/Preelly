@@ -111,6 +111,7 @@ router.get('/products', adminMiddleware, async (req, res) => {
       limit = 20,
       search,
       productAddType,
+      isFeature,
     } = req.query
 
     const query = {}
@@ -118,6 +119,11 @@ router.get('/products', adminMiddleware, async (req, res) => {
     const addType = String(productAddType || '').trim().toLowerCase()
     if (addType === 'web' || addType === 'ios' || addType === 'android') {
       query.productAddType = addType
+    }
+    if (typeof isFeature !== 'undefined') {
+      const isFeatureParam = String(isFeature).trim().toLowerCase()
+      if (['true', '1'].includes(isFeatureParam)) query.isFeature = true
+      else if (['false', '0'].includes(isFeatureParam)) query.isFeature = false
     }
     if (search) {
       query.$text = { $search: search }
@@ -408,6 +414,43 @@ router.put('/products/:id/status', adminMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Invalid product ID' })
     }
     res.status(500).json({ message: 'Error updating product status' })
+  }
+})
+
+// @route   PUT /api/admin/products/:id/feature
+// @desc    Toggle a product's Featured status. This is the only field this
+//          endpoint touches — no other product data can be changed here.
+// @access  Private (Admin only)
+router.put('/products/:id/feature', adminMiddleware, async (req, res) => {
+  try {
+    const { isFeature } = req.body
+
+    if (typeof isFeature !== 'boolean') {
+      return res.status(400).json({ message: 'isFeature must be a boolean' })
+    }
+
+    const product = await Product.findById(req.params.id)
+
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' })
+    }
+
+    product.isFeature = isFeature
+    await product.save()
+
+    await product.populate('category', 'name icon emoji')
+    await product.populate('seller', 'name email avatar')
+
+    res.json({
+      message: `Product ${isFeature ? 'marked as featured' : 'removed from featured'}`,
+      product,
+    })
+  } catch (error) {
+    console.error('Error updating product featured status:', error)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid product ID' })
+    }
+    res.status(500).json({ message: 'Error updating product featured status' })
   }
 })
 

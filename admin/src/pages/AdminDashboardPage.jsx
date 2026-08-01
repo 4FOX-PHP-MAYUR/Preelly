@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   XCircle as XCircleIcon,
   MessageCircle,
+  Star,
 } from 'lucide-react'
 import Card from '../components/AdminUI/Card'
 import AdminPage from '../components/AdminUI/AdminPage'
@@ -86,6 +87,8 @@ function AdminDashboardPage() {
   const [rejectSelectionByCategory, setRejectSelectionByCategory] = useState({})
   const [rejectCustomReason, setRejectCustomReason] = useState('')
   const [confirmAction, setConfirmAction] = useState(null) // { type: 'approve', productId, productTitle }
+  const [featureModal, setFeatureModal] = useState(null) // { productId, productTitle, isFeature }
+  const [savingFeature, setSavingFeature] = useState(false)
 
   const getMemberSinceYear = (u) => {
     const raw = u?.memberSince || u?.createdAt
@@ -164,6 +167,10 @@ function AdminDashboardPage() {
         <div className="min-w-0">
           <p className="text-slate-500 dark:text-slate-400">Posted</p>
           <p className="font-medium text-slate-800 dark:text-slate-200">{formatPostedDate(p.createdAt)}</p>
+        </div>
+        <div className="min-w-0">
+          <p className="text-slate-500 dark:text-slate-400">Featured</p>
+          <p className="font-medium text-slate-800 dark:text-slate-200">{p.isFeature ? 'Yes' : 'No'}</p>
         </div>
       </div>
     </div>
@@ -585,6 +592,33 @@ function AdminDashboardPage() {
     }
   }
 
+  const openFeatureModal = (p) => {
+    setFeatureModal({ productId: p._id, productTitle: p.title, isFeature: Boolean(p.isFeature) })
+  }
+
+  const closeFeatureModal = () => setFeatureModal(null)
+
+  const handleSaveFeature = async () => {
+    if (!featureModal) return
+    const { productId, isFeature } = featureModal
+    try {
+      setSavingFeature(true)
+      await adminService.setProductFeatured(productId, isFeature)
+      toast.success(`Product ${isFeature ? 'marked as featured' : 'removed from featured'}`)
+      closeFeatureModal()
+      if (activeTab === 'dashboard') {
+        fetchData(searchQuery)
+      } else {
+        fetchAllProducts(statusFilter, searchQuery, productPage)
+      }
+    } catch (error) {
+      console.error('Error updating product featured status:', error)
+      toast.error(error.response?.data?.message || 'Failed to update featured status')
+    } finally {
+      setSavingFeature(false)
+    }
+  }
+
   // Columns for the All Products table view (matches the list-page design used across admin).
   const productColumns = [
     {
@@ -612,7 +646,17 @@ function AdminDashboardPage() {
     },
     { key: 'category', title: 'Category', render: (p) => p.category?.name || '—' },
     { key: 'seller', title: 'Seller', render: (p) => p.seller?.name || '—' },
-    { key: 'location', title: 'Location', render: (p) => p.location || '—' },
+    {
+      key: 'location',
+      title: 'Location',
+      wrap: true,
+      cellClassName: 'max-w-[160px]',
+      render: (p) => (
+        <span className="line-clamp-3 break-words" title={p.location || ''}>
+          {p.location || '—'}
+        </span>
+      ),
+    },
     {
       key: 'productAddType',
       title: 'Uploaded by',
@@ -622,7 +666,18 @@ function AdminDashboardPage() {
         </span>
       ),
     },
-    { key: 'status', title: 'Status', render: (p) => <StatusBadge status={p.status} /> },
+    {
+      key: 'status',
+      title: 'Status',
+      render: (p) => (
+        <div className="flex items-center gap-1.5">
+          <StatusBadge status={p.status} />
+          {p.isFeature && (
+            <Star className="h-3.5 w-3.5 text-amber-500 dark:text-amber-400" fill="currentColor" aria-label="Featured" />
+          )}
+        </div>
+      ),
+    },
     { key: 'createdAt', title: 'Posted', render: (p) => formatPostedDate(p.createdAt) },
   ]
 
@@ -690,6 +745,19 @@ function AdminDashboardPage() {
           aria-label={p.status === 'active' ? 'Deactivate product' : 'Activate product'}
         >
           {p.status === 'active' ? <AlertCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
+        </button>
+      )}
+      {canEditListing && (
+        <button
+          type="button"
+          onClick={() => openFeatureModal(p)}
+          className={`admin-table-action ${
+            p.isFeature ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'
+          }`}
+          title={p.isFeature ? 'Featured — edit' : 'Not featured — edit'}
+          aria-label="Edit featured status"
+        >
+          <Star className="h-4 w-4" fill={p.isFeature ? 'currentColor' : 'none'} />
         </button>
       )}
       <button
@@ -1678,6 +1746,47 @@ function AdminDashboardPage() {
         <p className="text-sm text-slate-600 dark:text-slate-300">
           {`Are you sure you want to approve "${confirmAction?.productTitle}"? The listing will go live.`}
         </p>
+      </Modal>
+
+      <Modal
+        open={Boolean(featureModal)}
+        onClose={closeFeatureModal}
+        size="sm"
+        title="Edit Feature"
+        footer={
+          <Modal.Footer
+            onCancel={closeFeatureModal}
+            onConfirm={handleSaveFeature}
+            cancelLabel="Cancel"
+            confirmLabel="Save"
+            loading={savingFeature}
+          />
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-400 dark:text-slate-500">
+              Product
+            </p>
+            <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
+              {featureModal?.productTitle}
+            </p>
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            This screen only controls whether the product is featured. No other product details can be changed here.
+          </p>
+          <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+            <input
+              type="checkbox"
+              checked={Boolean(featureModal?.isFeature)}
+              onChange={(e) =>
+                setFeatureModal((prev) => (prev ? { ...prev, isFeature: e.target.checked } : prev))
+              }
+              className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+            />
+            Featured product
+          </label>
+        </div>
       </Modal>
 
       {rejectModalProductId && (

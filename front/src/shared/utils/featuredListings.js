@@ -1,12 +1,10 @@
 // What "Featured Listings" means, in one place — shared by the detail page's rail and
 // the /featured page it links to, so the two can never show different sets.
 //
-// There is no promotion flag on a listing yet (every Product is adType 'free', and the
-// list endpoint has no featured/adType filter), so featured currently resolves to the
-// newest active listings. When real promotion lands, change the query here and both
-// surfaces follow.
+// Backed by the `isFeature` flag on Product, set only from Admin Panel → Products →
+// Edit Feature. `sortBy` is just the default sort applied on top of that filter.
 
-export const FEATURED_LISTINGS_QUERY = { sortBy: 'newest' }
+export const FEATURED_LISTINGS_QUERY = { isFeature: true, sortBy: 'newest' }
 
 /** How many tiles the detail-page rail shows before "See all". */
 export const FEATURED_RAIL_LIMIT = 6

@@ -142,6 +142,7 @@ export const adminService = {
   rejectProduct: (productId, payload) => api.put(`/admin/products/${productId}/reject`, payload),
   getProductRejectionReasons: () => api.get('/admin/products/rejection-reasons'),
    setProductStatus: (productId, status) => api.put(`/admin/products/${productId}/status`, { status }),
+  setProductFeatured: (productId, isFeature) => api.put(`/admin/products/${productId}/feature`, { isFeature }),
   getStats: () => api.get('/admin/stats'),
   getUsers: (params) => api.get('/admin/users', { params }),
   verifyUser: (userId, isVerified) => api.put(`/admin/users/${userId}/verify`, { isVerified }),

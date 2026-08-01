@@ -537,6 +537,13 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Admin-only toggle (Admin Panel → Products → Edit Feature). Powers the
+    // Featured Products rail on the product details page and its "See all" listing.
+    isFeature: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
     // Soft archive on the same Product row (no separate archive collection).
     // status: 'inactive' remains the public-visibility gate; these fields track metadata.
     isArchived: {
@@ -608,6 +615,7 @@ productSchema.index({ subcategory: 1 })
 productSchema.index({ seller: 1 })
 productSchema.index({ seller: 1, createdAt: -1 })
 productSchema.index({ status: 1, createdAt: -1 })
+productSchema.index({ isFeature: 1, createdAt: -1 })
 productSchema.index({ seller: 1, isArchived: 1, archivedAt: -1 })
 productSchema.index({ createdAt: -1 })
 // Helps membership checks for “liked by user” when querying by likes array.

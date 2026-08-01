@@ -908,6 +908,14 @@ router.get('/', async (req, res) => {
       query.fuelType = new RegExp(fuelType.trim(), 'i')
     }
 
+    // Featured Products filter (Admin Panel → Products → Edit Feature sets this).
+    // Opt-in only: omitting the param keeps every other listing query unaffected.
+    if (typeof req.query.isFeature !== 'undefined') {
+      const isFeatureParam = String(req.query.isFeature).trim().toLowerCase()
+      if (['true', '1'].includes(isFeatureParam)) query.isFeature = true
+      else if (['false', '0'].includes(isFeatureParam)) query.isFeature = false
+    }
+
     // -----------------------------------------------------
     // 🚀 FIXED USER FILTER ISSUE
     // ONLY apply userId filter when explicitly requested

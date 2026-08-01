@@ -51,7 +51,7 @@ function DataTable({
     const showEdit = onEdit && (typeof canEditRow !== 'function' || canEditRow(row))
     const showDelete = onDelete && (typeof canDeleteRow !== 'function' || canDeleteRow(row))
     return (
-      <div className="flex items-center justify-end gap-1">
+      <div className="flex flex-wrap items-center justify-end gap-1 max-w-[108px] ml-auto">
         {showEdit && (
           <button
             type="button"
@@ -153,7 +153,7 @@ function DataTable({
                 </th>
               ))}
               {actions && (
-                <th className="text-right w-[100px]">
+                <th className="text-right w-[140px]">
                   <span className="sr-only">Actions</span>
                 </th>
               )}
@@ -180,7 +180,7 @@ function DataTable({
                   className={onRowClick ? 'cursor-pointer' : ''}
                 >
                   {columns.map((c) => (
-                    <td key={c.key} className={`whitespace-nowrap ${c.cellClassName || ''}`}>
+                    <td key={c.key} className={`${c.wrap ? '' : 'whitespace-nowrap'} ${c.cellClassName || ''}`}>
                       {c.render ? c.render(row) : row[c.key]}
                     </td>
                   ))}

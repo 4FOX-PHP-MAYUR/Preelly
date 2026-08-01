@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useSelector } from 'react-redux'
-import { ChevronLeft, Home, Loader2, Search } from 'lucide-react'
+import { Home, Loader2, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import useCategoryDrilldown, { MAX_CATEGORY_PATH_LENGTH } from '@shared/hooks/useCategoryDrilldown'
 import useCategoryFilterFields from '@shared/hooks/useCategoryFilterFields'
@@ -214,14 +214,6 @@ function CategorySearchPage() {
   const handlePriceRangeChange = (lo, hi) => setPriceRangeSelect(`${lo}-${hi}`)
   const handleKmsRangeChange = (lo, hi) => setKms(`${lo}-${hi}`)
 
-  const handleBack = () => {
-    if (selectedPath.length > 0) {
-      handleEditLevel(selectedPath.length - 1)
-      return
-    }
-    navigate('/')
-  }
-
   const missingRequiredField = useMemo(
     () =>
       fields.find((field) => {
@@ -298,16 +290,7 @@ function CategorySearchPage() {
     >
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-[#F7F8FC]">
         <div className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
-          <div className="mx-auto w-full max-w-[640px] pb-10">
-          <button
-            type="button"
-            onClick={handleBack}
-            className="mb-6 inline-flex items-center gap-1 text-sm font-medium text-gray-500 hover:text-gray-800"
-          >
-            <ChevronLeft className="h-4 w-4" />
-            Back
-          </button>
-
+          <div className="mx-auto w-full max-w-[640px] pb-10 md:max-w-[820px] lg:max-w-[1100px]">
           <div className="mb-8 w-full text-center sm:mb-10">
             <h2 className="post-ad-step-heading">What are you looking for?</h2>
             <p className="post-ad-step-subheading">
@@ -336,7 +319,7 @@ function CategorySearchPage() {
           {/* Category levels and filters render as the same sections the listing
               page's Advanced Filter panel uses: picking a category appends the
               next section below, it never swaps the layout out. */}
-          <div className="rounded-2xl border border-[#E8EBF2] bg-white px-5 py-2">
+          <div className="w-full">
             {/* City — same section, same data source (useEmirateCities + facet
                 counts) as the listing page's Advanced Filter panel. */}
             <CityFilterSection

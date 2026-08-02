@@ -461,6 +461,25 @@ router.get('/notifications', authMiddleware, async (req, res) => {
   }
 })
 
+// @route   GET /api/user/notifications/unread-count
+// @desc    Total unread notifications — badge only, no documents fetched
+// @access  Private
+router.get('/notifications/unread-count', authMiddleware, async (req, res) => {
+  try {
+    // Same blocked-actor rule as the list, so the badge can't count hidden rows.
+    const blockedIds = await getBlockedUserIds(req.user._id)
+    const unread = await Notification.countDocuments({
+      user: req.user._id,
+      isRead: false,
+      ...(blockedIds.length ? { actor: { $nin: blockedIds } } : {}),
+    })
+    res.json({ unread })
+  } catch (error) {
+    console.error('Error counting unread notifications:', error)
+    res.status(500).json({ message: 'Error counting unread notifications' })
+  }
+})
+
 // @route   PATCH /api/user/notifications/read-all
 // @desc    Mark all notifications as read
 // @access  Private

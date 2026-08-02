@@ -241,10 +241,24 @@ function App() {
             <Route path="listings" element={<DashboardListingsPage />} />
             <Route path="wishlist" element={<DashboardWishlistPage />} />
             <Route path="messages" element={<DashboardMessagesPage />} />
-            <Route path="notifications" element={<DashboardNotificationsPage />} />
-            <Route path="notifications/follow-requests" element={<DashboardFollowRequestsPage />} />
           </Route>
           {/* Profile/Settings use their own home-style shell, outside DashboardLayout. */}
+          <Route
+            path="/dashboard/notifications"
+            element={
+              <PrivateRoute>
+                <DashboardNotificationsPage />
+              </PrivateRoute>
+            }
+          />
+          <Route
+            path="/dashboard/notifications/follow-requests"
+            element={
+              <PrivateRoute>
+                <DashboardFollowRequestsPage />
+              </PrivateRoute>
+            }
+          />
           <Route
             path="/dashboard/profile"
             element={

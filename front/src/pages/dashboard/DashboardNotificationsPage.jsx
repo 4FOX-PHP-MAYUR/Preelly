@@ -1,8 +1,11 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Heart, MessageCircle, UserPlus, ShoppingBag, CheckCircle, Bell, ArrowLeft, ChevronRight, Reply, Check, X } from 'lucide-react'
+import SettingsPageShell from '../../components/Dashboard/SettingsPageShell'
 import { userService } from '@shared/services/api'
 import { getMediaUrl } from '@shared/utils/helpers'
+import { assetUrl } from '@shared/utils/constants'
+import { emitNotificationUnreadChanged } from '@shared/utils/notificationBadge'
 import toast from 'react-hot-toast'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -50,6 +53,29 @@ const TYPE_CONFIG = {
   system:         { icon: Bell,         bg: 'bg-gray-400'   },
 }
 
+/**
+ * Stand-in avatar for actors with no profile picture (or a broken one).
+ * Resolved through SITE_URL (VITE_SITE_URL in .env) so it loads from the app's
+ * own origin rather than a bare root-relative path.
+ */
+const DEFAULT_AVATAR = assetUrl('images/default-avatar.svg')
+
+function avatarSrc(actor) {
+  return (actor?.avatar && getMediaUrl(actor.avatar)) || DEFAULT_AVATAR
+}
+
+function onAvatarError(e) {
+  if (e.currentTarget.src === DEFAULT_AVATAR) return
+  e.currentTarget.src = DEFAULT_AVATAR
+}
+
+/** Filter chips over the notification tabs. */
+const TAB_FILTERS = [
+  { key: 'all', label: 'All' },
+  { key: 'buying', label: 'Buying' },
+  { key: 'selling', label: 'Selling' },
+]
+
 // ── Avatar with type badge ────────────────────────────────────────────────────
 function NotifAvatar({ notification }) {
   const cfg = TYPE_CONFIG[notification.type] || TYPE_CONFIG.system
@@ -59,7 +85,7 @@ function NotifAvatar({ notification }) {
   // System / listing notifications — show icon circle instead of avatar
   if (!actor || notification.type === 'listing' || notification.type === 'system') {
     return (
-      <div className={`h-12 w-12 rounded-full ${cfg.bg} flex items-center justify-center shrink-0`}>
+      <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full ${cfg.bg}`}>
         <Icon className="h-6 w-6 text-white" />
       </div>
     )
@@ -67,27 +93,22 @@ function NotifAvatar({ notification }) {
 
   return (
     <div className="relative shrink-0">
-      {actor.avatar ? (
-        <img
-          src={getMediaUrl(actor.avatar)}
-          alt={actor.name}
-          className="h-12 w-12 rounded-full object-cover"
-        />
-      ) : (
-        <div className="h-12 w-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-bold text-lg">
-          {actor.name?.[0]?.toUpperCase() || '?'}
-        </div>
-      )}
+      <img
+        src={avatarSrc(actor)}
+        onError={onAvatarError}
+        alt={actor.name || 'User'}
+        className="h-12 w-12 rounded-full bg-slate-100 object-cover"
+      />
       {/* type badge */}
-      <span className={`absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full ${cfg.bg} flex items-center justify-center border-2 border-white`}>
+      <span className={`absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white ${cfg.bg}`}>
         <Icon className="h-2.5 w-2.5 text-white" />
       </span>
     </div>
   )
 }
 
-// ── Single notification row ───────────────────────────────────────────────────
-function NotifRow({ notification, onRead, onRemove }) {
+// ── Single notification card ──────────────────────────────────────────────────
+function NotificationCard({ notification, onRead, onRemove }) {
   const navigate = useNavigate()
   const product = notification.relatedProduct
   const [actionLoading, setActionLoading] = useState(null) // 'accept' | 'reject'
@@ -137,26 +158,33 @@ function NotifRow({ notification, onRead, onRemove }) {
   return (
     <div
       onClick={handleClick}
-      className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50 transition-colors ${
-        !notification.isRead ? 'bg-violet-50/40' : ''
+      className={`flex cursor-pointer items-center gap-3 rounded-[16px] border p-3 shadow-[0_2px_10px_rgba(15,23,42,0.04)] transition duration-200 hover:border-brand/20 sm:gap-4 sm:p-4 ${
+        notification.isRead ? 'border-[#E5E7EB] bg-white' : 'border-brand/20 bg-brand-50/40'
       }`}
     >
       <NotifAvatar notification={notification} />
 
       {/* text */}
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-800 leading-snug">
-          {notification.actor && (
-            <span className="font-semibold">{notification.actor.name} </span>
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start gap-2">
+          <p className="min-w-0 flex-1 text-sm leading-snug text-slate-700">
+            {notification.actor && (
+              <span className="font-bold text-slate-900">{notification.actor.name} </span>
+            )}
+            {notification.body || notification.title}
+          </p>
+          {!notification.isRead && !isFollowRequest && (
+            <span className="shrink-0 rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand">
+              New
+            </span>
           )}
-          {notification.body || notification.title}
-        </p>
-        <div className="flex items-center gap-3 mt-1">
-          <span className="text-xs text-gray-400">{timeAgo(notification.createdAt)}</span>
+        </div>
+        <div className="mt-1 flex items-center gap-3">
+          <span className="text-[11px] text-slate-400">{timeAgo(notification.createdAt)}</span>
           {notification.type === 'comment' && (
             <button
               onClick={(e) => e.stopPropagation()}
-              className="flex items-center gap-1 text-xs text-gray-400 hover:text-violet-600 transition-colors"
+              className="flex items-center gap-1 text-[11px] text-slate-400 transition duration-200 hover:text-brand"
             >
               <Reply className="h-3 w-3" /> Reply
             </button>
@@ -165,14 +193,14 @@ function NotifRow({ notification, onRead, onRemove }) {
 
         {/* Accept / Reject buttons for follow requests */}
         {isFollowRequest && notification.actor && (
-          <div className="flex items-center gap-2 mt-2" onClick={(e) => e.stopPropagation()}>
+          <div className="mt-2 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
             <button
               onClick={handleAccept}
               disabled={!!actionLoading}
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-violet-600 hover:bg-violet-700 text-white text-xs font-semibold rounded-full transition disabled:opacity-60"
+              className="flex items-center gap-1.5 rounded-full bg-brand px-4 py-1.5 text-xs font-semibold text-white shadow-sm shadow-brand/25 transition duration-200 hover:bg-brand-700 disabled:opacity-60"
             >
               {actionLoading === 'accept' ? (
-                <span className="h-3 w-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
               ) : (
                 <Check className="h-3 w-3" />
               )}
@@ -181,10 +209,10 @@ function NotifRow({ notification, onRead, onRemove }) {
             <button
               onClick={handleReject}
               disabled={!!actionLoading}
-              className="flex items-center gap-1.5 px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-full transition disabled:opacity-60"
+              className="flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold text-slate-600 ring-1 ring-[#E5E7EB] transition duration-200 hover:text-brand hover:ring-brand/30 disabled:opacity-60"
             >
               {actionLoading === 'reject' ? (
-                <span className="h-3 w-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
               ) : (
                 <X className="h-3 w-3" />
               )}
@@ -196,11 +224,11 @@ function NotifRow({ notification, onRead, onRemove }) {
 
       {/* product thumbnail */}
       {product && (
-        <div className="shrink-0 ml-2">
+        <div className="ml-2 h-14 w-14 shrink-0 overflow-hidden rounded-[12px] bg-slate-100">
           {product.video ? (
             <video
               src={getMediaUrl(product.video)}
-              className="h-14 w-14 rounded-xl object-cover"
+              className="h-full w-full object-cover"
               muted
               playsInline
             />
@@ -208,14 +236,11 @@ function NotifRow({ notification, onRead, onRemove }) {
             <img
               src={getMediaUrl(product.images[0])}
               alt={product.title}
-              className="h-14 w-14 rounded-xl object-cover"
+              className="h-full w-full object-cover"
+              loading="lazy"
             />
           ) : null}
         </div>
-      )}
-
-      {!notification.isRead && !isFollowRequest && (
-        <div className="h-2.5 w-2.5 rounded-full bg-violet-500 shrink-0" />
       )}
     </div>
   )
@@ -255,155 +280,157 @@ export default function DashboardNotificationsPage() {
   const handleRead = async (id) => {
     setItems((prev) => prev.map((n) => n._id === id ? { ...n, isRead: true } : n))
     await userService.markNotificationRead(id).catch(() => {})
+    emitNotificationUnreadChanged()
   }
 
   const handleRemove = (id) => {
     setItems((prev) => prev.filter((n) => n._id !== id))
+    emitNotificationUnreadChanged()
   }
 
   const handleMarkAllRead = async () => {
     setItems((prev) => prev.map((n) => ({ ...n, isRead: true })))
     await userService.markAllNotificationsRead().catch(() => {})
+    emitNotificationUnreadChanged()
   }
 
   const followNotifications = items.filter((n) => n.type === 'follow_request' && !n.isRead)
   const grouped = groupByDay(items)
   const totalUnread = items.filter((n) => !n.isRead).length
 
-  return (
-    <div className="max-w-2xl mx-auto space-y-0">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Notifications</h1>
-          <p className="text-sm text-violet-600 mt-0.5">Stay updated with your latest activity and alerts</p>
-        </div>
-        <div className="flex items-center gap-3 shrink-0">
-          {totalUnread > 0 && (
-            <button
-              onClick={handleMarkAllRead}
-              className="text-xs font-semibold text-violet-600 hover:underline"
-            >
-              Mark all read
-            </button>
-          )}
-          <button
-            onClick={() => navigate('/')}
-            className="flex items-center gap-1 text-xs sm:text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            <span className="hidden sm:inline">BACK TO HOME</span>
-            <span className="sm:hidden">Home</span>
-          </button>
-        </div>
-      </div>
+  const subtitle = useMemo(() => {
+    if (loading) return 'Loading your latest activity…'
+    if (!items.length) return 'Your activity and alerts appear here'
+    if (totalUnread) return `${totalUnread} unread notification${totalUnread === 1 ? '' : 's'}`
+    return `${items.length} notification${items.length === 1 ? '' : 's'} · you're all caught up`
+  }, [loading, items.length, totalUnread])
 
-      {/* Follow requests banner */}
-      {followNotifications.length > 0 && (
-        <button
-          onClick={() => navigate('/dashboard/notifications/follow-requests')}
-          className="w-full flex items-center gap-3 bg-white border border-gray-200 rounded-2xl px-4 py-3 mb-4 hover:bg-gray-50 transition-colors"
-        >
-          <div className="flex -space-x-2">
-            {followNotifications.slice(0, 3).map((n) =>
-              n.actor?.avatar ? (
+  return (
+    <SettingsPageShell>
+      <div className="mx-auto max-w-3xl pb-10">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3 sm:mb-8">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Notifications</h1>
+            <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-4">
+            {totalUnread > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkAllRead}
+                className="text-xs font-semibold uppercase tracking-wide text-brand transition duration-200 hover:text-brand-700 sm:text-sm"
+              >
+                Mark all read
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand transition duration-200 hover:text-brand-700 sm:text-sm"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Home
+            </button>
+          </div>
+        </div>
+
+        {/* Follow requests banner */}
+        {followNotifications.length > 0 && (
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/notifications/follow-requests')}
+            className="mb-4 flex w-full items-center gap-3 rounded-[16px] border border-[#E5E7EB] bg-white p-3 shadow-[0_2px_10px_rgba(15,23,42,0.04)] transition duration-200 hover:border-brand/20 sm:gap-4 sm:p-4"
+          >
+            <div className="flex -space-x-2">
+              {followNotifications.slice(0, 3).map((n) => (
                 <img
                   key={n._id}
-                  src={getMediaUrl(n.actor.avatar)}
-                  alt={n.actor.name}
-                  className="h-9 w-9 rounded-full object-cover border-2 border-white"
+                  src={avatarSrc(n.actor)}
+                  onError={onAvatarError}
+                  alt={n.actor?.name || 'User'}
+                  className="h-9 w-9 rounded-full border-2 border-white bg-slate-100 object-cover"
                 />
-              ) : (
-                <div
-                  key={n._id}
-                  className="h-9 w-9 rounded-full bg-violet-200 border-2 border-white flex items-center justify-center text-violet-700 font-bold text-sm"
-                >
-                  {n.actor?.name?.[0]?.toUpperCase() || '?'}
-                </div>
-              )
-            )}
-          </div>
-          <div className="flex-1 text-left">
-            <p className="text-sm font-semibold text-gray-900">Follow requests</p>
-            <p className="text-xs text-gray-500">
-              {followNotifications[0]?.actor?.name}
-              {followNotifications.length > 1 && ` + ${followNotifications.length - 1} others`}
-            </p>
-          </div>
-          <ChevronRight className="h-5 w-5 text-gray-400" />
-        </button>
-      )}
-
-      {/* Tabs */}
-      <div className="flex gap-2 mb-4">
-        {[
-          { key: 'all', label: 'All', badge: 0 },
-          { key: 'buying', label: 'Buying', badge: buyingUnread },
-          { key: 'selling', label: 'Selling', badge: sellingUnread },
-        ].map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`relative px-5 py-2 rounded-full text-sm font-semibold transition-colors ${
-              activeTab === tab.key
-                ? 'bg-violet-600 text-white'
-                : 'bg-white border border-gray-200 text-gray-600 hover:border-violet-300'
-            }`}
-          >
-            {tab.label}
-            {tab.badge > 0 && (
-              <span className="absolute -top-1.5 -right-1.5 h-5 min-w-[20px] px-1 rounded-full bg-red-500 text-white text-[10px] font-bold flex items-center justify-center">
-                {tab.badge}
-              </span>
-            )}
+              ))}
+            </div>
+            <div className="min-w-0 flex-1 text-left">
+              <p className="truncate text-sm font-bold text-slate-900">Follow requests</p>
+              <p className="mt-0.5 truncate text-xs text-slate-500">
+                {followNotifications[0]?.actor?.name}
+                {followNotifications.length > 1 && ` + ${followNotifications.length - 1} others`}
+              </p>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-slate-400" />
           </button>
-        ))}
-      </div>
-
-      {/* Content */}
-      <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-        {error ? (
-          <div className="p-6 text-center text-sm text-red-600">{error}</div>
-        ) : loading ? (
-          <div className="divide-y divide-gray-100">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="flex items-center gap-3 px-4 py-3 animate-pulse">
-                <div className="h-12 w-12 rounded-full bg-gray-200 shrink-0" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3 bg-gray-200 rounded w-3/4" />
-                  <div className="h-3 bg-gray-200 rounded w-1/3" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : items.length === 0 ? (
-          <div className="p-12 text-center">
-            <Bell className="h-14 w-14 text-gray-300 mx-auto mb-3" />
-            <p className="text-base font-semibold text-gray-800">No notifications yet</p>
-            <p className="text-sm text-gray-500 mt-1">Activity like likes, comments and follows will appear here.</p>
-          </div>
-        ) : (
-          <div>
-            {grouped.map(([label, notifs]) => (
-              <div key={label}>
-                <div className="px-4 py-2 bg-gray-50 border-b border-gray-100">
-                  <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">{label}</span>
-                </div>
-                <div className="divide-y divide-gray-100">
-                  {notifs.map((n) => (
-                    <NotifRow
-                      key={n._id}
-                      notification={n}
-                      onRead={handleRead}
-                      onRemove={handleRemove}
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
         )}
+
+        {/* Tabs */}
+        <div className="mb-5 flex flex-wrap gap-2">
+          {TAB_FILTERS.map((tab) => {
+            const badge = tab.key === 'buying' ? buyingUnread : tab.key === 'selling' ? sellingUnread : 0
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => setActiveTab(tab.key)}
+                className={`relative rounded-full px-3.5 py-2 text-sm font-medium transition duration-200 ${
+                  activeTab === tab.key
+                    ? 'bg-brand text-white shadow-sm shadow-brand/25'
+                    : 'bg-white text-slate-600 ring-1 ring-[#E5E7EB] hover:text-brand hover:ring-brand/30'
+                }`}
+              >
+                {tab.label}
+                {badge > 0 && (
+                  <span className="absolute -right-1.5 -top-1.5 flex h-5 min-w-[20px] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                    {badge}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+
+        {error ? (
+          <div className="mb-4 rounded-[12px] border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+          </div>
+        ) : null}
+
+        <div className="space-y-3">
+          {loading ? (
+            [1, 2, 3].map((i) => (
+              <div key={i} className="h-28 animate-pulse rounded-[16px] bg-slate-100" />
+            ))
+          ) : items.length ? (
+            grouped.map(([label, notifs]) => (
+              <div key={label} className="space-y-3">
+                <p className="pt-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  {label}
+                </p>
+                {notifs.map((n) => (
+                  <NotificationCard
+                    key={n._id}
+                    notification={n}
+                    onRead={handleRead}
+                    onRemove={handleRemove}
+                  />
+                ))}
+              </div>
+            ))
+          ) : (
+            <div className="rounded-[16px] border border-dashed border-[#E5E7EB] px-4 py-12 text-center">
+              <Bell className="mx-auto h-10 w-10 text-slate-300" />
+              <p className="mt-3 text-sm font-semibold text-slate-700">
+                {activeTab === 'all' ? 'No notifications yet' : 'No notifications in this tab'}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                {activeTab === 'all'
+                  ? 'Activity like likes, comments and follows will appear here.'
+                  : 'Try another tab to see more of your activity.'}
+              </p>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </SettingsPageShell>
   )
 }

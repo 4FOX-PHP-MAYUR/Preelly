@@ -392,6 +392,8 @@ export const userService = {
   getWishlist: () => api.get('/user/wishlist'),
   getLikedProducts: () => api.get('/user/liked'),
   getNotifications: (params) => api.get('/user/notifications', { params }),
+  getNotificationUnreadCount: (config) =>
+    api.get('/user/notifications/unread-count', { persistAcrossRoutes: true, ...config }),
   markNotificationRead: (id) => api.patch(`/user/notifications/${id}/read`),
   markAllNotificationsRead: () => api.patch('/user/notifications/read-all'),
   followUser: (userId) => {

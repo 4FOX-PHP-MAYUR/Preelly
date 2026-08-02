@@ -1,10 +1,24 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Check, X, User } from 'lucide-react'
+import { ArrowLeft, Check, User, X } from 'lucide-react'
+import SettingsPageShell from '../../components/Dashboard/SettingsPageShell'
 import { userService } from '@shared/services/api'
 import { getMediaUrl } from '@shared/utils/helpers'
+import { assetUrl } from '@shared/utils/constants'
 import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
 import toast from 'react-hot-toast'
+
+/** Stand-in avatar, resolved through SITE_URL (VITE_SITE_URL in .env). */
+const DEFAULT_AVATAR = assetUrl('images/default-avatar.svg')
+
+function avatarSrc(user) {
+  return (user?.avatar && getMediaUrl(user.avatar)) || DEFAULT_AVATAR
+}
+
+function onAvatarError(e) {
+  if (e.currentTarget.src === DEFAULT_AVATAR) return
+  e.currentTarget.src = DEFAULT_AVATAR
+}
 
 function timeAgo(dateStr) {
   if (!dateStr) return ''
@@ -21,25 +35,29 @@ function timeAgo(dateStr) {
 }
 
 function Avatar({ user, size = 'md' }) {
-  const sz = size === 'sm' ? 'h-10 w-10 text-base' : 'h-12 w-12 text-lg'
-  if (user?.avatar) {
-    return (
-      <img
-        src={getMediaUrl(user.avatar)}
-        alt={user.name}
-        className={`${sz} rounded-full object-cover shrink-0`}
-      />
-    )
-  }
+  const sz = size === 'sm' ? 'h-10 w-10' : 'h-12 w-12'
   return (
-    <div className={`${sz} rounded-full bg-violet-100 flex items-center justify-center shrink-0`}>
-      <User className="h-5 w-5 text-violet-500" />
-    </div>
+    <img
+      src={avatarSrc(user)}
+      onError={onAvatarError}
+      alt={user?.name || 'User'}
+      className={`${sz} shrink-0 rounded-full bg-slate-100 object-cover`}
+    />
   )
 }
 
-// ── Follow request row ────────────────────────────────────────────────────────
-function RequestRow({ request, onAccept, onDelete }) {
+/** Shared card chrome — same shape as the order cards. */
+const CARD_CLASS =
+  'flex items-center gap-3 rounded-[16px] border border-[#E5E7EB] bg-white p-3 shadow-[0_2px_10px_rgba(15,23,42,0.04)] transition duration-200 hover:border-brand/20 sm:gap-4 sm:p-4'
+
+const PRIMARY_BTN =
+  'flex items-center gap-1.5 rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-brand/25 transition duration-200 hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60'
+
+const SECONDARY_BTN =
+  'flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-slate-600 ring-1 ring-[#E5E7EB] transition duration-200 hover:text-brand hover:ring-brand/30 disabled:cursor-not-allowed disabled:opacity-60'
+
+// ── Follow request card ───────────────────────────────────────────────────────
+function RequestCard({ request, onAccept, onDelete }) {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(null) // 'accept' | 'delete'
 
@@ -63,47 +81,40 @@ function RequestRow({ request, onAccept, onDelete }) {
   }
 
   return (
-    <div className="flex items-center gap-4 py-4 border-b border-gray-100 last:border-0">
-      <button onClick={() => navigate(`/user/${request.user._id}`)} className="shrink-0">
+    <div className={CARD_CLASS}>
+      <button type="button" onClick={() => navigate(`/user/${request.user._id}`)} className="shrink-0">
         <Avatar user={request.user} />
       </button>
 
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         <button
+          type="button"
           onClick={() => navigate(`/user/${request.user._id}`)}
-          className="flex items-center gap-1.5 text-left"
+          className="flex max-w-full items-center gap-1.5 text-left"
         >
-          <span className="text-sm font-bold text-gray-900 hover:underline">
+          <span className="truncate text-sm font-bold text-slate-900 hover:underline sm:text-base">
             {request.user.name}
           </span>
           {request.user.isVerified && (
-            <img src={VERIFIED_BADGE_IMAGES.small} alt="Verified" className="h-4 w-4" />
+            <img src={VERIFIED_BADGE_IMAGES.small} alt="Verified" className="h-4 w-4 shrink-0" />
           )}
         </button>
-        <p className="text-xs text-gray-500 mt-0.5">requested to follow you</p>
-        <p className="text-xs text-gray-400 mt-0.5">{timeAgo(request.requestedAt)}</p>
+        <p className="mt-0.5 text-xs text-slate-500 sm:text-sm">requested to follow you</p>
+        <p className="mt-0.5 text-[11px] text-slate-400">{timeAgo(request.requestedAt)}</p>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
-        <button
-          onClick={() => handle('accept')}
-          disabled={!!loading}
-          className="px-5 py-2 rounded-full bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold transition disabled:opacity-60 flex items-center gap-1.5"
-        >
+      <div className="flex shrink-0 items-center gap-2">
+        <button type="button" onClick={() => handle('accept')} disabled={!!loading} className={PRIMARY_BTN}>
           {loading === 'accept' ? (
-            <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
           ) : (
             <Check className="h-3.5 w-3.5" />
           )}
           Accept
         </button>
-        <button
-          onClick={() => handle('delete')}
-          disabled={!!loading}
-          className="px-5 py-2 rounded-full border border-gray-300 text-gray-700 hover:bg-gray-100 text-sm font-semibold transition disabled:opacity-60"
-        >
+        <button type="button" onClick={() => handle('delete')} disabled={!!loading} className={SECONDARY_BTN}>
           {loading === 'delete' ? (
-            <span className="h-3.5 w-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin inline-block" />
+            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-400 border-t-transparent" />
           ) : (
             'Delete'
           )}
@@ -113,8 +124,8 @@ function RequestRow({ request, onAccept, onDelete }) {
   )
 }
 
-// ── Suggested user row ────────────────────────────────────────────────────────
-function SuggestedRow({ user, onDismiss }) {
+// ── Suggested user card ───────────────────────────────────────────────────────
+function SuggestedCard({ user, onDismiss }) {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(null) // 'follow' | 'dismiss'
   const [followed, setFollowed] = useState(false)
@@ -139,38 +150,36 @@ function SuggestedRow({ user, onDismiss }) {
   }
 
   return (
-    <div className="flex items-center gap-4 py-4 border-b border-gray-100 last:border-0">
-      <button onClick={() => navigate(`/user/${user._id}`)} className="shrink-0">
+    <div className={CARD_CLASS}>
+      <button type="button" onClick={() => navigate(`/user/${user._id}`)} className="shrink-0">
         <Avatar user={user} size="sm" />
       </button>
 
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-700 leading-snug">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm leading-snug text-slate-700">
           <button
+            type="button"
             onClick={() => navigate(`/user/${user._id}`)}
-            className="font-bold text-gray-900 hover:underline mr-1"
+            className="mr-1 font-bold text-slate-900 hover:underline"
           >
             {user.name}
           </button>
           {user.isVerified && (
-            <img src={VERIFIED_BADGE_IMAGES.small} alt="Verified" className="h-3.5 w-3.5 inline mb-0.5 mr-1" />
+            <img src={VERIFIED_BADGE_IMAGES.small} alt="Verified" className="mb-0.5 mr-1 inline h-3.5 w-3.5" />
           )}
           requested to follow you
         </p>
       </div>
 
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex shrink-0 items-center gap-2">
         <button
+          type="button"
           onClick={handleFollow}
           disabled={!!loading || followed}
-          className={`px-5 py-2 rounded-full text-sm font-semibold transition disabled:opacity-60 ${
-            followed
-              ? 'bg-gray-200 text-gray-600'
-              : 'bg-violet-600 hover:bg-violet-700 text-white'
-          }`}
+          className={followed ? SECONDARY_BTN : PRIMARY_BTN}
         >
           {loading === 'follow' ? (
-            <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin inline-block" />
+            <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-white border-t-transparent" />
           ) : followed ? (
             'Requested'
           ) : (
@@ -178,9 +187,11 @@ function SuggestedRow({ user, onDismiss }) {
           )}
         </button>
         <button
+          type="button"
           onClick={handleDismiss}
           disabled={loading === 'dismiss'}
-          className="h-8 w-8 rounded-full border border-gray-300 flex items-center justify-center text-gray-500 hover:bg-gray-100 transition"
+          aria-label="Dismiss suggestion"
+          className="flex h-9 w-9 items-center justify-center rounded-full text-slate-500 ring-1 ring-[#E5E7EB] transition duration-200 hover:text-brand hover:ring-brand/30"
         >
           <X className="h-4 w-4" />
         </button>
@@ -218,100 +229,98 @@ export default function DashboardFollowRequestsPage() {
   const handleDelete = (recordId) => setRequests((p) => p.filter((r) => r._id !== recordId))
   const handleDismiss = (userId) => setSuggested((p) => p.filter((u) => u._id !== userId))
 
+  const subtitle = useMemo(() => {
+    if (loading) return 'Loading your follow requests…'
+    if (!requests.length) return 'Manage who can connect and follow your profile'
+    return `${requests.length} pending request${requests.length === 1 ? '' : 's'}`
+  }, [loading, requests.length])
+
   return (
-    <div className="max-w-2xl mx-auto">
-      {/* Breadcrumb */}
-      <div className="flex items-center gap-2 text-sm text-gray-500 mb-4">
-        <button onClick={() => navigate('/dashboard/notifications')} className="hover:text-violet-600 transition-colors">
-          Notifications
-        </button>
-        <span>›</span>
-        <span className="text-violet-600 font-medium">Follow Requests</span>
-      </div>
-
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Manage Follow Requests</h1>
-          <p className="text-sm text-gray-500 mt-0.5">Manage who can connect and follow your profile</p>
+    <SettingsPageShell>
+      <div className="mx-auto max-w-3xl pb-10">
+        {/* Breadcrumb */}
+        <div className="mb-4 flex items-center gap-2 text-xs text-slate-400 sm:text-sm">
+          <button
+            type="button"
+            onClick={() => navigate('/dashboard/notifications')}
+            className="transition duration-200 hover:text-brand"
+          >
+            Notifications
+          </button>
+          <span>›</span>
+          <span className="font-semibold text-slate-600">Follow Requests</span>
         </div>
-        <button
-          onClick={() => navigate('/')}
-          className="flex items-center gap-1 text-sm font-semibold text-gray-600 hover:text-gray-900 transition-colors mt-1"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          BACK TO HOME
-        </button>
-      </div>
 
-      {loading ? (
-        <div className="space-y-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="flex items-center gap-4 py-4 animate-pulse">
-              <div className="h-12 w-12 rounded-full bg-gray-200 shrink-0" />
-              <div className="flex-1 space-y-2">
-                <div className="h-3.5 bg-gray-200 rounded w-1/3" />
-                <div className="h-3 bg-gray-200 rounded w-1/4" />
-              </div>
-              <div className="flex gap-2">
-                <div className="h-9 w-20 rounded-full bg-gray-200" />
-                <div className="h-9 w-16 rounded-full bg-gray-200" />
-              </div>
-            </div>
-          ))}
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3 sm:mb-8">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Manage Follow Requests</h1>
+            <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/')}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand transition duration-200 hover:text-brand-700 sm:text-sm"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Home
+          </button>
         </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Follow requests section */}
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-            <div className="px-6 pt-5 pb-1">
-              <h2 className="text-base font-bold text-gray-900">
-                Follow request
+
+        {loading ? (
+          <div className="space-y-3">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-28 animate-pulse rounded-[16px] bg-slate-100" />
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-8">
+            {/* Follow requests section */}
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Follow request
+                </p>
                 {requests.length > 0 && (
-                  <span className="ml-2 text-xs font-semibold bg-violet-100 text-violet-700 px-2 py-0.5 rounded-full">
+                  <span className="rounded-full bg-brand-50 px-2.5 py-1 text-[11px] font-semibold text-brand">
                     {requests.length}
                   </span>
                 )}
-              </h2>
-            </div>
-
-            {requests.length === 0 ? (
-              <div className="px-6 py-8 text-center">
-                <div className="h-12 w-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
-                  <User className="h-6 w-6 text-gray-400" />
-                </div>
-                <p className="text-sm font-medium text-gray-700">No pending requests</p>
-                <p className="text-xs text-gray-400 mt-1">When someone requests to follow you, it'll appear here.</p>
               </div>
-            ) : (
-              <div className="px-6">
-                {requests.map((req) => (
-                  <RequestRow
+
+              {requests.length === 0 ? (
+                <div className="rounded-[16px] border border-dashed border-[#E5E7EB] px-4 py-12 text-center">
+                  <User className="mx-auto h-10 w-10 text-slate-300" />
+                  <p className="mt-3 text-sm font-semibold text-slate-700">No pending requests</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    When someone requests to follow you, it&apos;ll appear here.
+                  </p>
+                </div>
+              ) : (
+                requests.map((req) => (
+                  <RequestCard
                     key={req._id}
                     request={req}
                     onAccept={handleAccept}
                     onDelete={handleDelete}
                   />
+                ))
+              )}
+            </div>
+
+            {/* Suggested for you section */}
+            {suggested.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Suggested for you
+                </p>
+                {suggested.map((u) => (
+                  <SuggestedCard key={u._id} user={u} onDismiss={handleDismiss} />
                 ))}
               </div>
             )}
           </div>
-
-          {/* Suggested for you section */}
-          {suggested.length > 0 && (
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              <div className="px-6 pt-5 pb-1">
-                <h2 className="text-base font-bold text-gray-900">Suggested for you</h2>
-              </div>
-              <div className="px-6">
-                {suggested.map((u) => (
-                  <SuggestedRow key={u._id} user={u} onDismiss={handleDismiss} />
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </SettingsPageShell>
   )
 }

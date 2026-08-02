@@ -38,7 +38,8 @@ function Layout({ children }) {
     location.pathname === '/dashboard/drafts' ||
     location.pathname === '/dashboard/my-search' ||
     location.pathname === '/dashboard/archives' ||
-    location.pathname === '/dashboard/orders'
+    location.pathname === '/dashboard/orders' ||
+    location.pathname.startsWith('/dashboard/notifications')
   const isMyProfile = location.pathname === '/my-profile'
 
   return (

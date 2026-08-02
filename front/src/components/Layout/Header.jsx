@@ -104,7 +104,9 @@ function Header() {
     location.pathname === '/dashboard/contact' ||
     location.pathname === '/dashboard/drafts' ||
     location.pathname === '/dashboard/my-search' ||
-    location.pathname === '/dashboard/archives'
+    location.pathname === '/dashboard/archives' ||
+    location.pathname === '/dashboard/orders' ||
+    location.pathname.startsWith('/dashboard/notifications')
   // Both /my-profile and /user/:id render UserProfilePage, which brings its own
   // top bar via CategoryBrowseLayout — this header would be a second one.
   const isMyProfile = location.pathname === '/my-profile'

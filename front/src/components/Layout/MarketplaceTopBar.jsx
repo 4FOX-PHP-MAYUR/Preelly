@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import {
@@ -24,6 +24,8 @@ import {
   selectUser,
 } from '@shared/store/slices/authSlice'
 import { getMediaUrl, isUserVerified } from '@shared/utils/helpers'
+import { userService } from '@shared/services/api'
+import { NOTIFICATION_UNREAD_EVENT } from '@shared/utils/notificationBadge'
 
 function TopBarIcon({ to, label, Icon, badge }) {
   return (
@@ -59,6 +61,33 @@ function MarketplaceTopBar({ className = '', onToggleMobileMenu, topBarColSpan =
   const isGuest = useSelector(selectIsGuest)
   const user = useSelector(selectUser)
   const unreadChatCount = useSelector((state) => (isAuthenticated ? state.feed?.unreadCount || 0 : 0))
+  const [unreadNotifCount, setUnreadNotifCount] = useState(0)
+
+  // Bell badge — unread notifications. Refetched on navigation and whenever the
+  // notifications page marks something read.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setUnreadNotifCount(0)
+      return undefined
+    }
+    let cancelled = false
+    const load = () => {
+      userService
+        .getNotificationUnreadCount()
+        .then((res) => {
+          if (cancelled) return
+          const n = res?.data?.unread
+          if (typeof n === 'number') setUnreadNotifCount(n)
+        })
+        .catch(() => {})
+    }
+    load()
+    window.addEventListener(NOTIFICATION_UNREAD_EVENT, load)
+    return () => {
+      cancelled = true
+      window.removeEventListener(NOTIFICATION_UNREAD_EVENT, load)
+    }
+  }, [isAuthenticated, location.pathname])
 
   const [profileOpen, setProfileOpen] = useState(false)
   const profileCloseTimer = useRef(null)
@@ -114,9 +143,9 @@ function MarketplaceTopBar({ className = '', onToggleMobileMenu, topBarColSpan =
               aria-label="Notifications"
             >
               <Bell className="h-5 w-5" />
-              {unreadChatCount > 0 && (
+              {unreadNotifCount > 0 && (
                 <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-brand px-1 text-[9px] font-bold text-white">
-                  {Math.min(unreadChatCount, 99)}
+                  {Math.min(unreadNotifCount, 99)}
                 </span>
               )}
             </Link>
@@ -134,7 +163,7 @@ function MarketplaceTopBar({ className = '', onToggleMobileMenu, topBarColSpan =
           <TopBarIcon to={isAuthenticated ? '/chat' : '/login'} label="Chat" Icon={ChatIcon} badge={unreadChatCount} />
           <TopBarIcon to="/search" label="My Search" Icon={MySearchIcon} />
           <TopBarIcon to={isAuthenticated ? '/my-profile' : '/login'} label="My Ads" Icon={MyAdsIcon} />
-          <TopBarIcon to={isAuthenticated ? '/dashboard/notifications' : '/login'} label="Notification" Icon={NotificationIcon} />
+          <TopBarIcon to={isAuthenticated ? '/dashboard/notifications' : '/login'} label="Notification" Icon={NotificationIcon} badge={unreadNotifCount} />
         </div>
       </div>
 
@@ -150,7 +179,7 @@ function MarketplaceTopBar({ className = '', onToggleMobileMenu, topBarColSpan =
           <TopBarIcon to={isAuthenticated ? '/chat' : '/login'} label="Chat" Icon={ChatIcon} badge={unreadChatCount} />
           <TopBarIcon to="/search" label="My Search" Icon={MySearchIcon} />
           <TopBarIcon to={isAuthenticated ? '/my-profile' : '/login'} label="My Ads" Icon={MyAdsIcon} />
-          <TopBarIcon to={isAuthenticated ? '/dashboard/notifications' : '/login'} label="Notification" Icon={NotificationIcon} />
+          <TopBarIcon to={isAuthenticated ? '/dashboard/notifications' : '/login'} label="Notification" Icon={NotificationIcon} badge={unreadNotifCount} />
 
           <div className="mb-2 ml-1 hidden h-8 w-px bg-slate-200 lg:block" />
 

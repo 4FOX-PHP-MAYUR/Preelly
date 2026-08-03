@@ -431,22 +431,22 @@ function ChatThreadPage() {
             <p className="text-sm text-gray-500">With {otherParty?.name || 'User'}</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="inline-flex items-center space-x-2 text-xs text-gray-600 bg-white px-3 py-2 rounded-full shadow-sm border border-gray-100">
-            <ShieldCheck className="h-4 w-4 text-primary-500" />
+            <ShieldCheck className="h-4 w-4 text-primary-500 shrink-0" />
             <span>Stay safe: communicate in-app</span>
           </div>
-          <div className="inline-flex items-center space-x-2 text-xs text-gray-600 bg-white px-3 py-2 rounded-full shadow-sm border border-gray-100">
-            <Sparkles className="h-4 w-4 text-primary-500" />
+          <div className="hidden sm:inline-flex items-center space-x-2 text-xs text-gray-600 bg-white px-3 py-2 rounded-full shadow-sm border border-gray-100">
+            <Sparkles className="h-4 w-4 text-primary-500 shrink-0" />
             <span>Tip: reply quickly for better conversions</span>
           </div>
         </div>
       </div>
 
       <div className="bg-white/95 backdrop-blur rounded-2xl shadow-xl border border-gray-100 flex flex-col h-[75vh] overflow-hidden">
-        <div className="flex items-center justify-between px-4 sm:px-6 py-3 border-b border-gray-100 bg-gradient-to-r from-primary-50/60 via-white to-white">
-          <div className="flex items-center space-x-3">
-            <div className="h-12 w-12 rounded-xl bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center">
+        <div className="flex flex-wrap items-center justify-between gap-2 px-4 sm:px-6 py-3 border-b border-gray-100 bg-gradient-to-r from-primary-50/60 via-white to-white">
+          <div className="flex min-w-0 items-center space-x-3">
+            <div className="h-12 w-12 shrink-0 rounded-xl bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center">
               {thread.productImage ? (
                 isVideo ? (
                   <video
@@ -464,14 +464,14 @@ function ChatThreadPage() {
                 <img src={placeholderImage} alt="Listing placeholder" className="h-full w-full object-cover" />
               )}
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs uppercase tracking-wide text-gray-500">Listing</p>
-              <p className="text-sm font-semibold text-gray-900">{thread.productTitle}</p>
-              <p className="text-xs text-gray-500">With {otherParty?.name || 'User'}</p>
+              <p className="text-sm font-semibold text-gray-900 truncate">{thread.productTitle}</p>
+              <p className="text-xs text-gray-500 truncate">With {otherParty?.name || 'User'}</p>
             </div>
           </div>
-            <div className="flex items-center gap-2">
-              <div className="text-[11px] text-gray-500 bg-white px-3 py-2 rounded-full border border-gray-100">
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="hidden sm:block max-w-[160px] truncate text-[11px] text-gray-500 bg-white px-3 py-2 rounded-full border border-gray-100">
                 Thread ID: {thread.id}
               </div>
               <button
@@ -479,7 +479,7 @@ function ChatThreadPage() {
                 className="inline-flex items-center gap-1 text-[11px] font-semibold text-red-600 bg-red-50 border border-red-100 px-3 py-2 rounded-full hover:bg-red-100"
               >
                 <Trash2 className="h-4 w-4" />
-                Delete
+                <span className="hidden sm:inline">Delete</span>
               </button>
             </div>
         </div>
@@ -495,14 +495,14 @@ function ChatThreadPage() {
             const time = new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             return (
               <div key={msg.id} className={`flex ${isSelf ? 'justify-end' : 'justify-start'}`}>
-                <div className="flex items-end space-x-2 max-w-full group">
+                <div className="flex items-end space-x-2 max-w-[92%] sm:max-w-[85%] group">
                   {!isSelf && (
-                    <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary-100 to-primary-50 flex items-center justify-center text-primary-700 text-xs border border-primary-100 shadow-inner">
+                    <div className="h-8 w-8 shrink-0 rounded-full bg-gradient-to-br from-primary-100 to-primary-50 flex items-center justify-center text-primary-700 text-xs border border-primary-100 shadow-inner">
                       {otherParty?.name?.charAt(0).toUpperCase() || 'U'}
                     </div>
                   )}
                   <div
-                    className={`max-w-xs sm:max-w-md px-4 py-3 rounded-2xl text-sm shadow-sm border ${
+                    className={`min-w-0 max-w-full sm:max-w-md px-4 py-3 rounded-2xl text-sm shadow-sm border ${
                       isSelf
                         ? msg.readAt
                           ? 'bg-primary-500/90 text-white rounded-br-none border-primary-400/60'

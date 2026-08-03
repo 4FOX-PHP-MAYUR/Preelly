@@ -243,10 +243,10 @@ function Step2Subcategory({
         </button>
       )}
 
-      <nav className="mb-6 flex items-center gap-2 text-sm text-gray-500" aria-label="Breadcrumb">
+      <nav className="mb-6 flex min-w-0 items-center gap-2 text-sm text-gray-500" aria-label="Breadcrumb">
         <Home className="h-4 w-4 shrink-0" aria-hidden />
         <ChevronRight className="h-3.5 w-3.5 shrink-0 text-gray-400" aria-hidden />
-        <span className="font-medium text-gray-800">{rootCategoryName || 'Category'}</span>
+        <span className="truncate font-medium text-gray-800">{rootCategoryName || 'Category'}</span>
       </nav>
 
       <div className="text-center mb-6 sm:mb-8 w-full">
@@ -273,7 +273,7 @@ function Step2Subcategory({
                     isSelected ? 'text-primary-700 font-semibold' : 'text-gray-900 hover:text-primary-700'
                   }`}
                 >
-                  <span className="text-base sm:text-[17px] md:text-lg pr-2">{sub.name}</span>
+                  <span className="min-w-0 flex-1 pr-2 text-base sm:text-[17px] md:text-lg">{sub.name}</span>
                   <ChevronRight className="h-5 w-5 shrink-0 text-gray-400" />
                 </button>
               </li>

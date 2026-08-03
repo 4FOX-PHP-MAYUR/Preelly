@@ -295,6 +295,7 @@ connectDB().then(() => {
     require('./models/Emirate').fixIndexes?.() ?? Promise.resolve(),
     require('./models/Package').fixIndexes?.() ?? Promise.resolve(),
     require('./models/StorageFacility').fixIndexes?.() ?? Promise.resolve(),
+    require('./models/Testimonial').fixIndexes?.() ?? Promise.resolve(),
     require('./models/Coupon').fixIndexes?.() ?? Promise.resolve(),
     require('./models/CouponRedemption').fixIndexes?.() ?? Promise.resolve(),
     require('./models/PaymentTransaction').fixIndexes?.() ?? Promise.resolve(),

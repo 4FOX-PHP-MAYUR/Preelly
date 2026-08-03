@@ -50,8 +50,11 @@ function LoginPage() {
   const { loading, error, isAuthenticated } = useSelector((state) => state.auth)
   const { register, handleSubmit, formState: { errors } } = useForm()
   const [oauthLoading, setOauthLoading] = useState(null)
-  // Phone tab is the default per the new login design.
-  const [channel, setChannel] = useState('whatsapp')
+  // Phone tab is the default per the new login design, unless the caller
+  // asks for the email tab (e.g. returning from the email OTP screen).
+  const [channel, setChannel] = useState(() =>
+    new URLSearchParams(location.search).get('tab') === 'email' ? 'email' : 'whatsapp'
+  )
   const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO)
 
   const params = new URLSearchParams(location.search)

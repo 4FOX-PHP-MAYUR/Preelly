@@ -116,6 +116,11 @@ export const storageFacilityService = {
   listActiveStorageFacilities: (config) => api.get('/v1/web/storage-facilities', config),
 }
 
+// Testimonials (public web API — `testimonials` collection)
+export const testimonialService = {
+  listActiveTestimonials: (config) => api.get('/v1/web/testimonials', config),
+}
+
 /**
  * Storage facilities are sent as multipart so the icon can ride along.
  * `imageIcon` is a File when replacing the icon; everything else is coerced to a
@@ -127,6 +132,24 @@ function toStorageFacilityFormData(data = {}) {
     if (value === undefined || value === null || value === '') return
     if (key === 'imageIcon') {
       if (value instanceof File) formData.append('imageIcon', value)
+      return
+    }
+    formData.append(key, value)
+  })
+  return formData
+}
+
+/**
+ * Testimonials are sent as multipart so the profile image can ride along.
+ * `profileImage` is a File when replacing the image; everything else is coerced to a
+ * string by FormData, which the API's validators and service already expect.
+ */
+function toTestimonialFormData(data = {}) {
+  const formData = new FormData()
+  Object.entries(data).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    if (key === 'profileImage') {
+      if (value instanceof File) formData.append('profileImage', value)
       return
     }
     formData.append(key, value)
@@ -322,6 +345,22 @@ export const adminService = {
   setStorageFacilityStatus: (id, status) =>
     api.put(`/admin/storage-facilities/${id}/status`, { status }),
   deleteStorageFacility: (id) => api.delete(`/admin/storage-facilities/${id}`),
+  // Testimonials admin endpoints (multipart — optional profile image upload)
+  getTestimonials: (params) => api.get('/admin/testimonials', { params }),
+  getTestimonialById: (id) => api.get(`/admin/testimonials/${id}`),
+  createTestimonial: (data) =>
+    api.post('/admin/testimonials', toTestimonialFormData(data), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  updateTestimonial: (id, data) =>
+    api.patch(`/admin/testimonials/${id}`, toTestimonialFormData(data), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  setTestimonialStatus: (id, status) =>
+    api.put(`/admin/testimonials/${id}/status`, { status }),
+  deleteTestimonial: (id) => api.delete(`/admin/testimonials/${id}`),
+  exportTestimonials: (params) =>
+    api.get('/admin/testimonials/export', { params, responseType: 'blob' }),
   // Checkout Service endpoints (JSON; highlights ride along as an array)
   getCheckoutServices: (params) => api.get('/admin/checkout-services', { params }),
   getCheckoutServiceById: (id) => api.get(`/admin/checkout-services/${id}`),

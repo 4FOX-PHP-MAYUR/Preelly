@@ -8,11 +8,12 @@ export function fieldInputClass(hasError) {
 }
 
 export function pillOptionClass(selected) {
-  const base = 'inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors'
+  const base =
+    'inline-flex min-h-[44px] items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors sm:min-h-0'
   return selected
     ? `${base} border-[#2563eb] bg-blue-50 text-[#2563eb]`
     : `${base} border-gray-300 bg-white text-gray-700 hover:border-gray-400`
 }
 
 export const VIEW_ALL_PILL_CLASS =
-  'inline-flex items-center gap-2 rounded-full border border-[#2563eb] bg-white px-4 py-2 text-sm font-medium text-[#2563eb] hover:bg-blue-50'
+  'inline-flex min-h-[44px] items-center gap-2 rounded-full border border-[#2563eb] bg-white px-4 py-2 text-sm font-medium text-[#2563eb] hover:bg-blue-50 sm:min-h-0'

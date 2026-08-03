@@ -19,6 +19,7 @@ import {
   CreditCard,
   BadgePercent,
   ArrowLeftRight,
+  Quote,
 } from 'lucide-react'
 
 // App routes are root-relative. Nginx + Vite base=/admin/ mount the app under /admin.
@@ -49,6 +50,7 @@ export const ADMIN_MENU_GROUPS = [
       { key: 'packages', label: 'Packages', to: '/packages', icon: Package },
       { key: 'storage-facilities', label: 'Storage Facilities', to: '/storage-facilities', icon: Warehouse },
       { key: 'checkout-services', label: 'Checkout Services', to: '/checkout-services', icon: CreditCard },
+      { key: 'testimonials', label: 'Testimonials', to: '/testimonials', icon: Quote },
       { key: 'coupons', label: 'Coupons', to: '/coupons', icon: Ticket },
       { key: 'buyers-coupons', label: 'Buyer Coupons', to: '/buyers-coupons', icon: BadgePercent },
       { key: 'transactions', label: 'Transactions', to: '/transactions', icon: ArrowLeftRight },
@@ -96,6 +98,7 @@ export const MENU_PERMISSION_MAP = {
   packages: 'Packages',
   'storage-facilities': 'Storage Facilities',
   'checkout-services': 'Checkout Services',
+  testimonials: 'Testimonials',
   coupons: 'Coupons',
   'buyers-coupons': 'Buyer Coupons',
   transactions: 'Transactions',
@@ -120,6 +123,7 @@ export const ADMIN_ROUTE_META = {
   '/packages': { title: 'Packages', breadcrumbs: [{ label: 'Marketplace', to: '/packages' }, { label: 'Packages' }] },
   '/storage-facilities': { title: 'Storage Facilities', breadcrumbs: [{ label: 'Marketplace', to: '/storage-facilities' }, { label: 'Storage Facilities' }] },
   '/checkout-services': { title: 'Checkout Services', breadcrumbs: [{ label: 'Marketplace', to: '/checkout-services' }, { label: 'Checkout Services' }] },
+  '/testimonials': { title: 'Testimonials', breadcrumbs: [{ label: 'Marketplace', to: '/testimonials' }, { label: 'Testimonials' }] },
   '/coupons': { title: 'Coupons', breadcrumbs: [{ label: 'Marketplace', to: '/coupons' }, { label: 'Coupons' }] },
   '/buyers-coupons': { title: 'Buyer Coupons', breadcrumbs: [{ label: 'Marketplace', to: '/buyers-coupons' }, { label: 'Buyer Coupons' }] },
   '/transactions': { title: 'Transactions', breadcrumbs: [{ label: 'Marketplace', to: '/transactions' }, { label: 'Transactions' }] },
@@ -155,6 +159,7 @@ export const ADMIN_MODULE_FORM_META = {
   packages: { listPath: '/packages', section: 'Marketplace', label: 'Packages', singular: 'Package' },
   'storage-facilities': { listPath: '/storage-facilities', section: 'Marketplace', label: 'Storage Facilities', singular: 'Storage Facility' },
   'checkout-services': { listPath: '/checkout-services', section: 'Marketplace', label: 'Checkout Services', singular: 'Checkout Service' },
+  testimonials: { listPath: '/testimonials', section: 'Marketplace', label: 'Testimonials', singular: 'Testimonial' },
   coupons: { listPath: '/coupons', section: 'Marketplace', label: 'Coupons', singular: 'Coupon' },
   'buyers-coupons': { listPath: '/buyers-coupons', section: 'Marketplace', label: 'Buyer Coupons', singular: 'Buyer Coupon' },
   transactions: { listPath: '/transactions', section: 'Marketplace', label: 'Transactions', singular: 'Transaction' },

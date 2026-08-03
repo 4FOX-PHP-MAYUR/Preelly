@@ -61,7 +61,7 @@ export function OtpBoxes({ length = OTP_LENGTH, value, onChange }) {
   }
 
   return (
-    <div className="flex justify-center gap-2.5" onPaste={handlePaste}>
+    <div className="flex justify-center gap-1.5 sm:gap-2.5" onPaste={handlePaste}>
       {digits.map((d, i) => (
         <input
           key={i}
@@ -78,7 +78,7 @@ export function OtpBoxes({ length = OTP_LENGTH, value, onChange }) {
           onChange={() => {}}
           onKeyDown={(e) => handleKey(e, i)}
           onFocus={(e) => e.target.select()}
-          className="h-12 w-11 rounded-[10px] border border-[#D8E0F0] text-center text-lg font-semibold outline-none transition placeholder:text-slate-300 focus:border-brand focus:ring-2 focus:ring-brand/15"
+          className="h-12 w-10 rounded-[10px] border border-[#D8E0F0] text-center text-lg font-semibold outline-none transition placeholder:text-slate-300 focus:border-brand focus:ring-2 focus:ring-brand/15 sm:w-11"
           style={{ backgroundColor: INPUT_BG, color: TITLE_NAVY }}
         />
       ))}

@@ -36,7 +36,7 @@ function OverviewCard({ product, title, flat = false }) {
         {rows.map((row, rowIdx) => (
           <div
             key={`overview-row-${rowIdx}`}
-            className="grid grid-cols-3 gap-x-4 py-4 first:pt-0 last:pb-0"
+            className="grid grid-cols-2 gap-x-4 gap-y-3 py-4 first:pt-0 last:pb-0 sm:grid-cols-3"
           >
             {row.map((item, idx) => (
               <div key={`${item.label}-${idx}`} className="min-w-0">

@@ -2,11 +2,17 @@ import { forwardRef, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, ChevronDown, Phone } from 'lucide-react'
 import BrandLogo from '@shared/components/BrandLogo'
+import { testimonialService } from '@shared/services/api'
 import {
   findCountryByDialCode,
   getCountryByIso,
   searchCountries,
 } from '@shared/data/countryCodes'
+
+const CUSTOMER_TYPE_ROLE_LABEL = {
+  seller: 'Seller',
+  buyer: 'Car Buyer',
+}
 
 export const AuthField = forwardRef(function AuthField({
   label,
@@ -212,6 +218,43 @@ export function AuthSocialButton({ label, onClick, disabled, children, active = 
 }
 
 export function AuthSidePanel({ quote, quoteAuthor, quoteRole }) {
+  const [testimonials, setTestimonials] = useState([])
+  const [activeIndex, setActiveIndex] = useState(0)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const res = await testimonialService.listActiveTestimonials()
+        if (cancelled) return
+        const items = res.data?.data || []
+        setTestimonials(
+          items.map((item) => ({
+            quote: item.testimonial,
+            quoteAuthor: item.testimonialName,
+            quoteRole: CUSTOMER_TYPE_ROLE_LABEL[item.customerType] || 'Customer',
+          }))
+        )
+      } catch {
+        // Fall back to the static quote passed in via props.
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  const slides = testimonials.length ? testimonials : [{ quote, quoteAuthor, quoteRole }]
+  const activeSlide = slides[activeIndex] || slides[0]
+  const hasMultipleSlides = slides.length > 1
+
+  const goToPrevious = () => {
+    setActiveIndex((current) => (current - 1 + slides.length) % slides.length)
+  }
+
+  const goToNext = () => {
+    setActiveIndex((current) => (current + 1) % slides.length)
+  }
+
   return (
     <aside className="relative hidden w-full max-w-[677px] min-h-[760px] justify-self-start overflow-hidden rounded-[40px] bg-[#3520d8] p-6 text-white shadow-[0_32px_100px_rgba(49,40,255,0.28)] lg:flex lg:flex-col xl:min-h-[973px]">
       <div
@@ -242,11 +285,11 @@ export function AuthSidePanel({ quote, quoteAuthor, quoteRole }) {
         <div className="mt-auto w-full max-w-[630px] self-center">
           <div className="min-h-[300px] rounded-[32px] border border-white/10 bg-white/[0.16] px-8 py-9 shadow-[inset_0_1px_0_rgba(255,255,255,0.08)] backdrop-blur-md xl:min-h-[335px] xl:px-9 xl:py-10">
             <p className="max-w-[34rem] text-[2rem] font-normal leading-[1.25] text-white xl:text-[36px] xl:leading-[45px]">
-              {quote}
+              {activeSlide.quote}
             </p>
             <div className="mt-10 xl:mt-[72px]">
-              <p className="text-[1.25rem] font-medium text-white">{quoteAuthor}</p>
-              <p className="mt-1 text-base font-medium text-[#E1E1E1]">{quoteRole}</p>
+              <p className="text-[1.25rem] font-medium text-white">{activeSlide.quoteAuthor}</p>
+              <p className="mt-1 text-base font-medium text-[#E1E1E1]">{activeSlide.quoteRole}</p>
             </div>
           </div>
         </div>
@@ -256,15 +299,19 @@ export function AuthSidePanel({ quote, quoteAuthor, quoteRole }) {
       <div className="absolute bottom-0 right-0 z-20 flex items-center gap-[14px] rounded-tl-[32px] rounded-br-[40px] bg-white pb-5 pl-7 pr-5 pt-6">
         <button
           type="button"
+          onClick={goToPrevious}
+          disabled={!hasMultipleSlides}
           aria-label="Previous testimonial"
-          className="flex h-[62px] w-[74px] items-center justify-center rounded-[18px] border border-[#E6E9F5] bg-white text-[#21357C] shadow-[0_6px_18px_rgba(20,0,255,0.10)] transition hover:bg-[#f8faff]"
+          className="flex h-[62px] w-[74px] items-center justify-center rounded-[18px] border border-[#E6E9F5] bg-white text-[#21357C] shadow-[0_6px_18px_rgba(20,0,255,0.10)] transition hover:bg-[#f8faff] disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ArrowLeft className="h-6 w-6 stroke-[1.75]" />
         </button>
         <button
           type="button"
+          onClick={goToNext}
+          disabled={!hasMultipleSlides}
           aria-label="Next testimonial"
-          className="flex h-[62px] w-[74px] items-center justify-center rounded-[18px] border border-[#E6E9F5] bg-white text-[#21357C] shadow-[0_6px_18px_rgba(20,0,255,0.10)] transition hover:bg-[#f8faff]"
+          className="flex h-[62px] w-[74px] items-center justify-center rounded-[18px] border border-[#E6E9F5] bg-white text-[#21357C] shadow-[0_6px_18px_rgba(20,0,255,0.10)] transition hover:bg-[#f8faff] disabled:cursor-not-allowed disabled:opacity-40"
         >
           <ArrowRight className="h-6 w-6 stroke-[1.75]" />
         </button>

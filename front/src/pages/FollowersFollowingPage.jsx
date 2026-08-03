@@ -130,8 +130,8 @@ function FollowersFollowingPage() {
           ) : (
             <UserPlus className="h-8 w-8 text-primary-600" />
           )}
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">
+          <div className="min-w-0">
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 break-words">
               {profileUser?.name}'s {title}
             </h1>
             <p className="text-gray-600 mt-1">
@@ -170,10 +170,10 @@ function FollowersFollowingPage() {
                         <img
                           src={getMediaUrl(user.avatar) || user.avatar}
                           alt={user.name}
-                          className="w-12 h-12 rounded-full object-cover"
+                          className="w-12 h-12 rounded-full object-cover shrink-0"
                         />
                       ) : (
-                        <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center">
+                        <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center shrink-0">
                           <User className="h-6 w-6 text-primary-600" />
                         </div>
                       )}

@@ -90,7 +90,8 @@ function ChatAttachments({ attachments = [], isTemp = false }) {
   const gridStyle = {
     display: 'grid',
     gap: 2,
-    width: 244,
+    width: '100%',
+    maxWidth: 244,
     gridTemplateColumns: single ? '1fr' : '1fr 1fr',
   }
   const cellH = single ? 220 : 120
@@ -138,7 +139,7 @@ function ChatAttachments({ attachments = [], isTemp = false }) {
       )}
       {auds.map((a, i) => (
         <div key={i} className="px-3 py-2.5 bg-white">
-          <audio controls src={resolveUrl(a)} className="max-w-[240px] h-10" style={{ colorScheme: 'light' }} />
+          <audio controls src={resolveUrl(a)} className="w-full max-w-[240px] h-10" style={{ colorScheme: 'light' }} />
         </div>
       ))}
       {docs.map((a, i) => (

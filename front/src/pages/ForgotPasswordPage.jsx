@@ -405,7 +405,7 @@ function ForgotPasswordPage() {
             </div>
 
             <form onSubmit={onVerifyOtp} className="mt-10">
-              <div className="flex items-center justify-center gap-2 sm:gap-3">
+              <div className="flex items-center justify-center gap-1.5 sm:gap-2 lg:gap-3">
                 {otpDigits.map((digit, index) => (
                   <input
                     key={index}
@@ -421,7 +421,7 @@ function ForgotPasswordPage() {
                     onKeyDown={(event) => handleKeyDown(index, event)}
                     onPaste={handlePaste}
                     aria-label={`OTP digit ${index + 1}`}
-                    className="h-14 w-12 rounded-[14px] border border-[#cad3e6] bg-white text-center text-xl font-semibold text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#2c24ff] focus:ring-4 focus:ring-[#2c24ff]/10 sm:h-16 sm:w-14"
+                    className="h-12 w-10 rounded-[14px] border border-[#cad3e6] bg-white text-center text-lg font-semibold text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#2c24ff] focus:ring-4 focus:ring-[#2c24ff]/10 sm:h-14 sm:w-12 sm:text-xl lg:h-16 lg:w-14"
                   />
                 ))}
               </div>

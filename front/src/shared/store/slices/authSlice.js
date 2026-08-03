@@ -418,6 +418,17 @@ const authSlice = createSlice({
         state.loading = false
         state.error = action.payload
       })
+      .addCase(emailStart.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(emailStart.fulfilled, (state) => {
+        state.loading = false
+      })
+      .addCase(emailStart.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.payload
+      })
       .addCase(verifyOtp.pending, (state) => {
         state.loading = true
         state.error = null

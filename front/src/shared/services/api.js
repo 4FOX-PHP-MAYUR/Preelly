@@ -238,6 +238,11 @@ export const storageFacilityService = {
   listActiveStorageFacilities: (config) => api.get('/v1/web/storage-facilities', config),
 }
 
+// Testimonials (public web API — `testimonials` collection)
+export const testimonialService = {
+  listActiveTestimonials: (config) => api.get('/v1/web/testimonials', config),
+}
+
 // Public checkout-service add-ons (Pay Through Preelly, Pick & Drop, …).
 export const checkoutServicePublicService = {
   listActiveCheckoutServices: (config) => api.get('/v1/web/checkout-services', config),

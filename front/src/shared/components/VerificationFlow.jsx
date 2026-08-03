@@ -38,7 +38,7 @@ function OtpInput({ length = 6, value, onChange }) {
   }
 
   return (
-    <div className="flex gap-2 justify-center">
+    <div className="flex gap-1.5 justify-center sm:gap-2">
       {digits.map((d, i) => (
         <input
           key={i}
@@ -50,7 +50,7 @@ function OtpInput({ length = 6, value, onChange }) {
           onChange={() => {}}
           onKeyDown={(e) => handleKey(e, i)}
           onFocus={(e) => e.target.select()}
-          className="h-12 w-10 rounded-xl border-2 border-gray-200 text-center text-lg font-bold text-gray-900 focus:border-[#0044FF] focus:outline-none focus:ring-2 focus:ring-blue-100 transition"
+          className="h-11 w-8 rounded-xl border-2 border-gray-200 text-center text-lg font-bold text-gray-900 focus:border-[#0044FF] focus:outline-none focus:ring-2 focus:ring-blue-100 transition sm:h-12 sm:w-10"
         />
       ))}
     </div>

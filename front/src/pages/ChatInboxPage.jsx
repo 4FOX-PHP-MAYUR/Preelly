@@ -1395,7 +1395,7 @@ export default function ChatInboxPage() {
               </div>
 
               {/* messages */}
-              <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-6 py-4 bg-gray-50/60">
+              <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-3 sm:px-6 py-4 bg-gray-50/60">
                 {loadingThread ? (
                   <div className="space-y-4 pt-2">
                     {[38, 55, 42, 60, 35].map((w, i) => (
@@ -1436,7 +1436,7 @@ export default function ChatInboxPage() {
                                     name={activeThread?.isGroup ? m.senderName : otherParty?.name} size={32} />
                                 )}
 
-                                <div className={`flex flex-col max-w-[60%] ${isSelf ? 'items-end' : 'items-start'}`}>
+                                <div className={`flex flex-col max-w-[85%] sm:max-w-[75%] md:max-w-[65%] lg:max-w-[60%] ${isSelf ? 'items-end' : 'items-start'}`}>
                                   {!isSelf && activeThread?.isGroup && m.senderName && (
                                     <span className="mb-0.5 ml-1 text-[11px] font-semibold text-purple-600">{m.senderName}</span>
                                   )}

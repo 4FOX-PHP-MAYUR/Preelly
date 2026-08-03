@@ -50,7 +50,7 @@ function VerifyEmailOtpPage() {
     []
   )
 
-  const loginPath = target === 'seller' ? '/login?target=seller' : '/login'
+  const loginPath = target === 'seller' ? '/login?target=seller&tab=email' : '/login?tab=email'
   const signupPath = target === 'seller' ? '/signup?target=seller' : '/signup'
   const backPath = authMode === 'signup' ? signupPath : loginPath
 
@@ -59,12 +59,14 @@ function VerifyEmailOtpPage() {
   const [otpError, setOtpError] = useState('')
   const [resendCountdown, setResendCountdown] = useState(RESEND_DELAY)
   const [alreadyRegistered, setAlreadyRegistered] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     setEmail(queryEmail)
     setOtpDigits(Array(OTP_LENGTH).fill(''))
     setOtpError('')
     setResendCountdown(RESEND_DELAY)
+    setSubmitting(false)
   }, [queryEmail])
 
   useEffect(() => {
@@ -188,6 +190,7 @@ function VerifyEmailOtpPage() {
       return
     }
 
+    setSubmitting(true)
     try {
       if (isCompleteFlow) {
         const result = await dispatch(completeVerifyEmail({ email, otp: otpValue })).unwrap()
@@ -214,6 +217,7 @@ function VerifyEmailOtpPage() {
         setAlreadyRegistered(true)
       }
       toast.error(err?.message || 'Verification failed')
+      setSubmitting(false)
     }
   }
 
@@ -274,7 +278,7 @@ function VerifyEmailOtpPage() {
               </div>
             ) : null}
 
-            <div className="flex items-center justify-center gap-2 sm:gap-3">
+            <div className="flex items-center justify-center gap-1.5 sm:gap-2 lg:gap-3">
               {otpDigits.map((digit, index) => (
                 <input
                   key={index}
@@ -290,7 +294,7 @@ function VerifyEmailOtpPage() {
                   onKeyDown={(event) => handleKeyDown(index, event)}
                   onPaste={handlePaste}
                   aria-label={`OTP digit ${index + 1}`}
-                  className="h-14 w-12 rounded-[14px] border border-[#cad3e6] bg-white text-center text-xl font-semibold text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#2c24ff] focus:ring-4 focus:ring-[#2c24ff]/10 sm:h-16 sm:w-14"
+                  className="h-12 w-10 rounded-[14px] border border-[#cad3e6] bg-white text-center text-lg font-semibold text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#2c24ff] focus:ring-4 focus:ring-[#2c24ff]/10 sm:h-14 sm:w-12 sm:text-xl lg:h-16 lg:w-14"
                 />
               ))}
             </div>
@@ -309,7 +313,7 @@ function VerifyEmailOtpPage() {
                 <button
                   type="button"
                   onClick={onResend}
-                  disabled={loading}
+                  disabled={loading || submitting}
                   className="font-semibold text-[#2c24ff] transition hover:text-[#1800ff] disabled:opacity-60"
                 >
                   Resend code
@@ -319,10 +323,10 @@ function VerifyEmailOtpPage() {
 
             <button
               type="submit"
-              disabled={loading}
+              disabled={loading || submitting}
               className="mt-6 flex h-[54px] w-full items-center justify-center rounded-full bg-[#1a43ff] px-6 text-base font-medium text-white shadow-[0_18px_36px_rgba(26,67,255,0.28)] transition hover:bg-[#1438df] disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {loading ? (
+              {loading || submitting ? (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
               ) : (
                 'Verify Now'

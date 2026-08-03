@@ -1,4 +1,5 @@
 const express = require('express')
+const fs = require('fs')
 const router = express.Router()
 const Product = require('../models/Product')
 const User = require('../models/User')
@@ -54,6 +55,13 @@ const {
   toPaginatedStorageFacilitiesResponse,
   toStorageFacilityDto,
 } = require('../dto/storageFacility.dto')
+const testimonialService = require('../core/services/testimonialService')
+const testimonialValidator = require('../core/validators/testimonial.validator')
+const {
+  toPaginatedTestimonialsResponse,
+  toTestimonialDto,
+  toTestimonialListDto,
+} = require('../dto/testimonial.dto')
 const {
   resolveTableConfig,
   validateTableConfig,
@@ -2999,6 +3007,207 @@ router.delete(
     } catch (error) {
       console.error('Error deleting storage facility:', error)
       res.status(error.statusCode || 500).json({ message: error.message || 'Error deleting storage facility' })
+    }
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Testimonials
+// ---------------------------------------------------------------------------
+
+const TESTIMONIAL_IMAGE_MAX_BYTES = 5 * 1024 * 1024 // 5MB
+
+/** Multer writes images into uploads/images — expose the public relative path. */
+function resolveTestimonialImage(req) {
+  return req.file ? `/uploads/images/${req.file.filename}` : null
+}
+
+/** Rejects an uploaded profile image that exceeds the size cap; removes the temp file. */
+function enforceTestimonialImageSize(req, res, next) {
+  if (req.file && req.file.size > TESTIMONIAL_IMAGE_MAX_BYTES) {
+    fs.unlink(req.file.path, () => {})
+    return res.status(400).json({ message: 'Profile image must be 5MB or smaller' })
+  }
+  next()
+}
+
+// GET /api/admin/testimonials - paginated list with search + filters
+router.get(
+  '/testimonials',
+  adminMiddleware,
+  testimonialValidator.listQueryRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const {
+        page = 1,
+        limit = 20,
+        search,
+        status,
+        customerType,
+        fromDate,
+        toDate,
+        sortBy = 'displayOrder',
+        sortDir = 'asc',
+      } = req.query
+      const result = await testimonialService.listTestimonials({
+        page: Number(page),
+        limit: Number(limit),
+        search,
+        status: status || 'all',
+        customerType: customerType || 'all',
+        fromDate,
+        toDate,
+        sortBy,
+        sortDir,
+      })
+      res.json(toPaginatedTestimonialsResponse(result))
+    } catch (error) {
+      console.error('Error fetching testimonials:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching testimonials' })
+    }
+  }
+)
+
+// GET /api/admin/testimonials/export - Excel download (current filters)
+router.get('/testimonials/export', adminMiddleware, async (req, res) => {
+  try {
+    const { search, status, customerType, fromDate, toDate } = req.query
+    const items = await testimonialService.listTestimonialsForExport({
+      search,
+      status: status || 'all',
+      customerType: customerType || 'all',
+      fromDate,
+      toDate,
+    })
+
+    const rows = toTestimonialListDto(items).map((t) => ({
+      'Testimonial Name': t.testimonialName,
+      'Customer Type': t.customerType === 'seller' ? 'Seller' : 'Buyer',
+      Testimonial: t.testimonial,
+      Rating: t.rating,
+      'Display Order': t.displayOrder,
+      Status: t.status ? 'Active' : 'Inactive',
+      'Created At': t.createdAt ? new Date(t.createdAt).toLocaleString() : '',
+    }))
+
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+    worksheet['!cols'] = [
+      { wch: 20 }, { wch: 14 }, { wch: 40 },
+      { wch: 8 }, { wch: 12 }, { wch: 10 }, { wch: 20 },
+    ]
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Testimonials')
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="testimonials.xlsx"')
+    res.send(buffer)
+  } catch (error) {
+    console.error('Error exporting testimonials:', error)
+    res.status(error.statusCode || 500).json({ message: error.message || 'Error exporting testimonials' })
+  }
+})
+
+// GET /api/admin/testimonials/:id
+router.get(
+  '/testimonials/:id',
+  adminMiddleware,
+  testimonialValidator.mongoIdParamRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const testimonial = await testimonialService.getTestimonialById(req.params.id)
+      res.json(toTestimonialDto(testimonial))
+    } catch (error) {
+      console.error('Error fetching testimonial:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching testimonial' })
+    }
+  }
+)
+
+// POST /api/admin/testimonials - create (with optional profile image)
+router.post(
+  '/testimonials',
+  adminMiddleware,
+  upload.single('profileImage'),
+  enforceTestimonialImageSize,
+  testimonialValidator.createTestimonialRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const testimonial = await testimonialService.createTestimonial(
+        { ...req.body, profileImage: resolveTestimonialImage(req) },
+        req.user?._id
+      )
+      res.status(201).json(toTestimonialDto(testimonial))
+    } catch (error) {
+      console.error('Error creating testimonial:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error creating testimonial' })
+    }
+  }
+)
+
+// PATCH /api/admin/testimonials/:id - update (optional image replace / clear)
+router.patch(
+  '/testimonials/:id',
+  adminMiddleware,
+  upload.single('profileImage'),
+  enforceTestimonialImageSize,
+  testimonialValidator.updateTestimonialRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const testimonial = await testimonialService.updateTestimonial(
+        req.params.id,
+        { ...req.body, profileImage: resolveTestimonialImage(req) },
+        req.user?._id
+      )
+      res.json(toTestimonialDto(testimonial))
+    } catch (error) {
+      console.error('Error updating testimonial:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error updating testimonial' })
+    }
+  }
+)
+
+// PUT /api/admin/testimonials/:id/status - activate / deactivate
+router.put(
+  '/testimonials/:id/status',
+  adminMiddleware,
+  testimonialValidator.statusRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const testimonial = await testimonialService.setTestimonialStatus(
+        req.params.id,
+        req.body.status,
+        req.user?._id
+      )
+      res.json({
+        message: `Testimonial ${testimonial.status ? 'activated' : 'deactivated'}`,
+        testimonial: toTestimonialDto(testimonial),
+      })
+    } catch (error) {
+      console.error('Error updating testimonial status:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error updating testimonial status' })
+    }
+  }
+)
+
+// DELETE /api/admin/testimonials/:id - soft delete
+router.delete(
+  '/testimonials/:id',
+  adminMiddleware,
+  testimonialValidator.mongoIdParamRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      await testimonialService.deleteTestimonial(req.params.id, req.user?._id)
+      res.json({ message: 'Testimonial deleted successfully' })
+    } catch (error) {
+      console.error('Error deleting testimonial:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error deleting testimonial' })
     }
   }
 )

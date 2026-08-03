@@ -333,7 +333,7 @@ function HomePage() {
       )}
 
       <div
-        className={`grid h-full grid-rows-[auto_minmax(0,1fr)] ${
+        className={`grid h-full grid-cols-1 grid-rows-[auto_minmax(0,1fr)] ${
           sidebarCollapsed
             ? 'lg:grid-cols-[84px_minmax(0,1fr)_465px]'
             : 'lg:grid-cols-[270px_minmax(0,1fr)_465px]'
@@ -473,7 +473,7 @@ function HomePage() {
                 <div>
                   <p className="text-lg font-semibold text-slate-900">Login to view your following feed</p>
                   <p className="mt-2 text-sm text-slate-500">Trending reels are still available without signing in.</p>
-                  <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                  <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
                     <button
                       type="button"
                       onClick={() => handleTabChange('trending')}
@@ -503,7 +503,7 @@ function HomePage() {
                       ? 'Try another category or clear the filter to see more video listings.'
                       : 'Add listings with videos and they will appear here.'}
                   </p>
-                  <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row">
+                  <div className="mt-5 flex flex-col items-center justify-center gap-3 sm:flex-row sm:flex-wrap">
                     {activeTab === 'following' && isAuthenticated ? (
                       <button
                         type="button"

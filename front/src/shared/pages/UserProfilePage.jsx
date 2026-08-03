@@ -285,7 +285,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
           <div className="mx-auto mt-4 h-5 w-40 rounded bg-gray-200" />
           <div className="mx-auto mt-2 h-4 w-28 rounded bg-gray-200" />
         </div>
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 gap-2 min-[420px]:grid-cols-3 sm:grid-cols-4">
           {Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="aspect-square rounded-none bg-gray-200" />
           ))}

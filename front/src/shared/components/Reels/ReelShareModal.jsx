@@ -470,7 +470,7 @@ function ReelShareModal({ isOpen, onClose, product, userId, asPanel = false }) {
   const footer = (
     <>
       {selectedCount <= 1 && (
-      <div className="mb-3 grid grid-cols-6 gap-2">
+      <div className="mb-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
         <button
           type="button"
           onClick={handleNativeShare}
@@ -610,9 +610,9 @@ function ReelShareModal({ isOpen, onClose, product, userId, asPanel = false }) {
   return (
     <>
       <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-[2px]" onClick={onClose} aria-hidden />
-      <div className="fixed inset-0 z-[10001] flex items-center justify-center p-3 sm:p-4">
-        <div className="w-full max-w-[860px] rounded-2xl border border-gray-200 bg-white shadow-2xl overflow-hidden">
-          <div className="flex items-center gap-2 border-b border-gray-200 px-4 py-3">
+      <div className="fixed inset-0 z-[10001] flex items-end justify-center p-0 sm:items-center sm:p-4">
+        <div className="flex max-h-[92vh] w-full max-w-[860px] flex-col overflow-hidden rounded-t-2xl border border-gray-200 bg-white shadow-2xl sm:max-h-[85vh] sm:rounded-2xl">
+          <div className="flex shrink-0 items-center gap-2 border-b border-gray-200 px-4 py-3">
             {searchBar}
             <button
               type="button"
@@ -624,9 +624,9 @@ function ReelShareModal({ isOpen, onClose, product, userId, asPanel = false }) {
             </button>
           </div>
 
-          <div className="max-h-[42vh] overflow-y-auto px-4 py-4">{userGrid}</div>
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">{userGrid}</div>
 
-          <div className="border-t border-gray-200 px-4 py-3">{footer}</div>
+          <div className="shrink-0 border-t border-gray-200 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">{footer}</div>
         </div>
       </div>
     </>

@@ -172,7 +172,8 @@ function AttachGrid({ attachments, isTemp }) {
   const gridStyle = {
     display: 'grid',
     gap: 2,
-    width: 244,
+    width: '100%',
+    maxWidth: 244,
     gridTemplateColumns: shown.length === 1 ? '1fr' : '1fr 1fr',
   }
   const cellH = shown.length === 1 ? 220 : 120

@@ -40,6 +40,7 @@ export const ROUTE_PERMISSION_MAP = {
   '/buyers-coupons': 'Buyer Coupons',
   '/transactions': 'Transactions',
   '/products': 'Listings',
+  '/users': 'Users',
   '/roles': 'Settings',
   '/identity-verification': 'Users',
   '/reports': 'Reports',

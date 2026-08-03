@@ -14,8 +14,6 @@ import {
   Search,
   X,
   Users,
-  CheckCircle2,
-  XCircle as XCircleIcon,
   MessageCircle,
   Star,
   FileSpreadsheet,
@@ -28,8 +26,7 @@ import Modal from '../components/AdminUI/Modal'
 import DataTable from '../components/AdminUI/DataTable'
 import StatusBadge from '../components/AdminUI/StatusBadge'
 import PageHeader from '../components/AdminUI/PageHeader'
-import { EmiratesIdThumbnailPair, EmiratesIdLightbox } from '../components/AdminUI/EmiratesIdPreview'
-import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
+import { EmiratesIdLightbox } from '../components/AdminUI/EmiratesIdPreview'
 import toast from 'react-hot-toast'
 import { getMediaUrl } from '@shared/utils/helpers'
 import { formatListingPrice } from '@shared/components/categoryBrowseShared'
@@ -43,15 +40,12 @@ function AdminDashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const user = useSelector(selectUser)
   const isAdmin = useSelector(selectIsAdmin)
-  const { canCreate: canCreateUser, canEdit: canEditUser } = usePermission('Users')
   const { canEdit: canEditListing } = usePermission('Listings')
   const [pendingProducts, setPendingProducts] = useState([])
   const [allProducts, setAllProducts] = useState([])
   const [productTotal, setProductTotal] = useState(0)
   const [productHasMore, setProductHasMore] = useState(false)
   const [productPage, setProductPage] = useState(1)
-  const [users, setUsers] = useState([])
-  const [usersTotal, setUsersTotal] = useState(0)
   const [contacts, setContacts] = useState([])
   const [contactsTotal, setContactsTotal] = useState(0)
   const [supportUnreadCount, setSupportUnreadCount] = useState(0)
@@ -70,19 +64,9 @@ function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState('dashboard')
   const [statusFilter, setStatusFilter] = useState('all')
   const [productAddTypeFilter, setProductAddTypeFilter] = useState('all')
-  const [userFilter, setUserFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [contactsActiveOnly, setContactsActiveOnly] = useState(true)
-  const [statusUpdatingId, setStatusUpdatingId] = useState(null)
-  const [newUser, setNewUser] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    password: '',
-    role: 'user',
-    status: 'active',
-  })
   const [rejectModalProductId, setRejectModalProductId] = useState(null)
   const [selectedRejectCategories, setSelectedRejectCategories] = useState([])
   const [rejectSelectionByCategory, setRejectSelectionByCategory] = useState({})
@@ -106,15 +90,6 @@ function AdminDashboardPage() {
   const [exportToDate, setExportToDate] = useState('')
   const [exportApplyFilters, setExportApplyFilters] = useState(true)
   const [exporting, setExporting] = useState(false)
-
-  const getMemberSinceYear = (u) => {
-    const raw = u?.memberSince || u?.createdAt
-    if (!raw) return null
-    const d = new Date(raw)
-    if (Number.isNaN(d.getTime())) return null
-    return d.getFullYear()
-  }
-  const [roleUpdatingId, setRoleUpdatingId] = useState(null)
 
   const PRODUCT_PAGE_LIMIT = 15
 
@@ -215,6 +190,11 @@ function AdminDashboardPage() {
       navigate('/products', { replace: true })
       return
     }
+    // Legacy Users tab (?tab=users) now lives at /users
+    if (tab === 'users') {
+      navigate('/users', { replace: true })
+      return
+    }
     if (Object.prototype.hasOwnProperty.call(PRODUCT_STATUS_ROUTES, location.pathname)) {
       if (activeTab !== 'products') setActiveTab('products')
       const routeStatus = PRODUCT_STATUS_ROUTES[location.pathname]
@@ -225,7 +205,7 @@ function AdminDashboardPage() {
       return
     }
     if (location.pathname === '/') {
-      const nextTab = tab && ['dashboard', 'sold', 'users', 'contacts', 'categories'].includes(tab)
+      const nextTab = tab && ['dashboard', 'sold', 'contacts', 'categories'].includes(tab)
         ? tab
         : 'dashboard'
       if (nextTab !== activeTab) setActiveTab(nextTab)
@@ -398,93 +378,6 @@ function AdminDashboardPage() {
     })
   }
 
-  const fetchUsers = async (filter = 'all', search = '') => {
-    try {
-      setLoading(true)
-      const params = { limit: 100 }
-      if (filter === 'verified') {
-        params.isVerified = 'true'
-      } else if (filter === 'unverified') {
-        params.isVerified = 'false'
-      }
-      if (search) {
-        params.search = search
-      }
-      const response = await adminService.getUsers(params)
-      setUsers(response.data.users || [])
-      setUsersTotal(response.data.total || 0)
-    } catch (error) {
-      console.error('Error fetching users:', error)
-      toast.error('Failed to load users')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleVerifyUser = async (userId, isVerified) => {
-    try {
-      setProcessingId(userId)
-      await adminService.verifyUser(userId, isVerified)
-      toast.success(`User ${isVerified ? 'verified' : 'unverified'} successfully`)
-      fetchUsers(userFilter, searchQuery)
-    } catch (error) {
-      console.error('Error updating user verification:', error)
-      toast.error('Failed to update user verification')
-    } finally {
-      setProcessingId(null)
-    }
-  }
-
-  const handleChangeUserRole = async (userId, currentRole) => {
-    const newRole = currentRole === 'admin' ? 'user' : 'admin'
-    try {
-      setRoleUpdatingId(userId)
-      await adminService.setUserRole(userId, newRole)
-      toast.success(`User role updated to "${newRole}"`)
-      fetchUsers(userFilter, searchQuery)
-    } catch (error) {
-      console.error('Error updating user role:', error)
-      toast.error(error.response?.data?.message || 'Failed to update user role')
-    } finally {
-      setRoleUpdatingId(null)
-    }
-  }
-
-  const handleChangeUserStatus = async (userId, currentStatus) => {
-    const newStatus = currentStatus === 'active' ? 'inactive' : 'active'
-    try {
-      setStatusUpdatingId(userId)
-      await adminService.setUserStatus(userId, newStatus)
-      toast.success(`User status updated to "${newStatus}"`)
-      fetchUsers(userFilter, searchQuery)
-    } catch (error) {
-      console.error('Error updating user status:', error)
-      toast.error(error.response?.data?.message || 'Failed to update user status')
-    } finally {
-      setStatusUpdatingId(null)
-    }
-  }
-
-  const handleCreateUser = async (e) => {
-    e.preventDefault()
-    try {
-      await adminService.createUser(newUser)
-      toast.success('User created successfully')
-      setNewUser({
-        name: '',
-        email: '',
-        phone: '',
-        password: '',
-        role: 'user',
-        status: 'active',
-      })
-      fetchUsers(userFilter, searchQuery)
-    } catch (error) {
-      console.error('Error creating user:', error)
-      toast.error(error.response?.data?.message || 'Failed to create user')
-    }
-  }
-
   const fetchContacts = async (search = '') => {
     try {
       setLoading(true)
@@ -583,8 +476,6 @@ function AdminDashboardPage() {
     } else if (activeTab === 'sold') {
       setProductPage(1)
       fetchAllProducts('sold', searchInput, 1)
-    } else if (activeTab === 'users') {
-      fetchUsers(userFilter, searchInput)
     } else if (activeTab === 'contacts') {
       fetchContacts(searchInput)
     } else if (activeTab === 'comments') {
@@ -603,8 +494,6 @@ function AdminDashboardPage() {
     } else if (activeTab === 'sold') {
       setProductPage(1)
       fetchAllProducts('sold', '', 1)
-    } else if (activeTab === 'users') {
-      fetchUsers(userFilter, '')
     } else if (activeTab === 'contacts') {
       fetchContacts('')
     } else if (activeTab === 'comments') {
@@ -617,8 +506,6 @@ function AdminDashboardPage() {
       fetchAllProducts(statusFilter, searchQuery, productPage)
     } else if (activeTab === 'sold' && isAdmin) {
       fetchAllProducts('sold', searchQuery, productPage)
-    } else if (activeTab === 'users' && isAdmin) {
-      fetchUsers(userFilter, searchQuery)
     } else if (activeTab === 'contacts' && isAdmin) {
       fetchContacts(searchQuery)
     } else if (activeTab === 'comments' && isAdmin) {
@@ -627,12 +514,11 @@ function AdminDashboardPage() {
       fetchCategories()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, statusFilter, userFilter, productPage, contactsActiveOnly, isAdmin])
+  }, [activeTab, statusFilter, productPage, contactsActiveOnly, isAdmin])
 
-  // Load users and contacts once on mount so the tab counts are correct by default
+  // Load contacts once on mount so the tab counts are correct by default
   useEffect(() => {
     if (isAdmin) {
-      fetchUsers('all', '')
       fetchContacts('')
       adminService.getReportedComments({ page: 1, limit: 1 }).then((res) => {
         setReportedCommentsTotal(res.data.total || 0)
@@ -1021,9 +907,7 @@ function AdminDashboardPage() {
           {/* Search Bar */}
           <div className="flex-1 w-full">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              {activeTab === 'users'
-                ? 'Search Users'
-                : activeTab === 'contacts'
+              {activeTab === 'contacts'
                 ? 'Search Contacts'
                 : activeTab === 'comments'
                 ? 'Search Comments'
@@ -1041,9 +925,7 @@ function AdminDashboardPage() {
                   }
                 }}
                 placeholder={
-                  activeTab === 'users'
-                    ? 'Search users by name or email...'
-                    : activeTab === 'contacts'
+                  activeTab === 'contacts'
                     ? 'Search by name or email...'
                     : activeTab === 'comments'
                     ? 'Search by comment text or product title...'
@@ -1226,25 +1108,6 @@ function AdminDashboardPage() {
             </div>
           )}
 
-          {/* User Filter */}
-          {activeTab === 'users' && (
-            <div className="w-full md:w-auto">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Filter:</label>
-              <select
-                value={userFilter}
-                onChange={(e) => {
-                  setUserFilter(e.target.value)
-                  fetchUsers(e.target.value, searchQuery)
-                }}
-                className="w-full md:w-auto px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
-              >
-                <option value="all">All Users</option>
-                <option value="verified">Verified</option>
-                <option value="unverified">Unverified</option>
-              </select>
-            </div>
-          )}
-
           {/* Action Buttons */}
           <div className="flex flex-wrap gap-2 w-full md:w-auto">
             <Button type="button" onClick={handleSearch} icon={Search} className="flex-1 md:flex-none">
@@ -1261,8 +1124,6 @@ function AdminDashboardPage() {
                   fetchAllProducts(statusFilter, '')
                 } else if (activeTab === 'sold') {
                   fetchAllProducts('sold', '')
-                } else if (activeTab === 'users') {
-                  fetchUsers(userFilter, '')
                 } else if (activeTab === 'contacts') {
                   fetchContacts('')
                 } else if (activeTab === 'comments') {
@@ -1304,261 +1165,6 @@ function AdminDashboardPage() {
           </div>
         )}
       </Panel>
-
-      {/* Users List */}
-      {activeTab === 'users' && (
-        <div className="admin-card bg-white rounded-xl shadow-sm border border-gray-100">
-          {/* Create user form */}
-          {canCreateUser ? (
-          <div className="border-b p-6 bg-gray-50">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Create User</h2>
-            <form onSubmit={handleCreateUser} className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 items-end">
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Name</label>
-                <input
-                  type="text"
-                  value={newUser.name}
-                  onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-                  className="input-field h-9 text-sm"
-                  placeholder="Full name"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={newUser.email}
-                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  className="input-field h-9 text-sm"
-                  placeholder="email@example.com"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Phone</label>
-                <input
-                  type="text"
-                  value={newUser.phone}
-                  onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })}
-                  className="input-field h-9 text-sm"
-                  placeholder="+971..."
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Password</label>
-                <input
-                  type="password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  className="input-field h-9 text-sm"
-                  placeholder="Min 6 characters"
-                  required
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  value={newUser.status}
-                  onChange={(e) => setNewUser({ ...newUser, status: e.target.value })}
-                  className="input-field h-9 text-sm"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
-              <div className="md:col-span-1 lg:col-span-1">
-                <button
-                  type="submit"
-                  className="w-full btn-primary h-9 text-sm"
-                  aria-label="Add new user"
-                >
-                  Add User
-                </button>
-              </div>
-            </form>
-          </div>
-          ) : null}
-          {loading ? (
-            <div className="p-8 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading users...</p>
-            </div>
-          ) : users.length === 0 ? (
-            <div className="p-8 text-center">
-              <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">No users found</p>
-            </div>
-          ) : (
-            <div className="divide-y">
-              {users.map((user) => (
-                <div key={user._id} className="p-6 hover:bg-gray-50">
-                  <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center space-x-4 flex-1 min-w-0">
-                    <div className="relative">
-                      {user.avatar ? (
-                        <img
-                          src={getMediaUrl(user.avatar) || user.avatar}
-                          alt={user.name}
-                          className="w-12 h-12 rounded-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center">
-                          <Users className="h-6 w-6 text-primary-600" />
-                        </div>
-                      )}
-                      {user.isVerified && (
-                        <div className="absolute -bottom-1 -right-1 bg-white rounded-full p-0.5">
-                          <img 
-                            src={VERIFIED_BADGE_IMAGES.small} 
-                            alt="Verified" 
-                            className="h-4 w-4"
-                          />
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-semibold text-gray-900">{user.name}</h3>
-                        {user.isVerified && (
-                          <img 
-                            src={VERIFIED_BADGE_IMAGES.medium} 
-                            alt="Verified" 
-                            className="h-5 w-5"
-                            title="Verified Account"
-                          />
-                        )}
-                      </div>
-                      <p className="text-sm text-gray-600">{user.email}</p>
-                      {user.phone && (
-                        <p className="text-xs text-gray-500">{user.phone}</p>
-                      )}
-                      <div className="flex items-center gap-2 mt-1 text-xs text-gray-500 flex-wrap">
-                        {getMemberSinceYear(user) && (
-                          <span>Member since {getMemberSinceYear(user)}</span>
-                        )}
-                        <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded-full">
-                          Role: {user.adminRole?.role_name || (user.role === 'admin' ? 'Admin' : 'User')}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded-full ${
-                            user.status === 'active'
-                              ? 'bg-green-100 text-green-800'
-                              : 'bg-red-100 text-red-800'
-                          }`}
-                        >
-                          {user.status === 'active' ? 'Active' : 'Inactive'}
-                        </span>
-                        {user.identityVerificationStatus === 'pending' && (
-                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800">
-                            ID Pending
-                          </span>
-                        )}
-                        {user.identityVerificationStatus === 'rejected' && (
-                          <span className="px-2 py-0.5 rounded-full bg-red-100 text-red-700">
-                            ID Rejected
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {canEditUser && (user.isVerified ? (
-                      <button
-                        type="button"
-                        onClick={() => handleVerifyUser(user._id, false)}
-                        disabled={processingId === user._id}
-                        className="h-9 px-3 rounded-full flex items-center justify-center gap-1.5 border text-sm bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Unverify user"
-                        aria-label="Unverify user"
-                      >
-                        {processingId === user._id ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                        ) : (
-                          <XCircleIcon className="h-4 w-4" />
-                        )}
-                        <span className="text-xs font-medium">Unverify</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleVerifyUser(user._id, true)}
-                        disabled={processingId === user._id}
-                        className="h-9 px-3 rounded-full flex items-center justify-center gap-1.5 border text-sm bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        title="Verify user"
-                        aria-label="Verify user"
-                      >
-                        {processingId === user._id ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                        ) : (
-                          <CheckCircle2 className="h-4 w-4" />
-                        )}
-                        <span className="text-xs font-medium">Verify</span>
-                      </button>
-                    ))}
-                    {canEditUser && (
-                      <button
-                        type="button"
-                        onClick={() => handleChangeUserStatus(user._id, user.status || 'active')}
-                        disabled={statusUpdatingId === user._id}
-                        className={`h-9 px-3 rounded-full flex items-center justify-center gap-1.5 border text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                          (user.status || 'active') === 'active'
-                            ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
-                            : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
-                        }`}
-                        title={(user.status || 'active') === 'active' ? 'Deactivate user' : 'Activate user'}
-                        aria-label={(user.status || 'active') === 'active' ? 'Deactivate user' : 'Activate user'}
-                      >
-                        {statusUpdatingId === user._id ? (
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
-                        ) : (user.status || 'active') === 'active' ? (
-                          <AlertCircle className="h-4 w-4" />
-                        ) : (
-                          <CheckCircle className="h-4 w-4" />
-                        )}
-                        <span className="text-xs font-medium">{(user.status || 'active') === 'active' ? 'Deactivate' : 'Activate'}</span>
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/users/${user._id}`)}
-                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center space-x-2 text-sm"
-                      aria-label="View user profile"
-                    >
-                      <Eye className="h-4 w-4" />
-                      <span>View User</span>
-                    </button>
-                  </div>
-                  </div>
-
-                  {(user.emiratesIdFront || user.emiratesIdBack) && (
-                    <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap items-center gap-4">
-                      <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
-                        Emirates ID Preview
-                      </span>
-                      <EmiratesIdThumbnailPair
-                        front={user.emiratesIdFront}
-                        back={user.emiratesIdBack}
-                        onPreview={(src, label) => setIdLightbox({ src, label })}
-                      />
-                      {user.identityVerificationStatus === 'pending' && (
-                        <button
-                          type="button"
-                          onClick={() => navigate('/identity-verification')}
-                          className="ml-auto text-xs font-semibold text-blue-600 hover:underline"
-                        >
-                          Review in Verification →
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Contacts List */}
       {activeTab === 'contacts' && (

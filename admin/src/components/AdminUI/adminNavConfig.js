@@ -70,7 +70,7 @@ export const ADMIN_MENU_GROUPS = [
     key: 'users',
     label: 'Users & Support',
     items: [
-      { key: 'users', label: 'Users', to: '/?tab=users', icon: Users },
+      { key: 'users', label: 'Users', to: '/users', icon: Users },
       { key: 'identity-verification', label: 'Verification', to: '/identity-verification', icon: ShieldCheck },
       { key: 'contacts', label: 'Contacts', to: '/?tab=contacts', icon: MessageCircle },
       { key: 'reports', label: 'Reports', to: '/reports', icon: FileText },
@@ -127,6 +127,7 @@ export const ADMIN_ROUTE_META = {
   '/products/pending': { title: 'Pending Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'Pending' }] },
   '/products/approved': { title: 'Approved Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'Approved' }] },
   '/products/sold': { title: 'Sold Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'Sold' }] },
+  '/users': { title: 'Users', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Users' }] },
   '/roles': { title: 'Admin Roles', breadcrumbs: [{ label: 'Settings', to: '/roles' }, { label: 'Admin Roles' }] },
   '/identity-verification': { title: 'Identity Verification', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Verification' }] },
   '/reports': { title: 'User Reports', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Reports' }] },
@@ -139,7 +140,6 @@ export const ADMIN_TAB_META = {
   dashboard: { title: 'Dashboard', breadcrumbs: [{ label: 'Dashboard' }] },
   products: { title: 'All Products', breadcrumbs: [{ label: 'Marketplace' }, { label: 'Products', to: '/products' }, { label: 'All Products' }] },
   sold: { title: 'Sold Products', breadcrumbs: [{ label: 'Marketplace' }, { label: 'Sold' }] },
-  users: { title: 'Users', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Users' }] },
   contacts: { title: 'Contacts', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Contacts' }] },
   comments: { title: 'User Reports', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Reports' }] },
 }
@@ -158,6 +158,7 @@ export const ADMIN_MODULE_FORM_META = {
   coupons: { listPath: '/coupons', section: 'Marketplace', label: 'Coupons', singular: 'Coupon' },
   'buyers-coupons': { listPath: '/buyers-coupons', section: 'Marketplace', label: 'Buyer Coupons', singular: 'Buyer Coupon' },
   transactions: { listPath: '/transactions', section: 'Marketplace', label: 'Transactions', singular: 'Transaction' },
+  users: { listPath: '/users', section: 'Users & Support', label: 'Users', singular: 'User' },
   roles: { listPath: '/roles', section: 'Settings', label: 'Admin Roles', singular: 'Role' },
   reports: { listPath: '/reports', section: 'Users & Support', label: 'Reports', singular: 'Report' },
 }

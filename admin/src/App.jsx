@@ -9,7 +9,6 @@ import {
   selectIsAdmin,
   selectPermissions,
 } from '@shared/store/slices/authSlice'
-import AdminUserIdentityPanel from './components/AdminUI/AdminUserIdentityPanel'
 import PermissionRoute from './components/PermissionRoute'
 import ForbiddenPage from './pages/ForbiddenPage'
 
@@ -18,6 +17,7 @@ const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'))
 const AdminCategoriesRoutes = lazy(() => import('./pages/categories'))
 const AdminFiltersRoutes = lazy(() => import('./pages/filters'))
 const AdminDealersRoutes = lazy(() => import('./pages/dealers'))
+const AdminUsersRoutes = lazy(() => import('./pages/users'))
 const AdminEmiratesRoutes = lazy(() => import('./pages/emirates'))
 const AdminPackagesRoutes = lazy(() => import('./pages/packages'))
 const AdminStorageFacilitiesRoutes = lazy(() => import('./pages/storage-facilities'))
@@ -31,7 +31,6 @@ const AdminIdentityVerificationPage = lazy(() => import('./pages/AdminIdentityVe
 const AdminFieldTypesRoutes = lazy(() => import('./pages/field-types'))
 const AdminFormFieldsRoutes = lazy(() => import('./pages/form-fields'))
 const ProductDetailPage = lazy(() => import('@shared/pages/ProductDetailPage'))
-const UserProfilePage = lazy(() => import('@shared/pages/UserProfilePage'))
 const ChatThreadPage = lazy(() => import('@shared/pages/ChatThreadPage'))
 
 function AdminRoute({ children }) {
@@ -76,7 +75,6 @@ function DashboardPermissionGate({ children }) {
       dashboard: 'Dashboard',
       products: 'Listings',
       sold: 'Listings',
-      users: 'Users',
       contacts: 'Contacts',
       comments: 'Reports',
     }[tab]
@@ -91,15 +89,6 @@ function DashboardPermissionGate({ children }) {
   }
 
   return children
-}
-
-function AdminUserProfilePage() {
-  return (
-    <UserProfilePage
-      adminMode
-      renderAdminPanel={(props) => <AdminUserIdentityPanel {...props} />}
-    />
-  )
 }
 
 function App() {
@@ -166,11 +155,11 @@ function App() {
             }
           />
           <Route
-            path="/users/:id"
+            path="/users/*"
             element={
-              <PermissionRoute module="Users" action="can_view">
-                <AdminUserProfilePage />
-              </PermissionRoute>
+              <ModulePermissionRoute module="Users">
+                <AdminUsersRoutes />
+              </ModulePermissionRoute>
             }
           />
           <Route

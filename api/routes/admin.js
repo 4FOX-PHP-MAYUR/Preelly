@@ -545,7 +545,7 @@ router.get('/stats', adminMiddleware, async (req, res) => {
 // @access  Private (Admin only)
 router.get('/users', adminMiddleware, async (req, res) => {
   try {
-    const { page = 1, limit = 20, search, isVerified, status } = req.query
+    const { page = 1, limit = 20, search, isVerified, status, role, fromDate, toDate } = req.query
     const skip = (Number(page) - 1) * Number(limit)
 
     const query = {}
@@ -553,6 +553,7 @@ router.get('/users', adminMiddleware, async (req, res) => {
       query.$or = [
         { name: new RegExp(search, 'i') },
         { email: new RegExp(search, 'i') },
+        { phone: new RegExp(search, 'i') },
       ]
     }
     if (isVerified !== undefined) {
@@ -560,6 +561,24 @@ router.get('/users', adminMiddleware, async (req, res) => {
     }
     if (status) {
       query.status = status
+    }
+    if (role && role !== 'all' && ['user', 'admin'].includes(role)) {
+      query.role = role
+    }
+    if (fromDate || toDate) {
+      query.memberSince = {}
+      if (fromDate) {
+        const from = new Date(fromDate)
+        if (!Number.isNaN(from.getTime())) query.memberSince.$gte = from
+      }
+      if (toDate) {
+        const to = new Date(toDate)
+        if (!Number.isNaN(to.getTime())) {
+          to.setHours(23, 59, 59, 999)
+          query.memberSince.$lte = to
+        }
+      }
+      if (Object.keys(query.memberSince).length === 0) delete query.memberSince
     }
 
     const users = await User.find(query)
@@ -651,6 +670,172 @@ router.post('/users', adminMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Email already exists' })
     }
     res.status(500).json({ message: 'Error creating user' })
+  }
+})
+
+// @route   GET /api/admin/users/export
+// @desc    Export filtered users to an Excel workbook (requires a date range)
+// @access  Private (Admin only)
+const USER_EXPORT_MAX_ROWS = 10000
+router.get('/users/export', adminMiddleware, async (req, res) => {
+  try {
+    const { fromDate, toDate, search, isVerified, status, role } = req.query
+    if (!fromDate || !toDate) {
+      return res.status(400).json({ message: 'From date and To date are required for export' })
+    }
+    const from = new Date(fromDate)
+    const to = new Date(toDate)
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      return res.status(400).json({ message: 'Invalid from date or to date' })
+    }
+    if (from.getTime() > to.getTime()) {
+      return res.status(400).json({ message: 'From date cannot be after To date' })
+    }
+    to.setHours(23, 59, 59, 999)
+
+    const query = { memberSince: { $gte: from, $lte: to } }
+    if (search) {
+      query.$or = [
+        { name: new RegExp(search, 'i') },
+        { email: new RegExp(search, 'i') },
+        { phone: new RegExp(search, 'i') },
+      ]
+    }
+    if (isVerified !== undefined) query.isVerified = isVerified === 'true'
+    if (status) query.status = status
+    if (role && role !== 'all' && ['user', 'admin'].includes(role)) query.role = role
+
+    const [items, total] = await Promise.all([
+      User.find(query)
+        .select('-password')
+        .sort({ createdAt: -1 })
+        .limit(USER_EXPORT_MAX_ROWS)
+        .lean(),
+      User.countDocuments(query),
+    ])
+    const truncated = total > items.length
+
+    const rows = items.map((u) => ({
+      Name: u.name || '',
+      Email: u.email || '',
+      Phone: u.phone || '',
+      Type: u.role === 'admin' ? 'Admin' : 'User',
+      Status: u.status === 'inactive' ? 'Inactive' : 'Active',
+      Verified: u.isVerified ? 'Yes' : 'No',
+      'Member Since': u.memberSince || u.createdAt ? new Date(u.memberSince || u.createdAt).toISOString().slice(0, 10) : '',
+    }))
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.json_to_sheet(
+      rows.length
+        ? rows
+        : [{ Name: '', Email: '', Phone: '', Type: '', Status: '', Verified: '', 'Member Since': '' }]
+    )
+    worksheet['!cols'] = [
+      { wch: 26 }, { wch: 28 }, { wch: 16 }, { wch: 10 }, { wch: 10 }, { wch: 10 }, { wch: 14 },
+    ]
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Users')
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="users-${fromDate}_${toDate}.xlsx"`)
+    res.setHeader('X-Export-Total', String(total))
+    res.setHeader('X-Export-Truncated', truncated ? '1' : '0')
+    res.setHeader('Access-Control-Expose-Headers', 'X-Export-Total, X-Export-Truncated, Content-Disposition')
+    res.send(buffer)
+  } catch (error) {
+    console.error('Error exporting users:', error)
+    res.status(500).json({ message: 'Error exporting users' })
+  }
+})
+
+// @route   GET /api/admin/users/:id
+// @desc    Get a single user (for edit form prefill)
+// @access  Private (Admin only)
+router.get('/users/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid user ID' })
+    const user = await User.findById(id).select('-password').populate('adminRole', 'role_name status')
+    if (!user) return res.status(404).json({ message: 'User not found' })
+    res.json({ user })
+  } catch (error) {
+    console.error('Error fetching user:', error)
+    res.status(500).json({ message: 'Error fetching user' })
+  }
+})
+
+// @route   PATCH /api/admin/users/:id
+// @desc    Update a user's core profile fields (name/email/phone/role/status/password)
+// @access  Private (Admin only)
+router.patch('/users/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid user ID' })
+    const user = await User.findById(id)
+    if (!user) return res.status(404).json({ message: 'User not found' })
+
+    const { name, email, phone, password, role, status } = req.body
+
+    if (name !== undefined) {
+      if (!String(name).trim()) return res.status(400).json({ message: 'Name is required' })
+      user.name = String(name).trim()
+    }
+
+    if (email !== undefined) {
+      const normalizedEmail = String(email).trim().toLowerCase()
+      if (!normalizedEmail) return res.status(400).json({ message: 'Email is required' })
+      const existing = await User.findOne({ email: normalizedEmail, _id: { $ne: id } })
+      if (existing) return res.status(400).json({ message: 'User with this email already exists' })
+      user.email = normalizedEmail
+    }
+
+    if (phone !== undefined) {
+      const normalizedPhone = String(phone).trim()
+      if (!normalizedPhone) return res.status(400).json({ message: 'Phone is required' })
+      const existing = await User.findOne({ phone: normalizedPhone, _id: { $ne: id } })
+      if (existing) return res.status(400).json({ message: 'User with this phone already exists' })
+      user.phone = normalizedPhone
+    }
+
+    if (role !== undefined) {
+      const allowedRoles = ['user', 'admin']
+      if (!allowedRoles.includes(role)) return res.status(400).json({ message: 'Invalid role value' })
+      if (req.user && String(req.user._id) === String(id) && role !== user.role) {
+        return res.status(400).json({ message: 'You cannot change your own role' })
+      }
+      user.role = role
+      if (role === 'admin' && !user.isVerified) user.isVerified = true
+    }
+
+    if (status !== undefined) {
+      const allowedStatus = ['active', 'inactive']
+      if (!allowedStatus.includes(status)) return res.status(400).json({ message: 'Invalid status value' })
+      if (req.user && String(req.user._id) === String(id) && status === 'inactive') {
+        return res.status(400).json({ message: 'You cannot deactivate your own account' })
+      }
+      user.status = status
+    }
+
+    if (password) {
+      if (String(password).length < 6) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters' })
+      }
+      user.password = password
+    }
+
+    await user.save()
+
+    const populated = await User.findById(user._id).select('-password').populate('adminRole', 'role_name status')
+    res.json({ message: 'User updated successfully', user: populated })
+  } catch (error) {
+    console.error('Error updating user:', error)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid user ID' })
+    }
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Email or phone already exists' })
+    }
+    res.status(500).json({ message: 'Error updating user' })
   }
 })
 

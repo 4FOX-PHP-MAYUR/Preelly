@@ -18,6 +18,7 @@ import {
   XCircle as XCircleIcon,
   MessageCircle,
   Star,
+  FileSpreadsheet,
 } from 'lucide-react'
 import Card from '../components/AdminUI/Card'
 import AdminPage from '../components/AdminUI/AdminPage'
@@ -90,6 +91,22 @@ function AdminDashboardPage() {
   const [featureModal, setFeatureModal] = useState(null) // { productId, productTitle, isFeature }
   const [savingFeature, setSavingFeature] = useState(false)
 
+  // Advanced product filters: category / subcategory (cascading) / creation date range / featured
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [subcategoryFilter, setSubcategoryFilter] = useState('')
+  const [subcategoryOptions, setSubcategoryOptions] = useState([])
+  const [subcategoryLoading, setSubcategoryLoading] = useState(false)
+  const [fromDateFilter, setFromDateFilter] = useState('')
+  const [toDateFilter, setToDateFilter] = useState('')
+  const [featuredFilter, setFeaturedFilter] = useState('all') // all | featured | non-featured
+
+  // Products Excel export modal
+  const [exportModalOpen, setExportModalOpen] = useState(false)
+  const [exportFromDate, setExportFromDate] = useState('')
+  const [exportToDate, setExportToDate] = useState('')
+  const [exportApplyFilters, setExportApplyFilters] = useState(true)
+  const [exporting, setExporting] = useState(false)
+
   const getMemberSinceYear = (u) => {
     const raw = u?.memberSince || u?.createdAt
     if (!raw) return null
@@ -100,6 +117,15 @@ function AdminDashboardPage() {
   const [roleUpdatingId, setRoleUpdatingId] = useState(null)
 
   const PRODUCT_PAGE_LIMIT = 15
+
+  // Sidebar submenu routes (Marketplace > Products > All Products/Pending/Approved/Sold)
+  // all reuse this same page/component, pre-filtered by status via the URL.
+  const PRODUCT_STATUS_ROUTES = {
+    '/products': 'all',
+    '/products/pending': 'pending',
+    '/products/approved': 'active',
+    '/products/sold': 'sold',
+  }
 
   const PRODUCT_ADD_TYPE_LABELS = {
     web: 'Web',
@@ -189,8 +215,13 @@ function AdminDashboardPage() {
       navigate('/products', { replace: true })
       return
     }
-    if (location.pathname === '/products') {
+    if (Object.prototype.hasOwnProperty.call(PRODUCT_STATUS_ROUTES, location.pathname)) {
       if (activeTab !== 'products') setActiveTab('products')
+      const routeStatus = PRODUCT_STATUS_ROUTES[location.pathname]
+      if (statusFilter !== routeStatus) {
+        setStatusFilter(routeStatus)
+        setProductPage(1)
+      }
       return
     }
     if (location.pathname === '/') {
@@ -240,7 +271,19 @@ function AdminDashboardPage() {
     }
   }
 
-  const fetchAllProducts = async (status = 'all', search = '', page = 1, addType = productAddTypeFilter) => {
+  const fetchAllProducts = async (
+    status = 'all',
+    search = '',
+    page = 1,
+    addType = productAddTypeFilter,
+    extra = {
+      category: categoryFilter,
+      subcategory: subcategoryFilter,
+      fromDate: fromDateFilter,
+      toDate: toDateFilter,
+      isFeature: featuredFilter,
+    }
+  ) => {
     try {
       setLoading(true)
       const params = { limit: PRODUCT_PAGE_LIMIT, page }
@@ -252,6 +295,21 @@ function AdminDashboardPage() {
       }
       if (search) {
         params.search = search
+      }
+      if (extra?.category) {
+        params.category = extra.category
+      }
+      if (extra?.subcategory) {
+        params.subcategory = extra.subcategory
+      }
+      if (extra?.fromDate) {
+        params.fromDate = extra.fromDate
+      }
+      if (extra?.toDate) {
+        params.toDate = extra.toDate
+      }
+      if (extra?.isFeature && extra.isFeature !== 'all') {
+        params.isFeature = extra.isFeature === 'featured' ? 'true' : 'false'
       }
       const response = await adminService.getAllProducts(params)
       const data = response.data || {}
@@ -265,6 +323,79 @@ function AdminDashboardPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleCategoryFilterChange = async (value) => {
+    setCategoryFilter(value)
+    setSubcategoryFilter('')
+    setSubcategoryOptions([])
+    setProductPage(1)
+    fetchAllProducts(statusFilter, searchQuery, 1, productAddTypeFilter, {
+      category: value,
+      subcategory: '',
+      fromDate: fromDateFilter,
+      toDate: toDateFilter,
+      isFeature: featuredFilter,
+    })
+    if (!value) return
+    try {
+      setSubcategoryLoading(true)
+      const res = await adminService.getAdminCategoryChildren({ parentId: value })
+      setSubcategoryOptions(res.data || [])
+    } catch (error) {
+      console.error('Error fetching subcategories:', error)
+      toast.error('Failed to load subcategories')
+    } finally {
+      setSubcategoryLoading(false)
+    }
+  }
+
+  const handleSubcategoryFilterChange = (value) => {
+    setSubcategoryFilter(value)
+    setProductPage(1)
+    fetchAllProducts(statusFilter, searchQuery, 1, productAddTypeFilter, {
+      category: categoryFilter,
+      subcategory: value,
+      fromDate: fromDateFilter,
+      toDate: toDateFilter,
+      isFeature: featuredFilter,
+    })
+  }
+
+  const handleFromDateFilterChange = (value) => {
+    setFromDateFilter(value)
+    setProductPage(1)
+    fetchAllProducts(statusFilter, searchQuery, 1, productAddTypeFilter, {
+      category: categoryFilter,
+      subcategory: subcategoryFilter,
+      fromDate: value,
+      toDate: toDateFilter,
+      isFeature: featuredFilter,
+    })
+  }
+
+  const handleToDateFilterChange = (value) => {
+    setToDateFilter(value)
+    setProductPage(1)
+    fetchAllProducts(statusFilter, searchQuery, 1, productAddTypeFilter, {
+      category: categoryFilter,
+      subcategory: subcategoryFilter,
+      fromDate: fromDateFilter,
+      toDate: value,
+      isFeature: featuredFilter,
+    })
+  }
+
+  const handleFeaturedFilterChange = (value) => {
+    setFeaturedFilter(value)
+    setProductPage(1)
+    fetchAllProducts(statusFilter, searchQuery, 1, productAddTypeFilter, {
+      category: categoryFilter,
+      subcategory: subcategoryFilter,
+      fromDate: fromDateFilter,
+      toDate: toDateFilter,
+      isFeature: value,
+    })
   }
 
   const fetchUsers = async (filter = 'all', search = '') => {
@@ -619,6 +750,92 @@ function AdminDashboardPage() {
     }
   }
 
+  const openExportModal = () => {
+    setExportFromDate('')
+    setExportToDate('')
+    setExportApplyFilters(true)
+    setExportModalOpen(true)
+  }
+
+  const closeExportModal = () => {
+    if (exporting) return
+    setExportModalOpen(false)
+  }
+
+  const handleExportProducts = async () => {
+    if (!exportFromDate || !exportToDate) {
+      toast.error('Please select From Date and To Date')
+      return
+    }
+    if (exportFromDate > exportToDate) {
+      toast.error('From Date cannot be after To Date')
+      return
+    }
+
+    try {
+      setExporting(true)
+      const params = { fromDate: exportFromDate, toDate: exportToDate }
+      if (exportApplyFilters) {
+        if (statusFilter !== 'all') params.status = statusFilter
+        if (searchQuery) params.search = searchQuery
+        if (productAddTypeFilter !== 'all') params.productAddType = productAddTypeFilter
+        if (categoryFilter) params.category = categoryFilter
+        if (subcategoryFilter) params.subcategory = subcategoryFilter
+        if (featuredFilter !== 'all') params.isFeature = featuredFilter === 'featured' ? 'true' : 'false'
+      }
+
+      const res = await adminService.exportProducts(params)
+      const blob = res.data instanceof Blob
+        ? res.data
+        : new Blob([res.data], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          })
+
+      if (blob.type && blob.type.includes('application/json')) {
+        const text = await blob.text()
+        let message = 'Failed to export products'
+        try {
+          message = JSON.parse(text)?.message || message
+        } catch { /* ignore */ }
+        throw new Error(message)
+      }
+
+      const disposition = res.headers?.['content-disposition'] || ''
+      const match = disposition.match(/filename="?([^"]+)"?/i)
+      const filename = match?.[1] || `products-${exportFromDate}_${exportToDate}.xlsx`
+
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+
+      const truncated = String(res.headers?.['x-export-truncated'] || '') === '1'
+      toast.success(truncated
+        ? 'Excel exported (first 10,000 matching rows)'
+        : 'Excel exported successfully')
+      setExportModalOpen(false)
+    } catch (err) {
+      console.error(err)
+      let message = 'Failed to export Excel'
+      const data = err.response?.data
+      if (data instanceof Blob) {
+        try {
+          const text = await data.text()
+          message = JSON.parse(text)?.message || message
+        } catch { /* ignore */ }
+      } else {
+        message = err.message || err.response?.data?.message || message
+      }
+      toast.error(message)
+    } finally {
+      setExporting(false)
+    }
+  }
+
   // Columns for the All Products table view (matches the list-page design used across admin).
   const productColumns = [
     {
@@ -776,6 +993,16 @@ function AdminDashboardPage() {
     return null
   }
 
+  const isAllProductsRoute = location.pathname === '/products'
+  const productsPageTitle =
+    PRODUCT_STATUS_ROUTES[location.pathname] === 'pending'
+      ? 'Pending Products'
+      : PRODUCT_STATUS_ROUTES[location.pathname] === 'active'
+      ? 'Approved Products'
+      : PRODUCT_STATUS_ROUTES[location.pathname] === 'sold'
+      ? 'Sold Products'
+      : 'All Products'
+
   return (
     <AdminPage className="min-h-[70vh]">
       <div className="space-y-6">
@@ -790,7 +1017,7 @@ function AdminDashboardPage() {
           )}
 
       <Panel className="mb-6">
-        <div className="flex flex-col md:flex-row gap-4 items-end">
+        <div className={`flex flex-col gap-4 ${activeTab === 'products' ? '' : 'md:flex-row items-end'}`}>
           {/* Search Bar */}
           <div className="flex-1 w-full">
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -838,52 +1065,144 @@ function AdminDashboardPage() {
             </div>
           </div>
 
-          {/* Status / Add Type filters for All Products */}
+          {/* Add Type / Category / Subcategory / Date / Featured filters for the Products page.
+              Status itself is chosen via the sidebar submenu (All Products/Pending/Approved/Sold);
+              the Status dropdown only appears on "All Products" for extra narrowing (Inactive/Rejected). */}
           {activeTab === 'products' && (
-            <div className="w-full md:w-auto grid grid-cols-1 sm:grid-cols-2 gap-3 min-w-0">
-              <div className="min-w-0 w-full">
-                <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-status-filter">
-                  Status
-                </label>
-                <select
-                  id="product-status-filter"
-                  value={statusFilter}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    setStatusFilter(value)
-                    setProductPage(1)
-                    fetchAllProducts(value, searchQuery, 1)
-                  }}
-                  className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="active">Approved</option>
-                  <option value="pending">Pending Review</option>
-                  <option value="sold">Sold</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="rejected">Rejected</option>
-                </select>
-              </div>
-              <div className="min-w-0 w-full">
-                <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-add-type-filter">
-                  Uploaded by
-                </label>
-                <select
-                  id="product-add-type-filter"
-                  value={productAddTypeFilter}
-                  onChange={(e) => {
-                    const value = e.target.value
-                    setProductAddTypeFilter(value)
-                    setProductPage(1)
-                    fetchAllProducts(statusFilter, searchQuery, 1, value)
-                  }}
-                  className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
-                >
-                  <option value="all">All Platforms</option>
-                  <option value="web">Web</option>
-                  <option value="ios">iOS</option>
-                  <option value="android">Android</option>
-                </select>
+            <div className="w-full">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 min-w-0">
+                {isAllProductsRoute && (
+                  <div className="min-w-0 w-full">
+                    <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-status-filter">
+                      Status
+                    </label>
+                    <select
+                      id="product-status-filter"
+                      value={statusFilter}
+                      onChange={(e) => {
+                        const value = e.target.value
+                        setStatusFilter(value)
+                        setProductPage(1)
+                        fetchAllProducts(value, searchQuery, 1)
+                      }}
+                      className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                    >
+                      <option value="all">All Statuses</option>
+                      <option value="active">Approved</option>
+                      <option value="pending">Pending Review</option>
+                      <option value="sold">Sold</option>
+                      <option value="inactive">Inactive</option>
+                      <option value="rejected">Rejected</option>
+                    </select>
+                  </div>
+                )}
+                <div className="min-w-0 w-full">
+                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-add-type-filter">
+                    Uploaded by
+                  </label>
+                  <select
+                    id="product-add-type-filter"
+                    value={productAddTypeFilter}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      setProductAddTypeFilter(value)
+                      setProductPage(1)
+                      fetchAllProducts(statusFilter, searchQuery, 1, value)
+                    }}
+                    className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                  >
+                    <option value="all">All Platforms</option>
+                    <option value="web">Web</option>
+                    <option value="ios">iOS</option>
+                    <option value="android">Android</option>
+                  </select>
+                </div>
+                <div className="min-w-0 w-full">
+                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-category-filter">
+                    Category
+                  </label>
+                  <select
+                    id="product-category-filter"
+                    value={categoryFilter}
+                    onChange={(e) => handleCategoryFilterChange(e.target.value)}
+                    className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                  >
+                    <option value="">All Categories</option>
+                    {categories
+                      .filter((c) => !c.parentId)
+                      .map((c) => (
+                        <option key={c._id} value={c._id}>
+                          {c.name}
+                        </option>
+                      ))}
+                  </select>
+                </div>
+                <div className="min-w-0 w-full">
+                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-subcategory-filter">
+                    Subcategory
+                  </label>
+                  <select
+                    id="product-subcategory-filter"
+                    value={subcategoryFilter}
+                    onChange={(e) => handleSubcategoryFilterChange(e.target.value)}
+                    disabled={!categoryFilter || subcategoryLoading}
+                    className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600 disabled:bg-gray-100 disabled:text-gray-400"
+                  >
+                    <option value="">
+                      {!categoryFilter
+                        ? 'Select category first'
+                        : subcategoryLoading
+                        ? 'Loading...'
+                        : 'All Subcategories'}
+                    </option>
+                    {subcategoryOptions.map((sc) => (
+                      <option key={sc._id} value={sc._id}>
+                        {sc.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="min-w-0 w-full">
+                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-from-date-filter">
+                    From Date
+                  </label>
+                  <input
+                    id="product-from-date-filter"
+                    type="date"
+                    value={fromDateFilter}
+                    max={toDateFilter || undefined}
+                    onChange={(e) => handleFromDateFilterChange(e.target.value)}
+                    className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                  />
+                </div>
+                <div className="min-w-0 w-full">
+                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-to-date-filter">
+                    To Date
+                  </label>
+                  <input
+                    id="product-to-date-filter"
+                    type="date"
+                    value={toDateFilter}
+                    min={fromDateFilter || undefined}
+                    onChange={(e) => handleToDateFilterChange(e.target.value)}
+                    className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                  />
+                </div>
+                <div className="min-w-0 w-full">
+                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-featured-filter">
+                    Featured Product
+                  </label>
+                  <select
+                    id="product-featured-filter"
+                    value={featuredFilter}
+                    onChange={(e) => handleFeaturedFilterChange(e.target.value)}
+                    className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                  >
+                    <option value="all">All</option>
+                    <option value="featured">Featured</option>
+                    <option value="non-featured">Non-Featured</option>
+                  </select>
+                </div>
               </div>
             </div>
           )}
@@ -927,13 +1246,14 @@ function AdminDashboardPage() {
           )}
 
           {/* Action Buttons */}
-          <div className="flex gap-2 w-full md:w-auto">
-            <Button type="button" onClick={handleSearch} icon={Search}>
+          <div className="flex flex-wrap gap-2 w-full md:w-auto">
+            <Button type="button" onClick={handleSearch} icon={Search} className="flex-1 md:flex-none">
               Search
             </Button>
             <Button
               type="button"
               variant="secondary"
+              className="flex-1 md:flex-none"
               onClick={() => {
                 if (activeTab === 'dashboard') {
                   fetchData('')
@@ -954,6 +1274,17 @@ function AdminDashboardPage() {
             >
               Refresh
             </Button>
+            {activeTab === 'products' && (
+              <Button
+                type="button"
+                variant="secondary"
+                icon={FileSpreadsheet}
+                className="flex-1 md:flex-none"
+                onClick={openExportModal}
+              >
+                Export Excel
+              </Button>
+            )}
           </div>
         </div>
         {searchQuery && (
@@ -1407,14 +1738,16 @@ function AdminDashboardPage() {
       {activeTab === 'products' && (
         <div className="space-y-4">
           <PageHeader
-            title="All Products"
+            title={productsPageTitle}
             subtitle={`${productTotal} product${productTotal === 1 ? '' : 's'}${
-              statusFilter !== 'all' ? ` · ${statusFilter}` : ''
+              isAllProductsRoute && statusFilter !== 'all' ? ` · ${statusFilter}` : ''
             }${
               productAddTypeFilter !== 'all'
                 ? ` · ${formatProductAddType(productAddTypeFilter)}`
                 : ''
-            }`}
+            }${categoryFilter ? ' · category filtered' : ''}${
+              fromDateFilter || toDateFilter ? ' · date filtered' : ''
+            }${featuredFilter !== 'all' ? ` · ${featuredFilter}` : ''}`}
           />
           <DataTable
             columns={productColumns}
@@ -1422,7 +1755,13 @@ function AdminDashboardPage() {
             loading={loading}
             emptyTitle="No products found"
             emptyDescription={
-              statusFilter !== 'all' || productAddTypeFilter !== 'all'
+              statusFilter !== 'all' ||
+              productAddTypeFilter !== 'all' ||
+              categoryFilter ||
+              subcategoryFilter ||
+              fromDateFilter ||
+              toDateFilter ||
+              featuredFilter !== 'all'
                 ? 'No products match the selected filters.'
                 : 'No products match your search.'
             }
@@ -1787,6 +2126,65 @@ function AdminDashboardPage() {
             Featured product
           </label>
         </div>
+      </Modal>
+
+      <Modal
+        open={exportModalOpen}
+        onClose={closeExportModal}
+        title="Export Products to Excel"
+        size="sm"
+        footer={
+          <Modal.Footer
+            onCancel={closeExportModal}
+            onConfirm={handleExportProducts}
+            cancelLabel="Cancel"
+            confirmLabel="Export"
+            loading={exporting}
+          />
+        }
+      >
+        <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
+          Choose the creation-date range for the products you want to export.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="export-from-date">
+              From Date
+            </label>
+            <input
+              id="export-from-date"
+              type="date"
+              value={exportFromDate}
+              max={exportToDate || undefined}
+              onChange={(e) => setExportFromDate(e.target.value)}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="export-to-date">
+              To Date
+            </label>
+            <input
+              id="export-to-date"
+              type="date"
+              value={exportToDate}
+              min={exportFromDate || undefined}
+              onChange={(e) => setExportToDate(e.target.value)}
+              required
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+            />
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
+          <input
+            type="checkbox"
+            checked={exportApplyFilters}
+            onChange={(e) => setExportApplyFilters(e.target.checked)}
+            className="h-4 w-4 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
+          />
+          Apply currently selected filters (status, category, subcategory, featured, search, uploaded by)
+        </label>
       </Modal>
 
       {rejectModalProductId && (

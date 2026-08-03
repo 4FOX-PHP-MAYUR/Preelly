@@ -16,6 +16,13 @@ function Sidebar({ mobileOpen = false, onMobileClose }) {
   const [expandedGroups, setExpandedGroups] = useState(() =>
     Object.fromEntries(ADMIN_MENU_GROUPS.map((g) => [g.key, true]))
   )
+  const [expandedItems, setExpandedItems] = useState(() =>
+    Object.fromEntries(
+      ADMIN_MENU_GROUPS.flatMap((g) => g.items)
+        .filter((item) => item.children)
+        .map((item) => [item.key, true])
+    )
+  )
   const location = useLocation()
   const search = location.search || ''
   const permissions = useSelector(selectPermissions)
@@ -43,6 +50,7 @@ function Sidebar({ mobileOpen = false, onMobileClose }) {
       }
       if (item.to) {
         const pathOnly = item.to.split('?')[0]
+        if (item.exact) return pathname === pathOnly
         return pathname === pathOnly || (pathOnly !== '/' && pathname.startsWith(pathOnly))
       }
     } catch {
@@ -55,13 +63,23 @@ function Sidebar({ mobileOpen = false, onMobileClose }) {
     setExpandedGroups((prev) => ({ ...prev, [key]: !prev[key] }))
   }
 
+  const toggleItem = (key) => {
+    setExpandedItems((prev) => ({ ...prev, [key]: !prev[key] }))
+  }
+
   const handleNavClick = () => {
     if (mobileOpen) onMobileClose?.()
   }
 
   const visibleGroups = ADMIN_MENU_GROUPS.map((group) => ({
     ...group,
-    items: group.items.filter((item) => canViewModule(item.key)),
+    items: group.items
+      .filter((item) => canViewModule(item.key))
+      .map((item) =>
+        item.children
+          ? { ...item, children: item.children.filter((child) => canViewModule(child.key)) }
+          : item
+      ),
   })).filter((group) => group.items.length > 0)
 
   return (
@@ -134,6 +152,84 @@ function Sidebar({ mobileOpen = false, onMobileClose }) {
                       {group.items.map((item) => {
                         const Icon = item.icon
                         const active = isItemActive(item)
+
+                        if (item.children && item.children.length > 0) {
+                          const childrenActive = item.children.some(isItemActive)
+                          const itemExpanded = expandedItems[item.key] !== false
+
+                          // Icon-rail (collapsed) mode: behave like a normal link to the
+                          // parent's default view — submenus only expand once uncollapsed.
+                          if (collapsed) {
+                            return (
+                              <li key={item.key}>
+                                <Link
+                                  to={item.to}
+                                  onClick={handleNavClick}
+                                  title={item.label}
+                                  className={`
+                                    group flex items-center justify-center p-2.5 rounded-lg transition-all duration-150
+                                    ${childrenActive
+                                      ? 'bg-primary-600/90 text-white shadow-sm shadow-primary-900/20'
+                                      : 'text-slate-400 hover:text-white hover:bg-slate-800/80'}
+                                  `}
+                                  aria-current={childrenActive ? 'page' : undefined}
+                                >
+                                  {Icon && (
+                                    <Icon className={`h-[18px] w-[18px] shrink-0 ${childrenActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                                  )}
+                                </Link>
+                              </li>
+                            )
+                          }
+
+                          return (
+                            <li key={item.key}>
+                              <button
+                                type="button"
+                                onClick={() => toggleItem(item.key)}
+                                className={`
+                                  group flex items-center w-full gap-3 px-3 py-2 rounded-lg transition-all duration-150
+                                  ${childrenActive
+                                    ? 'text-white bg-slate-800/70'
+                                    : 'text-slate-400 hover:text-white hover:bg-slate-800/80'}
+                                `}
+                                aria-expanded={itemExpanded}
+                              >
+                                {Icon && (
+                                  <Icon className={`h-[18px] w-[18px] shrink-0 ${childrenActive ? 'text-white' : 'text-slate-500 group-hover:text-slate-300'}`} />
+                                )}
+                                <span className="flex-1 text-left text-sm font-medium truncate">{item.label}</span>
+                                <ChevronDown className={`h-3.5 w-3.5 shrink-0 transition-transform ${itemExpanded ? '' : '-rotate-90'}`} />
+                              </button>
+                              {itemExpanded && (
+                                <ul className="mt-0.5 ml-[22px] pl-3 border-l border-slate-800 space-y-0.5" role="list">
+                                  {item.children.map((child) => {
+                                    const childActive = isItemActive(child)
+                                    return (
+                                      <li key={child.key}>
+                                        <Link
+                                          to={child.to}
+                                          onClick={handleNavClick}
+                                          title={child.label}
+                                          className={`
+                                            block rounded-lg px-3 py-1.5 text-sm font-medium truncate transition-all duration-150
+                                            ${childActive
+                                              ? 'bg-primary-600/90 text-white shadow-sm shadow-primary-900/20'
+                                              : 'text-slate-400 hover:text-white hover:bg-slate-800/80'}
+                                          `}
+                                          aria-current={childActive ? 'page' : undefined}
+                                        >
+                                          {child.label}
+                                        </Link>
+                                      </li>
+                                    )
+                                  })}
+                                </ul>
+                              )}
+                            </li>
+                          )
+                        }
+
                         return (
                           <li key={item.key}>
                             <Link

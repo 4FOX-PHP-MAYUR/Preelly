@@ -138,6 +138,7 @@ function toStorageFacilityFormData(data = {}) {
 export const adminService = {
   getPendingProducts: (params) => api.get('/admin/products/pending', { params }),
   getAllProducts: (params) => api.get('/admin/products', { params }),
+  exportProducts: (params) => api.get('/admin/products/export', { params, responseType: 'blob' }),
   approveProduct: (productId) => api.put(`/admin/products/${productId}/approve`),
   rejectProduct: (productId, payload) => api.put(`/admin/products/${productId}/reject`, payload),
   getProductRejectionReasons: () => api.get('/admin/products/rejection-reasons'),

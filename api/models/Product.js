@@ -622,6 +622,8 @@ productSchema.index({ createdAt: -1 })
 productSchema.index({ likes: 1 })
 productSchema.index({ selectedFilters: 1 })
 productSchema.index({ categoryPath: 1 })
+// Speeds up admin listing filters that combine category/subcategory with a date range.
+productSchema.index({ category: 1, subcategory: 1, createdAt: -1 })
 productSchema.index({ cityId: 1 })
 productSchema.index({ modelId: 1 })
 productSchema.index({ trimId: 1 })

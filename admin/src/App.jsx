@@ -126,6 +126,30 @@ function App() {
             }
           />
           <Route
+            path="/products/pending"
+            element={
+              <DashboardPermissionGate>
+                <AdminDashboardPage />
+              </DashboardPermissionGate>
+            }
+          />
+          <Route
+            path="/products/approved"
+            element={
+              <DashboardPermissionGate>
+                <AdminDashboardPage />
+              </DashboardPermissionGate>
+            }
+          />
+          <Route
+            path="/products/sold"
+            element={
+              <DashboardPermissionGate>
+                <AdminDashboardPage />
+              </DashboardPermissionGate>
+            }
+          />
+          <Route
             path="/products/:id"
             element={
               <PermissionRoute module="Listings" action="can_view">

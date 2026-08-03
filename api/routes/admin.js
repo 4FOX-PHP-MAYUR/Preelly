@@ -59,6 +59,8 @@ const {
   validateTableConfig,
 } = require('../core/services/dynamicTableOptionsService')
 const { listRegisteredTables, isRegisteredTable, normalizeTableName } = require('../config/dynamicTableRegistry')
+const { buildAdminProductListQuery } = require('../utils/adminProductQuery')
+const { toAdminProductExcelRows } = require('../dto/adminProduct.dto')
 
 // Authenticate all admin routes, then enforce module permissions when the
 // user has an assigned adminRole (users without a role keep full access).
@@ -105,30 +107,9 @@ router.get('/products/pending', adminMiddleware, async (req, res) => {
 // @access  Private (Admin only)
 router.get('/products', adminMiddleware, async (req, res) => {
   try {
-    const {
-      status,
-      page = 1,
-      limit = 20,
-      search,
-      productAddType,
-      isFeature,
-    } = req.query
+    const { page = 1, limit = 20 } = req.query
 
-    const query = {}
-    if (status) query.status = status
-    const addType = String(productAddType || '').trim().toLowerCase()
-    if (addType === 'web' || addType === 'ios' || addType === 'android') {
-      query.productAddType = addType
-    }
-    if (typeof isFeature !== 'undefined') {
-      const isFeatureParam = String(isFeature).trim().toLowerCase()
-      if (['true', '1'].includes(isFeatureParam)) query.isFeature = true
-      else if (['false', '0'].includes(isFeatureParam)) query.isFeature = false
-    }
-    if (search) {
-      query.$text = { $search: search }
-    }
-
+    const query = await buildAdminProductListQuery(req.query)
     const skip = (Number(page) - 1) * Number(limit)
 
     const products = await Product.find(query)
@@ -150,6 +131,79 @@ router.get('/products', adminMiddleware, async (req, res) => {
   } catch (error) {
     console.error('Error fetching products:', error)
     res.status(500).json({ message: 'Error fetching products' })
+  }
+})
+
+// @route   GET /api/admin/products/export
+// @desc    Export filtered products to an Excel workbook (requires a date range)
+// @access  Private (Admin only)
+const PRODUCT_EXPORT_MAX_ROWS = 10000
+router.get('/products/export', adminMiddleware, async (req, res) => {
+  try {
+    const { fromDate, toDate } = req.query
+    if (!fromDate || !toDate) {
+      return res.status(400).json({ message: 'From date and To date are required for export' })
+    }
+    const from = new Date(fromDate)
+    const to = new Date(toDate)
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      return res.status(400).json({ message: 'Invalid from date or to date' })
+    }
+    if (from.getTime() > to.getTime()) {
+      return res.status(400).json({ message: 'From date cannot be after To date' })
+    }
+
+    const query = await buildAdminProductListQuery(req.query)
+
+    const [items, total] = await Promise.all([
+      Product.find(query)
+        .populate('category', 'name')
+        .populate('subcategory', 'name')
+        .populate('seller', 'name email')
+        .sort({ createdAt: -1 })
+        .limit(PRODUCT_EXPORT_MAX_ROWS)
+        .lean(),
+      Product.countDocuments(query),
+    ])
+    const truncated = total > items.length
+
+    const rows = toAdminProductExcelRows(items)
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.json_to_sheet(
+      rows.length
+        ? rows
+        : [{
+            'Product ID': '',
+            'Product Name': '',
+            Category: '',
+            Subcategory: '',
+            'Seller Name': '',
+            'Seller Email': '',
+            Price: '',
+            Location: '',
+            'Uploaded By': '',
+            Status: '',
+            'Featured Status': '',
+            'Created Date': '',
+          }]
+    )
+    worksheet['!cols'] = [
+      { wch: 26 }, { wch: 30 }, { wch: 18 }, { wch: 18 }, { wch: 22 },
+      { wch: 26 }, { wch: 10 }, { wch: 20 }, { wch: 12 }, { wch: 12 },
+      { wch: 14 }, { wch: 20 },
+    ]
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Products')
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="products-${fromDate}_${toDate}.xlsx"`)
+    res.setHeader('X-Export-Total', String(total))
+    res.setHeader('X-Export-Truncated', truncated ? '1' : '0')
+    res.setHeader('Access-Control-Expose-Headers', 'X-Export-Total, X-Export-Truncated, Content-Disposition')
+    res.send(buffer)
+  } catch (error) {
+    console.error('Error exporting products:', error)
+    res.status(500).json({ message: 'Error exporting products' })
   }
 })
 

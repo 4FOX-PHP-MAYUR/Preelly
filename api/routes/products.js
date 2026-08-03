@@ -29,6 +29,10 @@ const { buildProductAttributesPresentation, buildDetailFeaturesPresentation } = 
 const { enrichReelsProducts } = require('../utils/reelsProductFields')
 const { resolveOrderPlatform } = require('../utils/paymentLabels')
 const { getBlockedUserIds, isBlockedBetween } = require('../core/services/blockService')
+const Chat = require('../models/Chat')
+const SoldRating = require('../models/SoldRating')
+const Notification = require('../models/Notification')
+const { markSoldRules } = require('../core/validators/sold.validator')
 
 /**
  * Hide listings owned by accounts blocked in either direction.
@@ -2842,6 +2846,208 @@ router.put('/:id/restore', authMiddleware, validateObjectId('id'), async (req, r
       return res.status(400).json({ message: 'Invalid product ID' })
     }
     res.status(500).json({ message: 'Error restoring product' })
+  }
+})
+
+// @route   GET /api/products/:id/buyers
+// @desc    List chat contacts (potential buyers) for this product, for the
+//          "Mark as Sold" buyer-selection step
+// @access  Private (Owner or admin only)
+router.get('/:id/buyers', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id).select('seller').lean()
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' })
+    }
+    const isOwner = product.seller?.toString() === req.user._id.toString()
+    if (!isOwner && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized' })
+    }
+
+    const chats = await Chat.find({
+      product: req.params.id,
+      seller: product.seller,
+      buyer: { $ne: null },
+    })
+      .populate('buyer', 'name username avatar')
+      .sort({ lastMessageAt: -1 })
+      .lean()
+
+    const contacts = chats
+      .filter((chat) => chat.buyer)
+      .map((chat) => ({
+        chatId: chat._id,
+        buyer: chat.buyer,
+        lastMessage: chat.lastMessage || '',
+        lastMessageAt: chat.lastMessageAt,
+      }))
+
+    res.json(contacts)
+  } catch (error) {
+    console.error('Error fetching product buyers:', error)
+    res.status(500).json({ message: 'Error fetching product buyers' })
+  }
+})
+
+// @route   POST /api/products/:id/mark-sold
+// @desc    Commit the "Mark as Sold" flow — sets status to sold and stores buyer
+//          rating (Preelly path) or external sale feedback (external path)
+// @access  Private (Owner or admin only)
+router.post(
+  '/:id/mark-sold',
+  authMiddleware,
+  validateObjectId('id'),
+  markSoldRules,
+  async (req, res) => {
+    try {
+      const validationErrors = validationResult(req)
+      if (!validationErrors.isEmpty()) {
+        return res.status(400).json({
+          message: validationErrors.array()[0]?.msg || 'Validation failed',
+          errors: validationErrors.array(),
+        })
+      }
+
+      const product = await Product.findById(req.params.id)
+      if (!product) {
+        return res.status(404).json({ message: 'Product not found' })
+      }
+      const isOwner = product.seller.toString() === req.user._id.toString()
+      const isAdmin = req.user.role === 'admin'
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ message: 'Not authorized' })
+      }
+      if (product.status === 'sold') {
+        return res.status(409).json({ message: 'Product is already marked as sold' })
+      }
+
+      const { soldVia, buyerId, rating, platform, saleComment, preellyRating } = req.body
+      let notifyBuyerId = null
+
+      if (soldVia === 'preelly') {
+        const chat = await Chat.findOne({
+          product: req.params.id,
+          seller: product.seller,
+          buyer: buyerId,
+        }).lean()
+        if (!chat) {
+          return res.status(400).json({ message: 'Selected buyer has no conversation for this product' })
+        }
+        product.buyer = buyerId
+        product.soldVia = 'preelly'
+        notifyBuyerId = buyerId
+      } else {
+        product.soldVia = 'external'
+        product.soldPlatform = platform
+        product.soldComment = saleComment || ''
+        product.preellyFeedback = {
+          stars: preellyRating?.stars ?? null,
+          reasons: Array.isArray(preellyRating?.reasons) ? preellyRating.reasons : [],
+          comment: preellyRating?.comment || '',
+        }
+      }
+
+      product.status = 'sold'
+      product.isSold = true
+      product.soldAt = new Date()
+      syncArchiveFieldsFromStatus(product, 'sold', req.user._id)
+      await product.save()
+
+      if (soldVia === 'preelly' && rating && (rating.responseRating || rating.behaviourRating || rating.overallRating)) {
+        await SoldRating.create({
+          product: product._id,
+          rater: req.user._id,
+          ratee: buyerId,
+          responseRating: rating.responseRating ?? null,
+          behaviourRating: rating.behaviourRating ?? null,
+          overallRating: rating.overallRating ?? null,
+          comment: rating.comment || '',
+        })
+
+        // Overall experience can be left unrated (per the reference design) while
+        // response/behaviour are still scored — fall back to those so the sale
+        // still counts toward the buyer's profile rating.
+        const buyerRatings = await SoldRating.find({ ratee: buyerId }).select('responseRating behaviourRating overallRating').lean()
+        const effectiveScores = buyerRatings
+          .map((r) => {
+            if (r.overallRating != null) return r.overallRating
+            const parts = [r.responseRating, r.behaviourRating].filter((v) => v != null)
+            return parts.length ? parts.reduce((sum, v) => sum + v, 0) / parts.length : null
+          })
+          .filter((v) => v != null)
+        if (effectiveScores.length) {
+          const average = effectiveScores.reduce((sum, v) => sum + v, 0) / effectiveScores.length
+          await User.findByIdAndUpdate(buyerId, { rating: average, ratingCount: effectiveScores.length })
+        }
+      }
+
+      if (notifyBuyerId) {
+        await Notification.create({
+          user: notifyBuyerId,
+          actor: req.user._id,
+          relatedProduct: product._id,
+          type: 'listing',
+          tab: 'buying',
+          title: 'You were marked as the buyer',
+          body: `${req.user.name || 'The seller'} marked "${product.title}" as sold to you`,
+          data: { productId: product._id.toString(), event: 'marked_sold_buyer' },
+        })
+      }
+
+      await product.populate('category', 'name icon emoji')
+      await product.populate('seller', 'name avatar rating memberSince')
+      await product.populate('buyer', 'name avatar')
+
+      res.json({ message: 'Product marked as sold', product })
+    } catch (error) {
+      console.error('Error marking product as sold:', error)
+      if (error.name === 'CastError') {
+        return res.status(400).json({ message: 'Invalid ID' })
+      }
+      res.status(500).json({ message: 'Error marking product as sold' })
+    }
+  },
+)
+
+// @route   POST /api/products/:id/mark-unsold
+// @desc    Revert a sold product back to active and clear its sold metadata
+//          (buyer, sold rating link stays intact for history — only the
+//          product's own sold fields are cleared)
+// @access  Private (Owner or admin only)
+router.post('/:id/mark-unsold', authMiddleware, validateObjectId('id'), async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id)
+    if (!product) {
+      return res.status(404).json({ message: 'Product not found' })
+    }
+    const isOwner = product.seller.toString() === req.user._id.toString()
+    if (!isOwner && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized' })
+    }
+    if (product.status !== 'sold') {
+      return res.status(400).json({ message: 'Product is not marked as sold' })
+    }
+
+    product.status = 'active'
+    product.isSold = false
+    product.buyer = null
+    product.soldAt = null
+    product.soldVia = null
+    product.soldPlatform = null
+    product.soldComment = ''
+    product.preellyFeedback = { stars: null, reasons: [], comment: '' }
+    await product.save()
+
+    await product.populate('category', 'name icon emoji')
+    await product.populate('seller', 'name avatar rating memberSince')
+
+    res.json({ message: 'Product marked as unsold', product })
+  } catch (error) {
+    console.error('Error marking product as unsold:', error)
+    if (error.name === 'CastError') {
+      return res.status(400).json({ message: 'Invalid product ID' })
+    }
+    res.status(500).json({ message: 'Error marking product as unsold' })
   }
 })
 

@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { CheckCircle, Edit3, Filter, Loader2, Search, Tag, Trash2 } from 'lucide-react'
+import { CheckCircle, Edit3, Filter, Loader2, RotateCcw, Search, Tag, Trash2 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { productService, userService } from '@shared/services/api'
 import { getMediaUrl } from '@shared/utils/helpers'
+import MarkAsSoldFlow from '@shared/components/Profile/MarkAsSoldFlow'
 
 function EmptyState({ title, body, action }) {
   return (
@@ -50,6 +51,7 @@ export default function DashboardListingsPage() {
   const [q, setQ] = useState('')
   const [status, setStatus] = useState(() => searchParams.get('status') || '')
   const [busyId, setBusyId] = useState(null)
+  const [markSoldProduct, setMarkSoldProduct] = useState(null)
 
   const fetchListings = async (nextPage = page, { silent } = { silent: false }) => {
     if (!silent) setLoading(true)
@@ -95,14 +97,19 @@ export default function DashboardListingsPage() {
     }
   }
 
-  const onMarkSold = async (item) => {
+  const onMarkSold = (item) => {
+    setMarkSoldProduct(item)
+  }
+
+  const onMarkUnsold = async (item) => {
+    if (!window.confirm('Mark this listing as unsold and list it as active again?')) return
     setBusyId(item._id)
     try {
-      await productService.updateProduct(item._id, { status: 'sold' })
-      toast.success('Marked as sold')
+      await productService.markProductUnsold(item._id)
+      toast.success('Marked as unsold')
       await fetchListings(page, { silent: true })
     } catch (e) {
-      toast.error(e?.response?.data?.message || 'Failed to update status')
+      toast.error(e?.response?.data?.message || 'Failed to mark as unsold')
     } finally {
       setBusyId(null)
     }
@@ -269,7 +276,17 @@ export default function DashboardListingsPage() {
                           >
                             <CheckCircle className="h-4 w-4" />
                           </button>
-                        ) : null}
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => onMarkUnsold(p)}
+                            className="inline-flex items-center gap-1 text-sm text-gray-700 dark:text-gray-200 hover:text-amber-600 disabled:opacity-50"
+                            disabled={busyId === p._id}
+                            title="Mark as unsold"
+                          >
+                            {busyId === p._id ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
+                          </button>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -303,6 +320,16 @@ export default function DashboardListingsPage() {
           </div>
         </>
       )}
+
+      <MarkAsSoldFlow
+        open={!!markSoldProduct}
+        product={markSoldProduct}
+        onClose={() => setMarkSoldProduct(null)}
+        onSold={async () => {
+          setMarkSoldProduct(null)
+          await fetchListings(page, { silent: true })
+        }}
+      />
     </div>
   )
 }

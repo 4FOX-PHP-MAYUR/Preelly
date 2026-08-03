@@ -127,6 +127,12 @@ const userSchema = new mongoose.Schema(
       min: 0,
       max: 5,
     },
+    // Number of SoldRating docs (see models/SoldRating.js) folded into `rating` above.
+    ratingCount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     memberSince: {
       type: Date,
       default: Date.now,

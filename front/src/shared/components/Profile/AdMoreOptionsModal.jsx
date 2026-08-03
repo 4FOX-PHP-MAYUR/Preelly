@@ -5,6 +5,7 @@ import {
   EyeOff,
   Gavel,
   Pencil,
+  RotateCcw,
   Rocket,
   Trash2,
   Warehouse,
@@ -26,6 +27,8 @@ export default function AdMoreOptionsModal({
   onInsight,
   onBoost,
   onMarkSold,
+  onMarkUnsold,
+  isSold = false,
   onUnpublish,
   onDelete,
   busy = false,
@@ -88,7 +91,9 @@ export default function AdMoreOptionsModal({
     { id: 'warehouse', label: 'Move to Warehouse', icon: Warehouse, onClick: onWarehouse },
     { id: 'insight', label: 'See Insight', icon: BarChart3, onClick: onInsight },
     { id: 'boost', label: 'Boost this Ad', icon: Rocket, onClick: onBoost },
-    { id: 'sold', label: 'Mark as sold', icon: Gavel, onClick: onMarkSold },
+    isSold
+      ? { id: 'unsold', label: 'Mark as unsold', icon: RotateCcw, onClick: onMarkUnsold }
+      : { id: 'sold', label: 'Mark as sold', icon: Gavel, onClick: onMarkSold },
     { id: 'unpublish', label: 'Unpublish this', icon: EyeOff, onClick: onUnpublish },
     { id: 'delete', label: 'Delete this Ad', icon: Trash2, onClick: onDelete, danger: true },
   ]

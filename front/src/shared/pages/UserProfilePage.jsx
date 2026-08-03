@@ -325,11 +325,8 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
 
   const avatarSrc = profileUser.avatar ? getMediaUrl(profileUser.avatar) || profileUser.avatar : null
   const displayName = profileUser.displayName || profileUser.name || 'User'
-  const realRating = Number(profileUser.rating || 0)
-  const realRatingCount = Number(profileUser.ratingCount || profileUser.rating?.count || 0)
-  // Placeholder values from the design, shown until real data exists.
-  const rating = realRating > 0 ? realRating.toFixed(1) : '4.5'
-  const ratingCount = realRatingCount > 0 ? realRatingCount : 7
+  const rating = Number(profileUser.rating || 0).toFixed(1)
+  const ratingCount = Number(profileUser.ratingCount || 0)
   const hasRating = true
   const bio =
     profileUser.bio ||
@@ -380,7 +377,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
               >
                 <Star className="h-4 w-4 fill-amber-400 stroke-amber-500" />
                 <span className="font-semibold">{rating}</span>
-                <span className="text-gray-400">| {ratingCount} rating</span>
+                <span className="text-gray-400">| {ratingCount} rating{ratingCount !== 1 ? 's' : ''}</span>
               </button>
             )}
 

@@ -324,6 +324,9 @@ export const productService = {
   archiveProduct: (id) => api.put(`/products/${id}/archive`),
   restoreProduct: (id) => api.put(`/products/${id}/restore`),
   deleteProduct: (id) => api.delete(`/products/${id}`),
+  getProductBuyers: (id) => api.get(`/products/${id}/buyers`),
+  markProductSold: (id, payload) => api.post(`/products/${id}/mark-sold`, payload),
+  markProductUnsold: (id) => api.post(`/products/${id}/mark-unsold`),
 }
 
 // Post Your Ad — productDraft table sync (background; does not replace IndexedDB media)

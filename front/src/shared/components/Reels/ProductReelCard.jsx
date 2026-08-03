@@ -36,6 +36,7 @@ import ReelShareModal from './ReelShareModal'
 import QuickViewModal from './QuickViewModal'
 import ReelStreamPlayer from './ReelStreamPlayer'
 import AdMoreOptionsModal from '../Profile/AdMoreOptionsModal'
+import MarkAsSoldFlow from '../Profile/MarkAsSoldFlow'
 import BlockFlow from '../../../components/Block/BlockFlow'
 import useProductVideoViewTracking from '@shared/hooks/useProductVideoViewTracking'
 
@@ -72,6 +73,7 @@ function ProductReelCard({
   const [isSaved, setIsSaved] = useState(Boolean(product.saved))
   const [showMoreMenu, setShowMoreMenu] = useState(false)
   const [showOwnerMore, setShowOwnerMore] = useState(false)
+  const [showMarkSoldFlow, setShowMarkSoldFlow] = useState(false)
   const [ownerBusy, setOwnerBusy] = useState(false)
   const [likeCount, setLikeCount] = useState(product.likesCount ?? product.likes?.length ?? 0)
   const [viewCount, setViewCount] = useState(product.views || 0)
@@ -375,14 +377,19 @@ function ProductReelCard({
     toast(`${label} — coming soon`)
   }
 
-  const handleMarkSold = async () => {
+  const handleMarkSold = () => {
+    setShowMarkSoldFlow(true)
+  }
+
+  const handleMarkUnsold = async () => {
+    if (!window.confirm('Mark this ad as unsold and list it as active again?')) return false
     setOwnerBusy(true)
     try {
-      await productService.updateProduct(product._id, { status: 'sold' })
-      toast.success('Marked as sold')
-      onProductUpdated?.(product._id, { status: 'sold', isSold: true })
+      const res = await productService.markProductUnsold(product._id)
+      toast.success('Marked as unsold')
+      onProductUpdated?.(product._id, res.data.product || { status: 'active', isSold: false })
     } catch (error) {
-      toast.error(error?.response?.data?.message || 'Failed to mark as sold')
+      toast.error(error?.response?.data?.message || 'Failed to mark as unsold')
       return false
     } finally {
       setOwnerBusy(false)
@@ -816,8 +823,19 @@ function ProductReelCard({
           onInsight={() => handleComingSoon('See Insight')}
           onBoost={() => handleComingSoon('Boost this Ad')}
           onMarkSold={handleMarkSold}
+          onMarkUnsold={handleMarkUnsold}
+          isSold={product.status === 'sold' || product.isSold}
           onUnpublish={handleUnpublish}
           onDelete={handleDeleteAd}
+        />
+      ) : null}
+
+      {isOwner ? (
+        <MarkAsSoldFlow
+          open={showMarkSoldFlow}
+          product={product}
+          onClose={() => setShowMarkSoldFlow(false)}
+          onSold={(updated) => onProductUpdated?.(product._id, updated || { status: 'sold', isSold: true })}
         />
       ) : null}
 

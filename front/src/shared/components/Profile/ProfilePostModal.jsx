@@ -19,6 +19,7 @@ import { formatPrice, getMediaUrl, isIdentityVerified } from '@shared/utils/help
 import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
 import { navigateToUser } from '@shared/utils/safeNavigate'
 import AdMoreOptionsModal from './AdMoreOptionsModal'
+import MarkAsSoldFlow from './MarkAsSoldFlow'
 import ListingVideoPreview from '../Video/ListingVideoPreview'
 
 function formatPostDate(value) {
@@ -72,6 +73,7 @@ export default function ProfilePostModal({
   const [commentText, setCommentText] = useState('')
   const [posting, setPosting] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
+  const [showMarkSoldFlow, setShowMarkSoldFlow] = useState(false)
   const [busy, setBusy] = useState(false)
 
   const seller = product?.seller || profileUser || {}
@@ -210,14 +212,19 @@ export default function ProfilePostModal({
     toast(`${label} — coming soon`)
   }
 
-  const handleMarkSold = async () => {
+  const handleMarkSold = () => {
+    setShowMarkSoldFlow(true)
+  }
+
+  const handleMarkUnsold = async () => {
+    if (!window.confirm('Mark this ad as unsold and list it as active again?')) return false
     setBusy(true)
     try {
-      await productService.updateProduct(product._id, { status: 'sold' })
-      toast.success('Marked as sold')
-      onProductUpdated?.(product._id, { status: 'sold', isSold: true })
+      const res = await productService.markProductUnsold(product._id)
+      toast.success('Marked as unsold')
+      onProductUpdated?.(product._id, res.data.product || { status: 'active', isSold: false })
     } catch (err) {
-      toast.error(err?.response?.data?.message || 'Failed to mark as sold')
+      toast.error(err?.response?.data?.message || 'Failed to mark as unsold')
       return false
     } finally {
       setBusy(false)
@@ -491,8 +498,19 @@ export default function ProfilePostModal({
           onInsight={() => handleComingSoon('See Insight')}
           onBoost={() => handleComingSoon('Boost this Ad')}
           onMarkSold={handleMarkSold}
+          onMarkUnsold={handleMarkUnsold}
+          isSold={product.status === 'sold' || product.isSold}
           onUnpublish={handleUnpublish}
           onDelete={handleDelete}
+        />
+      ) : null}
+
+      {isOwnProfile ? (
+        <MarkAsSoldFlow
+          open={showMarkSoldFlow}
+          product={product}
+          onClose={() => setShowMarkSoldFlow(false)}
+          onSold={(updated) => onProductUpdated?.(product._id, updated || { status: 'sold', isSold: true })}
         />
       ) : null}
     </div>,

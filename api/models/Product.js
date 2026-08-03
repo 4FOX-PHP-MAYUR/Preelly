@@ -537,6 +537,38 @@ const productSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // "Mark as Sold" workflow metadata (all optional/additive; status/isSold above
+    // remain the source of truth for "is this product sold").
+    buyer: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    soldAt: {
+      type: Date,
+      default: null,
+    },
+    soldVia: {
+      type: String,
+      enum: ['preelly', 'external', null],
+      default: null,
+    },
+    soldPlatform: {
+      type: String,
+      enum: ['friends_family', 'facebook', 'instagram', 'dubizzle', 'other', null],
+      default: null,
+    },
+    soldComment: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    // Populated only when soldVia === 'external' — seller's feedback on Preelly itself.
+    preellyFeedback: {
+      stars: { type: Number, min: 0, max: 5, default: null },
+      reasons: [{ type: String }],
+      comment: { type: String, default: '', trim: true },
+    },
     // Admin-only toggle (Admin Panel → Products → Edit Feature). Powers the
     // Featured Products rail on the product details page and its "See all" listing.
     isFeature: {
@@ -617,6 +649,7 @@ productSchema.index({ seller: 1, createdAt: -1 })
 productSchema.index({ status: 1, createdAt: -1 })
 productSchema.index({ isFeature: 1, createdAt: -1 })
 productSchema.index({ seller: 1, isArchived: 1, archivedAt: -1 })
+productSchema.index({ buyer: 1 })
 productSchema.index({ createdAt: -1 })
 // Helps membership checks for “liked by user” when querying by likes array.
 productSchema.index({ likes: 1 })

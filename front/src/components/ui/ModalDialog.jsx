@@ -16,6 +16,7 @@ export default function ModalDialog({
   footer,
   maxWidthClass = 'sm:max-w-md',
   labelledBy,
+  zIndexClass = 'z-[70]',
 }) {
   const titleId = useId()
   const panelRef = useRef(null)
@@ -75,7 +76,7 @@ export default function ModalDialog({
   if (!mounted) return null
 
   return createPortal(
-    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:items-center sm:p-4" role="presentation">
+    <div className={`fixed inset-0 ${zIndexClass} flex items-end justify-center sm:items-center sm:p-4`} role="presentation">
       <button
         type="button"
         aria-label="Close dialog"

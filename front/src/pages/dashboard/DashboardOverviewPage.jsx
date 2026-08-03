@@ -209,8 +209,8 @@ export default function DashboardOverviewPage() {
   const displayName = user?.displayName || user?.name || 'User'
   const followersCount = Array.isArray(user?.followers) ? user.followers.length : (user?.followersCount || 0)
   const followingCount = Array.isArray(user?.following) ? user.following.length : (user?.followingCount || 0)
-  const rating = Number(user?.rating?.average || user?.averageRating || 0).toFixed(1)
-  const ratingCount = Number(user?.rating?.count || user?.ratingCount || 0)
+  const rating = Number(user?.rating || 0).toFixed(1)
+  const ratingCount = Number(user?.ratingCount || 0)
   const bio = user?.bio || user?.description || ''
 
   return (

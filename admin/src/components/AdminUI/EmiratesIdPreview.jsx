@@ -17,7 +17,7 @@ function IdImage({ src, label, size = 'md', onClick }) {
     <button
       type="button"
       onClick={onClick}
-      className={`group relative rounded-xl border border-gray-200 bg-gray-50 overflow-hidden ${sizeClass} ${onClick ? 'cursor-zoom-in hover:border-blue-400' : ''}`}
+      className={`group relative rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 overflow-hidden ${sizeClass} ${onClick ? 'cursor-zoom-in hover:border-primary-400 dark:hover:border-primary-500' : ''}`}
     >
       <img src={url} alt={label} className="h-full w-full object-cover" />
       {onClick && (
@@ -83,7 +83,7 @@ export function EmiratesIdThumbnailPair({ front, back, onPreview }) {
             size="sm"
             onClick={onPreview ? () => onPreview(front, 'Emirates ID — Front') : undefined}
           />
-          <span className="text-[10px] text-gray-400 mt-0.5 block">Front</span>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 block">Front</span>
         </div>
       )}
       {back && (
@@ -94,7 +94,7 @@ export function EmiratesIdThumbnailPair({ front, back, onPreview }) {
             size="sm"
             onClick={onPreview ? () => onPreview(back, 'Emirates ID — Back') : undefined}
           />
-          <span className="text-[10px] text-gray-400 mt-0.5 block">Back</span>
+          <span className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 block">Back</span>
         </div>
       )}
     </div>
@@ -106,14 +106,14 @@ export function EmiratesIdPreviewPanel({ front, back, className = '' }) {
   const [lightbox, setLightbox] = useState(null)
 
   if (!front && !back) {
-    return <p className="text-sm text-gray-400">No Emirates ID images uploaded</p>
+    return <p className="text-sm text-slate-400 dark:text-slate-500">No Emirates ID images uploaded</p>
   }
 
   return (
     <>
       <div className={`grid grid-cols-1 sm:grid-cols-2 gap-4 ${className}`}>
         <div>
-          <p className="text-sm font-semibold text-gray-700 mb-2">Emirates ID — Front</p>
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Emirates ID — Front</p>
           {front ? (
             <div className="space-y-2">
               <IdImage
@@ -133,11 +133,11 @@ export function EmiratesIdPreviewPanel({ front, back, className = '' }) {
               </a>
             </div>
           ) : (
-            <p className="text-sm text-gray-400">Not uploaded</p>
+            <p className="text-sm text-slate-400 dark:text-slate-500">Not uploaded</p>
           )}
         </div>
         <div>
-          <p className="text-sm font-semibold text-gray-700 mb-2">Emirates ID — Back</p>
+          <p className="text-sm font-semibold text-slate-700 dark:text-slate-300 mb-2">Emirates ID — Back</p>
           {back ? (
             <div className="space-y-2">
               <IdImage
@@ -157,7 +157,7 @@ export function EmiratesIdPreviewPanel({ front, back, className = '' }) {
               </a>
             </div>
           ) : (
-            <p className="text-sm text-gray-400">Not uploaded</p>
+            <p className="text-sm text-slate-400 dark:text-slate-500">Not uploaded</p>
           )}
         </div>
       </div>

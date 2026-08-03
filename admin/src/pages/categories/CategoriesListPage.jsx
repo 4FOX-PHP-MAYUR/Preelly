@@ -314,7 +314,7 @@ function CategoriesListPage() {
               value={importRootCategoryId}
               onChange={(e) => setImportRootCategoryId(e.target.value)}
               disabled={!importRootCategoryOptions.length || importing}
-              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-800 disabled:opacity-60 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
+              className="admin-input w-auto min-w-[160px]"
               aria-label="Import root category"
             >
               {importRootCategoryOptions.length ? (
@@ -331,7 +331,7 @@ function CategoriesListPage() {
               value={importSubCategoryId}
               onChange={(e) => setImportSubCategoryId(e.target.value)}
               disabled={!importRootCategoryId || loadingImportSubCategories || importing}
-              className="px-3 py-2 text-sm border border-gray-200 rounded-lg bg-white text-gray-800 disabled:opacity-60 dark:bg-slate-900 dark:border-slate-700 dark:text-slate-200"
+              className="admin-input w-auto min-w-[160px]"
               aria-label="Import sub category"
             >
               {importRootCategoryId ? (
@@ -452,12 +452,12 @@ function CategoriesListPage() {
               const trail = Array.isArray(r.pathNames) ? r.pathNames.join(' › ') : ''
               return (
                 <div className="min-w-0">
-                  <span className="font-medium text-gray-900 whitespace-pre dark:text-slate-100">
-                    <span className="text-gray-400">{indent}</span>
+                  <span className="font-medium text-slate-900 whitespace-pre dark:text-white">
+                    <span className="text-slate-400 dark:text-slate-500">{indent}</span>
                     {r.name}
                   </span>
                   {trail ? (
-                    <div className="mt-0.5 truncate text-xs text-gray-400 dark:text-slate-500">{trail}</div>
+                    <div className="mt-0.5 truncate text-xs text-slate-400 dark:text-slate-500">{trail}</div>
                   ) : null}
                 </div>
               )

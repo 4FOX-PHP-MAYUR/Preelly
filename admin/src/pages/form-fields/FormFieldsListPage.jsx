@@ -7,6 +7,9 @@ import Button from '../../components/AdminUI/Button'
 import FilterBar from '../../components/AdminUI/FilterBar'
 import Select from '../../components/AdminUI/Select'
 import Panel from '../../components/AdminUI/Panel'
+import StatusBadge from '../../components/AdminUI/StatusBadge'
+import EmptyState from '../../components/AdminUI/EmptyState'
+import LoadingSpinner from '../../components/AdminUI/LoadingSpinner'
 import toast from 'react-hot-toast'
 import { usePermission } from '../../hooks/usePermission'
 import {
@@ -169,7 +172,7 @@ function FormFieldsListPage() {
   }
 
   const SortIcon = ({ field }) => {
-    if (sortBy !== field) return <ChevronUp className="h-3 w-3 text-gray-300 shrink-0" />
+    if (sortBy !== field) return <ChevronUp className="h-3 w-3 text-slate-300 dark:text-slate-600 shrink-0" />
     return sortDir === 'asc'
       ? <ChevronUp className="h-3 w-3 text-indigo-500 shrink-0" />
       : <ChevronDown className="h-3 w-3 text-indigo-500 shrink-0" />
@@ -277,177 +280,168 @@ function FormFieldsListPage() {
 
       <Panel padding={false} className="overflow-hidden">
         {loading && formFields.length === 0 ? (
-          <div className="p-10 text-center">
-            <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-600 mx-auto" />
-            <p className="mt-3 text-sm text-gray-500">Loading form fields…</p>
-          </div>
+          <LoadingSpinner message="Loading form fields…" />
         ) : formFields.length === 0 ? (
-          <div className="p-14 text-center">
-            <div className="h-14 w-14 rounded-2xl bg-gray-100 flex items-center justify-center mx-auto mb-4">
-              <LayoutList className="h-7 w-7 text-gray-400" />
-            </div>
-            <p className="text-sm font-semibold text-gray-700">
-              {hasActiveFilters ? 'No records found' : 'No form fields found'}
-            </p>
-            <p className="text-xs text-gray-400 mt-1">
-              {hasActiveFilters
+          <EmptyState
+            icon={LayoutList}
+            title={hasActiveFilters ? 'No records found' : 'No form fields found'}
+            description={
+              hasActiveFilters
                 ? 'Try adjusting your search or filters, or reset filters to see all records.'
-                : 'Click "Add Form Field" to create the first one.'}
-            </p>
-            {hasActiveFilters ? (
-              <Button variant="secondary" icon={RotateCcw} onClick={handleResetFilters} className="mt-4">
-                Reset Filters
-              </Button>
-            ) : canCreate ? (
-              <Button icon={Plus} onClick={() => navigate(`${LIST_PATH}/new`)} className="mt-4">
-                Add Form Field
-              </Button>
-            ) : null}
-          </div>
+                : 'Click "Add Form Field" to create the first one.'
+            }
+            action={
+              hasActiveFilters ? (
+                <Button variant="secondary" icon={RotateCcw} onClick={handleResetFilters}>
+                  Reset Filters
+                </Button>
+              ) : canCreate ? (
+                <Button icon={Plus} onClick={() => navigate(`${LIST_PATH}/new`)}>
+                  Add Form Field
+                </Button>
+              ) : null
+            }
+          />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px]">
-              <thead className="bg-gray-50 border-b border-gray-200">
+            <table className="w-full min-w-[900px] admin-table">
+              <thead>
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-8">#</th>
+                  <th className="w-8">#</th>
                   <th
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700 whitespace-nowrap"
+                    className="cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
                     onClick={() => handleSort('fieldTitle')}
                   >
                     <div className="flex items-center gap-1">Field Title <SortIcon field="fieldTitle" /></div>
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th>
                     Field Name
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th>
                     Category
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th>
                     Category Filter
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th>
                     Child Category
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th>
                     Field Type
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th>
                     Filter
                   </th>
                   <th
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700 whitespace-nowrap"
+                    className="cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
                     onClick={() => handleSort('formStep')}
                   >
                     <div className="flex items-center gap-1">Step <SortIcon field="formStep" /></div>
                   </th>
                   <th
-                    className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer select-none hover:text-gray-700 whitespace-nowrap"
+                    className="cursor-pointer select-none hover:text-slate-700 dark:hover:text-slate-300"
                     onClick={() => handleSort('fieldOrder')}
                   >
                     <div className="flex items-center gap-1">Order <SortIcon field="fieldOrder" /></div>
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th>
                     Status
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th>
                     Quick View
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th>
                     Date Added
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider whitespace-nowrap">
+                  <th className="text-right">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody>
                 {formFields.map((row, idx) => (
-                  <tr key={row._id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-4 py-3 text-xs text-gray-400">{(page - 1) * LIMIT + idx + 1}</td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-gray-900 truncate max-w-[160px]" title={row.fieldTitle}>
+                  <tr key={row._id}>
+                    <td className="text-xs text-slate-400 dark:text-slate-500">{(page - 1) * LIMIT + idx + 1}</td>
+                    <td>
+                      <div className="text-sm font-medium text-slate-900 dark:text-white truncate max-w-[160px]" title={row.fieldTitle}>
                         {row.fieldTitle}
                       </div>
                       {row.placeholder && (
-                        <div className="text-xs text-gray-400 truncate max-w-[160px]">{row.placeholder}</div>
+                        <div className="text-xs text-slate-400 dark:text-slate-500 truncate max-w-[160px]">{row.placeholder}</div>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      <code className="text-xs bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-mono">
+                    <td>
+                      <code className="text-xs bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded font-mono">
                         {row.fieldName}
                       </code>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-700 truncate max-w-[120px] block" title={row.categoryId?.name}>
-                        {row.categoryId?.name || <span className="text-gray-400">—</span>}
+                    <td>
+                      <span className="text-sm text-slate-700 dark:text-slate-300 truncate max-w-[120px] block" title={row.categoryId?.name}>
+                        {row.categoryId?.name || <span className="text-slate-400 dark:text-slate-500">—</span>}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-700 truncate max-w-[120px] block" title={row.categoryFilterId?.name}>
-                        {row.categoryFilterId?.name || <span className="text-gray-400">—</span>}
+                    <td>
+                      <span className="text-sm text-slate-700 dark:text-slate-300 truncate max-w-[120px] block" title={row.categoryFilterId?.name}>
+                        {row.categoryFilterId?.name || <span className="text-slate-400 dark:text-slate-500">—</span>}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-700 truncate max-w-[120px] block" title={row.childCategoryId?.name}>
-                        {row.childCategoryId?.name || <span className="text-gray-400">—</span>}
+                    <td>
+                      <span className="text-sm text-slate-700 dark:text-slate-300 truncate max-w-[120px] block" title={row.childCategoryId?.name}>
+                        {row.childCategoryId?.name || <span className="text-slate-400 dark:text-slate-500">—</span>}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 border border-purple-100">
+                    <td>
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-100 dark:border-purple-900">
                         {row.fieldTypeId?.fieldValue || '—'}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-700 truncate max-w-[120px] block" title={row.filterId?.name}>
-                        {row.filterId?.name || <span className="text-gray-400">—</span>}
+                    <td>
+                      <span className="text-sm text-slate-700 dark:text-slate-300 truncate max-w-[120px] block" title={row.filterId?.name}>
+                        {row.filterId?.name || <span className="text-slate-400 dark:text-slate-500">—</span>}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-center">
-                      <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-indigo-50 text-indigo-700 text-xs font-semibold">
+                    <td className="text-center">
+                      <span className="inline-flex items-center justify-center h-6 w-6 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 text-xs font-semibold">
                         {row.formStep ?? '—'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600 text-center">
+                    <td className="text-center">
                       {row.fieldOrder ?? 0}
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       <button
                         type="button"
                         onClick={() => handleToggleStatus(row)}
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border transition-colors cursor-pointer ${
-                          row.isActive
-                            ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                            : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                        }`}
+                        className="focus:outline-none"
                         title="Click to toggle"
                       >
-                        {row.isActive ? 'Active' : 'Inactive'}
+                        <StatusBadge status={row.isActive ? 'active' : 'inactive'} label={row.isActive ? 'Active' : 'Inactive'} />
                       </button>
                     </td>
-                    <td className="px-4 py-3">
+                    <td>
                       <span
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
                           row.showOnQuickView
-                            ? 'bg-blue-50 text-blue-700 border-blue-200'
-                            : 'bg-gray-50 text-gray-500 border-gray-200'
+                            ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-900'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700'
                         }`}
                       >
                         {row.showOnQuickView ? 'Yes' : 'No'}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-400 whitespace-nowrap">
+                    <td className="text-xs text-slate-400 dark:text-slate-500 whitespace-nowrap">
                       {row.createdAt
                         ? new Date(row.createdAt).toLocaleDateString('en-GB', {
                             day: '2-digit', month: 'short', year: 'numeric',
                           })
                         : '—'}
                     </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                    <td className="text-right whitespace-nowrap">
                       <div className="flex items-center justify-end gap-1.5">
                         {canEdit ? (
                           <button
                             onClick={() => navigate(`${LIST_PATH}/${row._id}/edit`)}
-                            className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors"
                             title="Edit"
                           >
                             <Edit2 className="h-4 w-4" />
@@ -457,7 +451,7 @@ function FormFieldsListPage() {
                           <button
                             onClick={() => handleDelete(row)}
                             disabled={deleting === row._id}
-                            className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
+                            className="p-1.5 text-slate-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors disabled:opacity-50"
                             title="Delete"
                           >
                             <Trash2 className="h-4 w-4" />
@@ -475,9 +469,9 @@ function FormFieldsListPage() {
 
       {total > 0 && (
         <div className="flex items-center justify-between flex-wrap gap-3">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-slate-500 dark:text-slate-400">
             Showing {(page - 1) * LIMIT + 1}–{Math.min(page * LIMIT, total)} of{' '}
-            <span className="font-semibold text-gray-800">{total}</span>
+            <span className="font-semibold text-slate-800 dark:text-slate-200">{total}</span>
             {hasActiveFilters ? ' filtered' : ''} record{total !== 1 ? 's' : ''}
             {hasActiveFilters && totalRecords > total && (
               <> (of {totalRecords} total)</>
@@ -488,15 +482,15 @@ function FormFieldsListPage() {
               <button
                 onClick={() => fetchFormFields(page - 1)}
                 disabled={page <= 1 || loading}
-                className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition"
+                className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 transition"
               >
                 ← Prev
               </button>
-              <span className="px-3 py-1.5 text-sm text-gray-600">{page} / {totalPages}</span>
+              <span className="px-3 py-1.5 text-sm text-slate-600 dark:text-slate-400">{page} / {totalPages}</span>
               <button
                 onClick={() => fetchFormFields(page + 1)}
                 disabled={page >= totalPages || loading}
-                className="px-3 py-1.5 text-sm rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-40 transition"
+                className="px-3 py-1.5 text-sm rounded-lg border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 transition"
               >
                 Next →
               </button>

@@ -479,7 +479,7 @@ function FormFieldFormPage() {
               </optgroup>
             ))}
           </Select>
-          {!dropdownsLoaded && <p className="text-xs text-gray-400 lg:col-span-5">Loading dropdowns…</p>}
+          {!dropdownsLoaded && <p className="text-xs text-slate-400 dark:text-slate-500 lg:col-span-5">Loading dropdowns…</p>}
 
           <Select
             label="Category Filter"

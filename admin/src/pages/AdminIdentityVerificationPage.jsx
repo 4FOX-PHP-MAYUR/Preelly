@@ -5,10 +5,13 @@ import {
   PageHeader,
   FilterBar,
   Button,
+  Modal,
+  EmptyState,
+  LoadingSpinner,
 } from '../components/AdminUI'
 import toast from 'react-hot-toast'
 import { getMediaUrl } from '@shared/utils/helpers'
-import { CheckCircle2, XCircle, Eye, Loader2, ShieldCheck, Clock } from 'lucide-react'
+import { CheckCircle2, XCircle, Eye, ShieldCheck, Clock } from 'lucide-react'
 import { EmiratesIdPreviewPanel, EmiratesIdThumbnailPair, EmiratesIdLightbox } from '../components/AdminUI/EmiratesIdPreview'
 
 const STATUS_OPTIONS = [
@@ -25,7 +28,7 @@ function StatusBadge({ status }) {
     rejected: 'bg-red-100 text-red-800',
   }
   return (
-    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${styles[status] || 'bg-gray-100 text-gray-700'}`}>
+    <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold capitalize ${styles[status] || 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'}`}>
       {status}
     </span>
   )
@@ -46,95 +49,86 @@ function ReviewModal({ user, onClose, onApprove, onReject, processing }) {
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between px-6 py-4 border-b">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">{user.name}</h2>
-            <p className="text-sm text-gray-500">{user.email}</p>
-          </div>
-          <StatusBadge status={user.identityVerificationStatus} />
-        </div>
-
-        <div className="p-6 space-y-6">
-          <EmiratesIdPreviewPanel
-            front={user.emiratesIdFront}
-            back={user.emiratesIdBack}
-          />
-
-          {user.identityVerificationSubmittedAt && (
-            <p className="text-xs text-gray-500">
-              Submitted: {new Date(user.identityVerificationSubmittedAt).toLocaleString()}
-            </p>
-          )}
-          {user.identityVerificationRejectionReason && (
-            <div className="rounded-xl bg-red-50 border border-red-100 p-3">
-              <p className="text-xs font-semibold text-red-700 mb-1">Rejection reason</p>
-              <p className="text-sm text-red-600">{user.identityVerificationRejectionReason}</p>
-            </div>
-          )}
-
-          {showRejectForm && (
-            <div className="space-y-2">
-              <label className="text-sm font-semibold text-gray-700">
-                Rejection reason <span className="font-normal text-gray-500">(sent to user by email)</span>
-              </label>
-              <textarea
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                rows={3}
-                required
-                placeholder="Explain why the verification was rejected..."
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm focus:border-red-400 focus:outline-none focus:ring-2 focus:ring-red-100"
-              />
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center justify-end gap-3 px-6 py-4 border-t bg-gray-50 rounded-b-2xl">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 rounded-full border border-gray-200 text-sm font-medium text-gray-600 hover:bg-white transition"
-          >
+    <Modal
+      open={Boolean(user)}
+      onClose={onClose}
+      title={user.name}
+      size="lg"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose}>
             Close
-          </button>
+          </Button>
           {user.identityVerificationStatus === 'pending' && (
             <>
               {!showRejectForm ? (
-                <button
-                  type="button"
+                <Button
+                  variant="secondary"
                   onClick={() => setShowRejectForm(true)}
                   disabled={processing}
-                  className="px-4 py-2 rounded-full border border-red-200 bg-red-50 text-red-700 text-sm font-semibold hover:bg-red-100 transition disabled:opacity-50 flex items-center gap-1.5"
+                  icon={XCircle}
+                  className="border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/30 text-red-700 dark:text-red-400 hover:bg-red-100 dark:hover:bg-red-950/50"
                 >
-                  <XCircle className="h-4 w-4" />
                   Reject
-                </button>
+                </Button>
               ) : (
-                <button
-                  type="button"
-                  onClick={handleReject}
-                  disabled={processing}
-                  className="px-4 py-2 rounded-full bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition disabled:opacity-50"
-                >
+                <Button variant="danger" onClick={handleReject} disabled={processing}>
                   Confirm Reject
-                </button>
+                </Button>
               )}
-              <button
-                type="button"
+              <Button
+                variant="success"
+                icon={CheckCircle2}
+                loading={processing}
                 onClick={() => onApprove(user._id)}
-                disabled={processing}
-                className="px-4 py-2 rounded-full bg-emerald-600 text-white text-sm font-semibold hover:bg-emerald-700 transition disabled:opacity-50 flex items-center gap-1.5"
               >
-                {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
                 Approve Identity
-              </button>
+              </Button>
             </>
           )}
+        </>
+      }
+    >
+      <div className="space-y-6">
+        <div className="flex items-center gap-2 flex-wrap -mt-2">
+          <p className="text-sm text-slate-500 dark:text-slate-400">{user.email}</p>
+          <StatusBadge status={user.identityVerificationStatus} />
         </div>
+
+        <EmiratesIdPreviewPanel
+          front={user.emiratesIdFront}
+          back={user.emiratesIdBack}
+        />
+
+        {user.identityVerificationSubmittedAt && (
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            Submitted: {new Date(user.identityVerificationSubmittedAt).toLocaleString()}
+          </p>
+        )}
+        {user.identityVerificationRejectionReason && (
+          <div className="rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-100 dark:border-red-900/50 p-3">
+            <p className="text-xs font-semibold text-red-700 dark:text-red-400 mb-1">Rejection reason</p>
+            <p className="text-sm text-red-600 dark:text-red-400">{user.identityVerificationRejectionReason}</p>
+          </div>
+        )}
+
+        {showRejectForm && (
+          <div className="space-y-2">
+            <label className="text-sm font-semibold text-slate-700 dark:text-slate-300">
+              Rejection reason <span className="font-normal text-slate-500 dark:text-slate-400">(sent to user by email)</span>
+            </label>
+            <textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              rows={3}
+              required
+              placeholder="Explain why the verification was rejected..."
+              className="admin-input w-full focus:border-red-400 focus:ring-red-100 dark:focus:ring-red-900/40"
+            />
+          </div>
+        )}
       </div>
-    </div>
+    </Modal>
   )
 }
 
@@ -237,21 +231,15 @@ export default function AdminIdentityVerificationPage() {
         }
       />
 
-      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+      <div className="admin-card overflow-hidden">
         {loading ? (
-          <div className="p-12 text-center">
-            <Loader2 className="h-8 w-8 animate-spin text-blue-600 mx-auto" />
-            <p className="mt-3 text-gray-500 text-sm">Loading requests...</p>
-          </div>
+          <LoadingSpinner message="Loading requests..." />
         ) : verifications.length === 0 ? (
-          <div className="p-12 text-center">
-            <ShieldCheck className="h-12 w-12 text-gray-300 mx-auto mb-3" />
-            <p className="text-gray-500">No verification requests found</p>
-          </div>
+          <EmptyState icon={ShieldCheck} title="No verification requests found" />
         ) : (
-          <div className="divide-y">
+          <div className="divide-y divide-slate-100 dark:divide-slate-800">
             {verifications.map((user) => (
-              <div key={user._id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-gray-50 gap-4">
+              <div key={user._id} className="p-5 flex flex-col sm:flex-row sm:items-center justify-between hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors gap-4">
                 <div className="flex items-center gap-4 min-w-0 flex-1">
                   {user.avatar ? (
                     <img
@@ -266,7 +254,7 @@ export default function AdminIdentityVerificationPage() {
                   )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="font-semibold text-gray-900 truncate">{user.name}</h3>
+                      <h3 className="font-semibold text-slate-900 dark:text-white truncate">{user.name}</h3>
                       <StatusBadge status={user.identityVerificationStatus} />
                       {user.identityVerificationStatus === 'approved' && (
                         <span className="text-xs text-emerald-600 font-medium flex items-center gap-0.5">
@@ -274,9 +262,9 @@ export default function AdminIdentityVerificationPage() {
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-gray-500 truncate">{user.email}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400 truncate">{user.email}</p>
                     {user.identityVerificationSubmittedAt && (
-                      <p className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+                      <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1 mt-0.5">
                         <Clock className="h-3 w-3" />
                         {new Date(user.identityVerificationSubmittedAt).toLocaleDateString()}
                       </p>
@@ -294,7 +282,7 @@ export default function AdminIdentityVerificationPage() {
                   <button
                     type="button"
                     onClick={() => setSelectedUser(user)}
-                    className="h-9 px-3 rounded-full flex items-center gap-1.5 border border-gray-200 text-sm text-gray-700 hover:bg-gray-100 transition"
+                    className="h-9 px-3 rounded-full flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                   >
                     <Eye className="h-4 w-4" />
                     Review
@@ -338,7 +326,7 @@ export default function AdminIdentityVerificationPage() {
           >
             Previous
           </button>
-          <span className="text-sm text-gray-500">Page {page}</span>
+          <span className="text-sm text-slate-500 dark:text-slate-400">Page {page}</span>
           <button
             type="button"
             disabled={page * 20 >= total}

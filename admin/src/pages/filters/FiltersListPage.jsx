@@ -7,6 +7,9 @@ import AdminPage from '../../components/AdminUI/AdminPage'
 import PageHeader from '../../components/AdminUI/PageHeader'
 import FilterBar from '../../components/AdminUI/FilterBar'
 import Button from '../../components/AdminUI/Button'
+import StatusBadge from '../../components/AdminUI/StatusBadge'
+import EmptyState from '../../components/AdminUI/EmptyState'
+import LoadingSpinner from '../../components/AdminUI/LoadingSpinner'
 import {
   ChevronRight,
   FolderOpen,
@@ -71,15 +74,15 @@ function CategoryBreadcrumb({ path, labelById }) {
   const crumbs = path.filter(Boolean).map((id) => labelById.get(String(id))?.split(' > ').pop() || id)
   return (
     <div className="flex items-center gap-1 flex-wrap text-sm">
-      <span className="text-gray-400">Showing filters for:</span>
+      <span className="text-slate-400 dark:text-slate-500">Showing filters for:</span>
       {crumbs.map((crumb, i) => (
         <React.Fragment key={i}>
-          {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-gray-400" />}
+          {i > 0 && <ChevronRight className="h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />}
           <span
             className={
               i === crumbs.length - 1
-                ? 'font-semibold text-indigo-700'
-                : 'text-gray-600'
+                ? 'font-semibold text-indigo-700 dark:text-indigo-400'
+                : 'text-slate-600 dark:text-slate-400'
             }
           >
             {crumb}
@@ -109,14 +112,14 @@ function CategoryPathBadge({ filter, labelById }) {
     <div className="flex items-center gap-1 flex-wrap">
       {crumbs.map((crumb, i) => (
         <React.Fragment key={i}>
-          {i > 0 && <ChevronRight className="h-3 w-3 text-gray-300 shrink-0" />}
+          {i > 0 && <ChevronRight className="h-3 w-3 text-slate-300 dark:text-slate-600 shrink-0" />}
           <span
             className={`text-xs px-2 py-0.5 rounded-full font-medium ${
               i === 0
-                ? 'bg-violet-50 text-violet-700 border border-violet-100'
+                ? 'bg-violet-50 text-violet-700 border border-violet-100 dark:bg-violet-950/40 dark:text-violet-300 dark:border-violet-900'
                 : i === crumbs.length - 1
-                ? 'bg-indigo-50 text-indigo-700 border border-indigo-100'
-                : 'bg-blue-50 text-blue-700 border border-blue-100'
+                ? 'bg-indigo-50 text-indigo-700 border border-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-900'
+                : 'bg-blue-50 text-blue-700 border border-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900'
             }`}
           >
             {crumb}
@@ -132,14 +135,14 @@ function FilterGroupRow({ group, onEdit, onDelete, onToggleStatus, categoryLabel
   const hasChildren = group.children && group.children.length > 0
 
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden mb-3">
-      <div className="flex items-start gap-3 px-4 py-3 bg-gray-50 border-b border-gray-200">
+    <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden mb-3">
+      <div className="flex items-start gap-3 px-4 py-3 bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-700">
         <div className="mt-0.5 shrink-0">
           {hasChildren ? (
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}
-              className="text-gray-400 hover:text-gray-600 transition"
+              className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition"
             >
               <ChevronDown
                 className={`h-4 w-4 transition-transform duration-200 ${expanded ? '' : '-rotate-90'}`}
@@ -156,13 +159,13 @@ function FilterGroupRow({ group, onEdit, onDelete, onToggleStatus, categoryLabel
 
         <div className="flex-1 min-w-0 space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="font-semibold text-gray-900 text-sm">{group.name}</span>
+            <span className="font-semibold text-slate-900 dark:text-white text-sm">{group.name}</span>
             {hasChildren ? (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-xs font-medium">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-300 text-xs font-medium">
                 {group.children.length} {group.children.length === 1 ? 'value' : 'values'}
               </span>
             ) : (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 text-xs">
+              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 text-xs">
                 No values
               </span>
             )}
@@ -171,22 +174,14 @@ function FilterGroupRow({ group, onEdit, onDelete, onToggleStatus, categoryLabel
         </div>
 
         <div className="flex items-center gap-2 shrink-0 mt-0.5">
-          <button
-            type="button"
-            onClick={() => onToggleStatus(group)}
-            className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
-              group.isActive !== false
-                ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-            }`}
-          >
-            {group.isActive !== false ? 'Active' : 'Inactive'}
+          <button type="button" onClick={() => onToggleStatus(group)} className="focus:outline-none">
+            <StatusBadge status={group.isActive !== false ? 'active' : 'inactive'} />
           </button>
           {onEdit ? (
             <button
               type="button"
               onClick={() => onEdit(group)}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition"
+              className="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition"
               title="Edit"
             >
               <Pencil className="h-3.5 w-3.5" />
@@ -196,7 +191,7 @@ function FilterGroupRow({ group, onEdit, onDelete, onToggleStatus, categoryLabel
             <button
               type="button"
               onClick={() => onDelete(group)}
-              className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
+              className="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition"
               title="Delete"
             >
               <Trash2 className="h-3.5 w-3.5" />
@@ -206,17 +201,17 @@ function FilterGroupRow({ group, onEdit, onDelete, onToggleStatus, categoryLabel
       </div>
 
       {hasChildren && expanded && (
-        <div className="divide-y divide-gray-100">
+        <div className="divide-y divide-slate-100 dark:divide-slate-800/80">
           {group.children.map((child) => (
-            <div key={child._id} className="flex items-center gap-3 px-4 py-2.5 bg-white hover:bg-gray-50 transition">
+            <div key={child._id} className="flex items-center gap-3 px-4 py-2.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition">
               <div className="w-4 shrink-0" />
               <div className="w-4 shrink-0 flex items-center justify-center">
-                <div className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+                <div className="h-1.5 w-1.5 rounded-full bg-slate-400 dark:bg-slate-500" />
               </div>
-              <span className="flex-1 text-sm text-gray-700 truncate">{child.name}</span>
+              <span className="flex-1 text-sm text-slate-700 dark:text-slate-300 truncate">{child.name}</span>
               {child.colorCode && (
                 <div
-                  className="h-4 w-4 rounded border border-gray-300 shrink-0"
+                  className="h-4 w-4 rounded border border-slate-300 dark:border-slate-600 shrink-0"
                   style={{ backgroundColor: child.colorCode }}
                   title={child.colorCode}
                 />
@@ -225,25 +220,21 @@ function FilterGroupRow({ group, onEdit, onDelete, onToggleStatus, categoryLabel
                 <img
                   src={getMediaUrl(child.thumbImage) || child.thumbImage}
                   alt={child.name}
-                  className="h-6 w-6 rounded object-cover border border-gray-200 shrink-0"
+                  className="h-6 w-6 rounded object-cover border border-slate-200 dark:border-slate-700 shrink-0"
                 />
               )}
               <button
                 type="button"
                 onClick={() => onToggleStatus(child)}
-                className={`px-2 py-0.5 rounded-full text-xs font-medium border transition-colors shrink-0 ${
-                  child.isActive !== false
-                    ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
-                    : 'bg-red-50 text-red-700 border-red-200 hover:bg-red-100'
-                }`}
+                className="shrink-0 focus:outline-none"
               >
-                {child.isActive !== false ? 'Active' : 'Inactive'}
+                <StatusBadge status={child.isActive !== false ? 'active' : 'inactive'} />
               </button>
               {onEdit ? (
                 <button
                   type="button"
                   onClick={() => onEdit(child)}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition shrink-0"
+                  className="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition shrink-0"
                   title="Edit"
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -253,7 +244,7 @@ function FilterGroupRow({ group, onEdit, onDelete, onToggleStatus, categoryLabel
                 <button
                   type="button"
                   onClick={() => onDelete(child)}
-                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition shrink-0"
+                  className="p-1.5 rounded-lg text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/40 transition shrink-0"
                   title="Delete"
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -474,7 +465,7 @@ function FiltersListPage() {
 
   const renderCategoryCascade = () => (
     <div className="w-full space-y-2">
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex items-center gap-1.5">
+      <p className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
         <Layers className="h-3.5 w-3.5" />
         Category
       </p>
@@ -486,7 +477,7 @@ function FiltersListPage() {
           const isSelected = !!categoryPath[depth]
           return (
             <React.Fragment key={depth}>
-              {depth > 0 && <ChevronRight className="h-4 w-4 text-gray-300 shrink-0" />}
+              {depth > 0 && <ChevronRight className="h-4 w-4 text-slate-300 dark:text-slate-600 shrink-0" />}
               <div className="relative">
                 <select
                   value={categoryPath[depth] || ''}
@@ -494,9 +485,9 @@ function FiltersListPage() {
                   disabled={importing || loading}
                   className={`h-9 pl-3 pr-8 text-sm rounded-lg border transition appearance-none cursor-pointer disabled:opacity-60 ${
                     isSelected
-                      ? 'border-indigo-300 bg-indigo-50 text-indigo-800 font-medium'
-                      : 'border-gray-200 bg-white text-gray-700'
-                  } focus:outline-none focus:ring-2 focus:ring-indigo-300`}
+                      ? 'border-indigo-300 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-950/40 text-indigo-800 dark:text-indigo-300 font-medium'
+                      : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300'
+                  } focus:outline-none focus:ring-2 focus:ring-indigo-300 dark:focus:ring-indigo-800`}
                 >
                   <option value="">
                     {getLevelLabel(depth)}
@@ -508,7 +499,7 @@ function FiltersListPage() {
                     </option>
                   ))}
                 </select>
-                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-gray-400" />
+                <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 dark:text-slate-500" />
               </div>
             </React.Fragment>
           )
@@ -517,7 +508,7 @@ function FiltersListPage() {
           <button
             type="button"
             onClick={clearCategory}
-            className="flex items-center gap-1 h-9 px-3 text-sm rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition"
+            className="flex items-center gap-1 h-9 px-3 text-sm rounded-lg border border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition"
           >
             <X className="h-3.5 w-3.5" />
             Clear
@@ -581,26 +572,26 @@ function FiltersListPage() {
       />
 
       {hasCategory && (
-        <div className="mb-4 flex items-center justify-between flex-wrap gap-2 rounded-xl border border-gray-200 bg-white px-4 py-3">
+        <div className="mb-4 flex items-center justify-between flex-wrap gap-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-4 py-3">
           <CategoryBreadcrumb path={categoryPath} labelById={categoryLabelById} />
-          <div className="flex items-center gap-3 text-xs text-gray-500">
+          <div className="flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
             <span>
-              <span className="font-semibold text-gray-800">{totalGroups}</span> filter groups
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{totalGroups}</span> filter groups
             </span>
-            <span className="text-gray-300">|</span>
+            <span className="text-slate-300 dark:text-slate-600">|</span>
             <span>
-              <span className="font-semibold text-gray-800">{totalValues}</span> values
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{totalValues}</span> values
             </span>
-            <span className="text-gray-300">|</span>
+            <span className="text-slate-300 dark:text-slate-600">|</span>
             <span>
-              <span className="font-semibold text-gray-800">{total}</span> total
+              <span className="font-semibold text-slate-800 dark:text-slate-200">{total}</span> total
             </span>
           </div>
         </div>
       )}
 
       {!hasCategory && !loading && (
-        <p className="text-xs text-gray-400 flex items-center gap-1.5 px-1 mb-4">
+        <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1.5 px-1 mb-4">
           <AlertCircle className="h-3.5 w-3.5 shrink-0" />
           Showing all {total} filters across every category. Select a category above to narrow the view.
         </p>
@@ -608,35 +599,32 @@ function FiltersListPage() {
 
       <div>
         {loading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
-              <div key={i} className="h-14 rounded-xl bg-gray-100 animate-pulse" />
-            ))}
-          </div>
+          <LoadingSpinner message="Loading filters..." />
         ) : filteredGroups.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="h-14 w-14 rounded-2xl bg-gray-100 flex items-center justify-center mb-4">
-              <FolderOpen className="h-7 w-7 text-gray-400" />
-            </div>
-            <p className="text-sm font-semibold text-gray-700">No filters found</p>
-            <p className="text-xs text-gray-400 mt-1">
-              {search
+          <EmptyState
+            icon={FolderOpen}
+            title="No filters found"
+            description={
+              search
                 ? `No results for "${search}"`
                 : hasCategory
                 ? `No filters assigned to "${selectedCategoryLabel}" yet. Click "Add Filter" to create one.`
-                : 'Select a category above to see its filters, or add a new one.'}
-            </p>
-            {canCreate ? (
-              <Button onClick={handleAdd} icon={Plus} className="mt-4">
-                Add First Filter
-              </Button>
-            ) : null}
-          </div>
+                : 'Select a category above to see its filters, or add a new one.'
+            }
+            action={
+              canCreate ? (
+                <Button onClick={handleAdd} icon={Plus}>
+                  Add First Filter
+                </Button>
+              ) : null
+            }
+            className="py-16"
+          />
         ) : (
           <>
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-gray-500">
-                <span className="font-semibold text-gray-800">{filteredGroups.length}</span> filter group
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                <span className="font-semibold text-slate-800 dark:text-slate-200">{filteredGroups.length}</span> filter group
                 {filteredGroups.length !== 1 ? 's' : ''}
                 {search && (
                   <span className="ml-1">
@@ -645,12 +633,12 @@ function FiltersListPage() {
                 )}
               </p>
               {total > LIMIT && (
-                <div className="flex items-center gap-2 text-xs text-gray-500">
+                <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
                   <button
                     type="button"
                     onClick={() => fetchFilters(Math.max(1, page - 1), search)}
                     disabled={page <= 1 || loading}
-                    className="px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
+                    className="px-2 py-1 rounded border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-800/60"
                   >
                     ←
                   </button>
@@ -659,7 +647,7 @@ function FiltersListPage() {
                     type="button"
                     onClick={() => fetchFilters(page + 1, search)}
                     disabled={page * LIMIT >= total || loading}
-                    className="px-2 py-1 rounded border border-gray-200 disabled:opacity-40 hover:bg-gray-50"
+                    className="px-2 py-1 rounded border border-slate-200 dark:border-slate-700 disabled:opacity-40 hover:bg-slate-50 dark:hover:bg-slate-800/60"
                   >
                     →
                   </button>

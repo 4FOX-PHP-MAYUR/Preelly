@@ -324,13 +324,13 @@ function UsersListPage() {
               return (
                 <div className="flex items-center gap-3 min-w-[180px]">
                   {src ? (
-                    <img src={src} alt={r.name} className="h-9 w-9 rounded-full object-cover border border-gray-200 shrink-0" />
+                    <img src={src} alt={r.name} className="h-9 w-9 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0" />
                   ) : (
                     <div className="h-9 w-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-medium text-slate-500 shrink-0">
                       {(r.name || '?').charAt(0).toUpperCase()}
                     </div>
                   )}
-                  <span className="font-medium text-gray-900 dark:text-white flex items-center gap-1">
+                  <span className="font-medium text-slate-900 dark:text-white flex items-center gap-1">
                     {r.name}
                     {r.isVerified && (
                       <img src={VERIFIED_BADGE_IMAGES.medium} alt="Verified" className="h-4 w-4" />
@@ -340,13 +340,13 @@ function UsersListPage() {
               )
             },
           },
-          { key: 'email', title: 'Email', render: (r) => <span className="text-gray-700 dark:text-gray-300">{r.email || '—'}</span> },
-          { key: 'phone', title: 'Mobile', render: (r) => <span className="text-gray-700 dark:text-gray-300">{r.phone || '—'}</span> },
+          { key: 'email', title: 'Email', render: (r) => <span className="text-slate-700 dark:text-slate-300">{r.email || '—'}</span> },
+          { key: 'phone', title: 'Mobile', render: (r) => <span className="text-slate-700 dark:text-slate-300">{r.phone || '—'}</span> },
           {
             key: 'type',
             title: 'Type',
             render: (r) => (
-              <span className="text-gray-700 dark:text-gray-300">
+              <span className="text-slate-700 dark:text-slate-300">
                 {r.adminRole?.role_name || (r.role === 'admin' ? 'Admin' : 'User')}
               </span>
             ),
@@ -354,7 +354,7 @@ function UsersListPage() {
           {
             key: 'memberSince',
             title: 'Registered',
-            render: (r) => <span className="text-gray-700 dark:text-gray-300">{getMemberSince(r)}</span>,
+            render: (r) => <span className="text-slate-700 dark:text-slate-300">{getMemberSince(r)}</span>,
           },
           {
             key: 'status',
@@ -428,7 +428,7 @@ function UsersListPage() {
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="export-from-date">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="export-from-date">
               From Date
             </label>
             <input
@@ -438,11 +438,11 @@ function UsersListPage() {
               max={exportToDate || undefined}
               onChange={(e) => setExportFromDate(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+              className="admin-input w-full"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="export-to-date">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="export-to-date">
               To Date
             </label>
             <input
@@ -452,7 +452,7 @@ function UsersListPage() {
               min={exportFromDate || undefined}
               onChange={(e) => setExportToDate(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+              className="admin-input w-full"
             />
           </div>
         </div>

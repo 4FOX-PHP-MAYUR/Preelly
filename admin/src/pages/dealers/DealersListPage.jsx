@@ -143,20 +143,20 @@ function DealersListPage() {
             title: 'Image',
             render: (r) => {
               const src = r.dealer_image ? getMediaUrl(r.dealer_image) || r.dealer_image : null
-              if (!src) return <span className="text-gray-400 text-xs">—</span>
+              if (!src) return <span className="text-slate-400 dark:text-slate-500 text-xs">—</span>
               return (
                 <img
                   src={src}
                   alt={r.dealer_name}
-                  className="h-10 w-10 rounded object-cover border border-gray-200"
+                  className="h-10 w-10 rounded object-cover border border-slate-200 dark:border-slate-700"
                 />
               )
             },
           },
-          { key: 'dealer_name', title: 'Dealer Name', render: (r) => <span className="font-medium text-gray-900">{r.dealer_name}</span> },
-          { key: 'dealer_email', title: 'Email', render: (r) => <span className="text-gray-700">{r.dealer_email}</span> },
-          { key: 'dealer_mobile', title: 'Mobile', render: (r) => <span className="text-gray-700">{r.dealer_mobile}</span> },
-          { key: 'dealer_whatsapp', title: 'WhatsApp', render: (r) => <span className="text-gray-700">{r.dealer_whatsapp || '—'}</span> },
+          { key: 'dealer_name', title: 'Dealer Name', render: (r) => <span className="font-medium text-slate-900 dark:text-white">{r.dealer_name}</span> },
+          { key: 'dealer_email', title: 'Email', render: (r) => <span className="text-slate-700 dark:text-slate-300">{r.dealer_email}</span> },
+          { key: 'dealer_mobile', title: 'Mobile', render: (r) => <span className="text-slate-700 dark:text-slate-300">{r.dealer_mobile}</span> },
+          { key: 'dealer_whatsapp', title: 'WhatsApp', render: (r) => <span className="text-slate-700 dark:text-slate-300">{r.dealer_whatsapp || '—'}</span> },
           {
             key: 'status',
             title: 'Status',

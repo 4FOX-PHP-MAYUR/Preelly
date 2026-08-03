@@ -139,12 +139,12 @@ function FieldTypesListPage() {
           {
             key: 'fieldValue',
             title: 'Field Value',
-            render: (r) => <span className="font-medium text-gray-900">{r.fieldValue}</span>,
+            render: (r) => <span className="font-medium text-slate-900 dark:text-white">{r.fieldValue}</span>,
           },
           {
             key: 'sortOrder',
             title: 'Sort Order',
-            render: (r) => <span className="text-gray-700">{r.sortOrder}</span>,
+            render: (r) => <span className="text-slate-700 dark:text-slate-300">{r.sortOrder}</span>,
           },
           {
             key: 'isActive',

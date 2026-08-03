@@ -292,7 +292,7 @@ function FilterFormPage() {
             const isSelected = !!formCategoryPath[depth]
             return (
               <React.Fragment key={depth}>
-                {depth > 0 && <ChevronRight className="h-3.5 w-3.5 text-gray-300 shrink-0" />}
+                {depth > 0 && <ChevronRight className="h-3.5 w-3.5 text-slate-300 dark:text-slate-600 shrink-0" />}
                 <div className="relative">
                   <select
                     value={formCategoryPath[depth] || ''}
@@ -300,7 +300,7 @@ function FilterFormPage() {
                     className={`h-9 pl-3 pr-8 text-sm rounded-lg border transition appearance-none cursor-pointer ${
                       isSelected
                         ? 'border-indigo-300 bg-indigo-50 text-indigo-800 font-medium'
-                        : 'border-gray-200 bg-white text-gray-700'
+                        : 'border-slate-200 bg-white text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300'
                     } focus:outline-none focus:ring-2 focus:ring-indigo-300 admin-input`}
                   >
                     <option value="">
@@ -313,7 +313,7 @@ function FilterFormPage() {
                       </option>
                     ))}
                   </select>
-                  <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-gray-400" />
+                  <ChevronDown className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 h-3 w-3 text-slate-400 dark:text-slate-500" />
                 </div>
               </React.Fragment>
             )
@@ -325,7 +325,7 @@ function FilterFormPage() {
                 setFormCategoryPath([])
                 fetchFormFilterTree([])
               }}
-              className="flex items-center gap-1 h-9 px-2.5 text-sm rounded-lg border border-gray-200 text-gray-500 hover:bg-gray-50 transition"
+              className="flex items-center gap-1 h-9 px-2.5 text-sm rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 transition dark:border-slate-700 dark:text-slate-400 dark:hover:bg-slate-800/60"
             >
               <X className="h-3 w-3" /> Clear
             </button>
@@ -357,7 +357,7 @@ function FilterFormPage() {
               Parent Filter
             </label>
             {formCategoryPath.filter(Boolean).length === 0 ? (
-              <div className="w-full border border-dashed border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-400 bg-gray-50 cursor-not-allowed admin-input">
+              <div className="w-full border border-dashed border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800/60 cursor-not-allowed admin-input">
                 Select a category first
               </div>
             ) : (
@@ -402,7 +402,7 @@ function FilterFormPage() {
                 type="color"
                 value={form.colorCode || '#ffffff'}
                 onChange={(e) => setForm({ ...form, colorCode: e.target.value })}
-                className="h-10 w-10 border border-gray-200 rounded cursor-pointer"
+                className="h-10 w-10 border border-slate-200 dark:border-slate-700 rounded cursor-pointer"
               />
               <input
                 type="text"
@@ -431,7 +431,7 @@ function FilterFormPage() {
               <img
                 src={form.thumbPreview || getMediaUrl(editing?.thumbImage) || editing?.thumbImage}
                 alt="Thumb"
-                className="h-10 w-10 rounded-lg object-cover border border-gray-200"
+                className="h-10 w-10 rounded-lg object-cover border border-slate-200 dark:border-slate-700"
               />
               <button
                 type="button"

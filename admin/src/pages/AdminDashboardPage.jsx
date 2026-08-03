@@ -3,11 +3,11 @@ import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { adminService } from '@/services/api'
 import { selectIsAdmin, selectUser } from '@shared/store/slices/authSlice'
-import { 
-  Package, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
+import {
+  Package,
+  CheckCircle,
+  XCircle,
+  Clock,
   TrendingUp,
   Eye,
   AlertCircle,
@@ -17,6 +17,9 @@ import {
   MessageCircle,
   Star,
   FileSpreadsheet,
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
 } from 'lucide-react'
 import Card from '../components/AdminUI/Card'
 import AdminPage from '../components/AdminUI/AdminPage'
@@ -26,6 +29,8 @@ import Modal from '../components/AdminUI/Modal'
 import DataTable from '../components/AdminUI/DataTable'
 import StatusBadge from '../components/AdminUI/StatusBadge'
 import PageHeader from '../components/AdminUI/PageHeader'
+import EmptyState from '../components/AdminUI/EmptyState'
+import LoadingSpinner from '../components/AdminUI/LoadingSpinner'
 import { EmiratesIdLightbox } from '../components/AdminUI/EmiratesIdPreview'
 import toast from 'react-hot-toast'
 import { getMediaUrl } from '@shared/utils/helpers'
@@ -906,7 +911,7 @@ function AdminDashboardPage() {
         <div className={`flex flex-col gap-4 ${activeTab === 'products' ? '' : 'md:flex-row items-end'}`}>
           {/* Search Bar */}
           <div className="flex-1 w-full">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">
               {activeTab === 'contacts'
                 ? 'Search Contacts'
                 : activeTab === 'comments'
@@ -914,7 +919,7 @@ function AdminDashboardPage() {
                 : 'Search Products'}
             </label>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400 pointer-events-none" />
               <input
                 type="text"
                 value={searchInput}
@@ -931,16 +936,16 @@ function AdminDashboardPage() {
                     ? 'Search by comment text or product title...'
                     : 'Search products by title, description, seller name...'
                 }
-                className="w-full pl-10 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                className="admin-input w-full pl-10 pr-10"
               />
               {searchInput && (
                 <button
                   type="button"
                   onClick={handleClearSearch}
-                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
                   aria-label="Clear search"
                 >
-                  <X className="h-5 w-5" />
+                  <X className="h-4 w-4" />
                   <span className="sr-only">Clear search</span>
                 </button>
               )}
@@ -955,7 +960,7 @@ function AdminDashboardPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 min-w-0">
                 {isAllProductsRoute && (
                   <div className="min-w-0 w-full">
-                    <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-status-filter">
+                    <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="product-status-filter">
                       Status
                     </label>
                     <select
@@ -967,7 +972,7 @@ function AdminDashboardPage() {
                         setProductPage(1)
                         fetchAllProducts(value, searchQuery, 1)
                       }}
-                      className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                      className="admin-input w-full min-w-0"
                     >
                       <option value="all">All Statuses</option>
                       <option value="active">Approved</option>
@@ -979,7 +984,7 @@ function AdminDashboardPage() {
                   </div>
                 )}
                 <div className="min-w-0 w-full">
-                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-add-type-filter">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="product-add-type-filter">
                     Uploaded by
                   </label>
                   <select
@@ -991,7 +996,7 @@ function AdminDashboardPage() {
                       setProductPage(1)
                       fetchAllProducts(statusFilter, searchQuery, 1, value)
                     }}
-                    className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                    className="admin-input w-full min-w-0"
                   >
                     <option value="all">All Platforms</option>
                     <option value="web">Web</option>
@@ -1000,14 +1005,14 @@ function AdminDashboardPage() {
                   </select>
                 </div>
                 <div className="min-w-0 w-full">
-                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-category-filter">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="product-category-filter">
                     Category
                   </label>
                   <select
                     id="product-category-filter"
                     value={categoryFilter}
                     onChange={(e) => handleCategoryFilterChange(e.target.value)}
-                    className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                    className="admin-input w-full min-w-0"
                   >
                     <option value="">All Categories</option>
                     {categories
@@ -1020,7 +1025,7 @@ function AdminDashboardPage() {
                   </select>
                 </div>
                 <div className="min-w-0 w-full">
-                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-subcategory-filter">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="product-subcategory-filter">
                     Subcategory
                   </label>
                   <select
@@ -1028,7 +1033,7 @@ function AdminDashboardPage() {
                     value={subcategoryFilter}
                     onChange={(e) => handleSubcategoryFilterChange(e.target.value)}
                     disabled={!categoryFilter || subcategoryLoading}
-                    className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600 disabled:bg-gray-100 disabled:text-gray-400"
+                    className="admin-input w-full min-w-0"
                   >
                     <option value="">
                       {!categoryFilter
@@ -1045,7 +1050,7 @@ function AdminDashboardPage() {
                   </select>
                 </div>
                 <div className="min-w-0 w-full">
-                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-from-date-filter">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="product-from-date-filter">
                     From Date
                   </label>
                   <input
@@ -1054,11 +1059,11 @@ function AdminDashboardPage() {
                     value={fromDateFilter}
                     max={toDateFilter || undefined}
                     onChange={(e) => handleFromDateFilterChange(e.target.value)}
-                    className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                    className="admin-input w-full min-w-0"
                   />
                 </div>
                 <div className="min-w-0 w-full">
-                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-to-date-filter">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="product-to-date-filter">
                     To Date
                   </label>
                   <input
@@ -1067,18 +1072,18 @@ function AdminDashboardPage() {
                     value={toDateFilter}
                     min={fromDateFilter || undefined}
                     onChange={(e) => handleToDateFilterChange(e.target.value)}
-                    className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                    className="admin-input w-full min-w-0"
                   />
                 </div>
                 <div className="min-w-0 w-full">
-                  <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="product-featured-filter">
+                  <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="product-featured-filter">
                     Featured Product
                   </label>
                   <select
                     id="product-featured-filter"
                     value={featuredFilter}
                     onChange={(e) => handleFeaturedFilterChange(e.target.value)}
-                    className="w-full min-w-0 px-3 sm:px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+                    className="admin-input w-full min-w-0"
                   >
                     <option value="all">All</option>
                     <option value="featured">Featured</option>
@@ -1100,10 +1105,10 @@ function AdminDashboardPage() {
                     setContactsActiveOnly(e.target.checked)
                     fetchContacts(searchQuery)
                   }}
-                  className="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  className="rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800 text-primary-600 focus:ring-primary-500"
                   aria-label="Show only active support chats"
                 />
-                <span className="text-sm font-medium text-gray-700">Active support only</span>
+                <span className="text-sm font-medium text-slate-700 dark:text-slate-300">Active support only</span>
               </label>
             </div>
           )}
@@ -1168,36 +1173,30 @@ function AdminDashboardPage() {
 
       {/* Contacts List */}
       {activeTab === 'contacts' && (
-        <div className="admin-card bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="admin-card">
           {loading ? (
-            <div className="p-8 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading contacts...</p>
-            </div>
+            <LoadingSpinner message="Loading contacts..." />
           ) : contacts.length === 0 ? (
-            <div className="p-8 text-center">
-              <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">No contacts found</p>
-            </div>
+            <EmptyState icon={Users} title="No contacts found" />
           ) : (
-            <div className="divide-y">
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {contacts.map((chat) => {
                 const displayName = chat.user?.name || chat.user?.username || chat.user?.email || 'Customer'
                 return (
-                  <div key={chat._id} className="p-6 flex items-center justify-between hover:bg-gray-50">
+                  <div key={chat._id} className="p-4 sm:p-6 flex items-center justify-between hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
                     <div className="flex items-start space-x-4 flex-1">
-                      <div className="w-16 h-16 rounded-lg bg-gray-100 overflow-hidden flex-shrink-0 flex items-center justify-center">
-                        <span className="text-2xl text-primary-600" aria-hidden>💬</span>
+                      <div className="w-16 h-16 rounded-lg bg-slate-100 dark:bg-slate-800 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                        <span className="text-2xl text-primary-600 dark:text-primary-400" aria-hidden>💬</span>
                       </div>
                       <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900">
-                          <span className="px-2 py-0.5 bg-primary-100 text-primary-700 rounded text-xs mr-2">Support</span>
+                        <h3 className="font-semibold text-slate-900 dark:text-white">
+                          <span className="px-2 py-0.5 bg-primary-100 dark:bg-primary-950/60 text-primary-700 dark:text-primary-300 rounded text-xs mr-2">Support</span>
                           {displayName}
                         </h3>
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
                           Last: {chat.lastMessage || 'No messages yet'}
                         </p>
-                        <div className="mt-2 text-xs text-gray-600 flex flex-wrap gap-3">
+                        <div className="mt-2 text-xs text-slate-600 dark:text-slate-400 flex flex-wrap gap-3">
                           {chat.user?.email && <span>{chat.user.email}</span>}
                           {chat.lastMessageAt && (
                             <span>Last active: {new Date(chat.lastMessageAt).toLocaleString()}</span>
@@ -1205,23 +1204,23 @@ function AdminDashboardPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-col items-end space-y-2 text-xs text-gray-600">
+                    <div className="flex flex-col items-end space-y-2 text-xs text-slate-600 dark:text-slate-400">
                       <div className="flex space-x-2 flex-wrap justify-end">
                         {(chat.unreadForAdmin ?? 0) > 0 && (
-                          <span className="px-2 py-0.5 bg-red-100 text-red-700 rounded-full font-medium">
+                          <span className="px-2 py-0.5 bg-red-100 dark:bg-red-950/60 text-red-700 dark:text-red-300 rounded-full font-medium">
                             Unread: {chat.unreadForAdmin}
                           </span>
                         )}
                       </div>
-                      <button
+                      <Button
                         type="button"
+                        size="sm"
+                        icon={MessageCircle}
                         onClick={() => navigate(`/chat/${chat._id}?from=contacts`)}
-                        className="px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors flex items-center space-x-2"
                         aria-label="Open chat"
                       >
-                        <MessageCircle className="h-4 w-4" />
-                        <span>Open Chat</span>
-                      </button>
+                        Open Chat
+                      </Button>
                     </div>
                   </div>
                 )
@@ -1233,48 +1232,42 @@ function AdminDashboardPage() {
 
           {/* Reported Comments List */}
       {activeTab === 'comments' && (
-        <div className="admin-card bg-white rounded-xl shadow-sm border border-gray-100">
+        <div className="admin-card">
           {loading ? (
-            <div className="p-8 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto"></div>
-              <p className="mt-4 text-gray-600">Loading reported comments...</p>
-            </div>
+            <LoadingSpinner message="Loading reported comments..." />
           ) : reportedComments.length === 0 ? (
-            <div className="p-8 text-center">
-              <AlertCircle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-600">No reported comments</p>
-            </div>
+            <EmptyState icon={AlertCircle} title="No reported comments" />
           ) : (
-            <div className="divide-y">
+            <div className="divide-y divide-slate-100 dark:divide-slate-800">
               {reportedComments.map((item) => (
-                <div key={item.commentId} className="p-6 hover:bg-gray-50">
+                <div key={item.commentId} className="p-4 sm:p-6 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors">
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800">
+                        <span className="px-2 py-1 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300">
                           {item.reportCount} report{item.reportCount !== 1 ? 's' : ''}
                         </span>
                         {item.resolution === 'deactivated' && (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-red-100 dark:bg-red-950/60 text-red-800 dark:text-red-300">
                             Deactivated
                           </span>
                         )}
                         {item.resolution === 'ignored' && (
-                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-200 text-gray-700">
+                          <span className="px-2 py-1 rounded-full text-xs font-medium bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
                             Ignored
                           </span>
                         )}
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-slate-500 dark:text-slate-400">
                           Reasons: {(item.reasons || []).join(', ')}
                         </span>
                       </div>
                       {item.comment && (
                         <>
-                          <p className="text-sm text-gray-900 font-medium mb-1">
+                          <p className="text-sm text-slate-900 dark:text-white font-medium mb-1">
                             Comment by {item.comment.user?.name || 'Unknown'}
                           </p>
-                          <p className="text-sm text-gray-700 mb-2">{item.comment.text}</p>
-                          <p className="text-xs text-gray-500">
+                          <p className="text-sm text-slate-700 dark:text-slate-300 mb-2">{item.comment.text}</p>
+                          <p className="text-xs text-slate-500 dark:text-slate-400">
                             Product / reel: {item.comment.product?.title || 'Unknown'}
                           </p>
                         </>
@@ -1283,38 +1276,43 @@ function AdminDashboardPage() {
                     <div className="flex flex-col gap-2 flex-shrink-0">
                       {(item.resolution ?? 'pending') === 'pending' && (
                         <>
-                          <button
+                          <Button
                             type="button"
+                            size="sm"
+                            variant="danger"
+                            className="!bg-red-50 !text-red-700 !border !border-red-200 hover:!bg-red-100 dark:!bg-red-950/40 dark:!text-red-300 dark:!border-red-900 shadow-none"
                             onClick={() => handleReportAction(item.commentId, 'deactivate')}
                             disabled={reportActionId === item.commentId}
-                            className="px-3 py-2 text-sm bg-red-50 border border-red-200 text-red-700 rounded-lg hover:bg-red-100 transition-colors disabled:opacity-50"
+                            loading={reportActionId === item.commentId}
                             title="Deactivate comment"
                             aria-label="Deactivate comment"
                           >
-                            {reportActionId === item.commentId ? '...' : 'Deactivate comment'}
-                          </button>
-                          <button
+                            Deactivate comment
+                          </Button>
+                          <Button
                             type="button"
+                            size="sm"
+                            variant="secondary"
                             onClick={() => handleReportAction(item.commentId, 'ignore')}
                             disabled={reportActionId === item.commentId}
-                            className="px-3 py-2 text-sm bg-gray-100 border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50"
                             title="Ignore report"
                             aria-label="Ignore report"
                           >
                             Ignore report
-                          </button>
+                          </Button>
                         </>
                       )}
                       {item.comment?.product?._id && (
-                        <button
+                        <Button
                           type="button"
+                          size="sm"
+                          variant="secondary"
+                          icon={Eye}
                           onClick={() => navigate(`/products/${item.comment.product._id}`)}
-                          className="px-3 py-2 text-sm bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center gap-1"
                           aria-label="View product"
                         >
-                          <Eye className="h-4 w-4" />
                           View product
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </div>
@@ -1327,15 +1325,13 @@ function AdminDashboardPage() {
 
       {/* Categories Management - quick link to dedicated page */}
       {activeTab === 'categories' && (
-        <div className="admin-card bg-white rounded-xl shadow-sm border border-gray-100 p-6">
-          <div className="flex items-center justify-between">
+        <div className="admin-card p-4 sm:p-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Manage Categories</h2>
-              <p className="text-sm text-gray-600">Open the dedicated categories page to manage hierarchy and bulk actions.</p>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-white">Manage Categories</h2>
+              <p className="text-sm text-slate-600 dark:text-slate-400">Open the dedicated categories page to manage hierarchy and bulk actions.</p>
             </div>
-            <div>
-              <button onClick={() => navigate('/categories')} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Open Categories</button>
-            </div>
+            <Button onClick={() => navigate('/categories')} className="shrink-0">Open Categories</Button>
           </div>
         </div>
       )}
@@ -1390,20 +1386,20 @@ function AdminDashboardPage() {
 
       {/* Products List (Dashboard = pending, Sold) */}
       {(activeTab === 'dashboard' || activeTab === 'sold') && (
-        <div className="admin-card bg-white rounded-xl shadow-sm border border-gray-100">
-          <div className="p-4 sm:p-6 border-b">
+        <div className="admin-card">
+          <div className="p-4 sm:p-6 border-b border-slate-200 dark:border-slate-800">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-lg sm:text-xl font-semibold text-gray-900">
-                  {activeTab === 'dashboard' 
+                <h2 className="text-lg sm:text-xl font-semibold text-slate-900 dark:text-white">
+                  {activeTab === 'dashboard'
                     ? `Pending Review (${pendingProducts.length})`
                     : activeTab === 'sold'
                     ? `Sold Products (${allProducts.length})`
                     : `All Products (${allProducts.length})${statusFilter !== 'all' ? ` - ${statusFilter}` : ''}`
                   }
                 </h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  {activeTab === 'dashboard' 
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
+                  {activeTab === 'dashboard'
                     ? 'Products waiting for approval'
                     : activeTab === 'sold'
                     ? 'Products marked as sold'
@@ -1412,50 +1408,48 @@ function AdminDashboardPage() {
                 </p>
               </div>
               {activeTab === 'dashboard' && (
-                <button
+                <Button
                   type="button"
                   onClick={fetchData}
-                  className="w-full sm:w-auto px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
+                  className="w-full sm:w-auto"
                   aria-label="Refresh pending products"
                 >
                   Refresh
-                </button>
+                </Button>
               )}
             </div>
           </div>
 
           {loading ? (
-            <div className="p-12 text-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto"></div>
-            </div>
+            <LoadingSpinner />
           ) : (activeTab === 'dashboard' ? pendingProducts : allProducts).length === 0 ? (
-            <div className="p-12 text-center">
-              <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                {activeTab === 'dashboard'
+            <EmptyState
+              icon={Package}
+              title={
+                activeTab === 'dashboard'
                   ? 'All caught up!'
                   : activeTab === 'sold'
                   ? 'No sold products found'
-                  : 'No products found'}
-              </h3>
-              <p className="text-gray-600">
-                {activeTab === 'dashboard' 
+                  : 'No products found'
+              }
+              description={
+                activeTab === 'dashboard'
                   ? 'No products pending review.'
                   : activeTab === 'sold'
                   ? 'There are no products marked as sold yet.'
-                  : `No products with status "${statusFilter}" found.`}
-              </p>
-            </div>
+                  : `No products with status "${statusFilter}" found.`
+              }
+            />
           ) : (
             <div>
-              <div className="divide-y">
+              <div className="divide-y divide-slate-100 dark:divide-slate-800">
                 {(activeTab === 'dashboard' ? pendingProducts : allProducts).map((product) => (
                   <div
                     key={product._id}
-                    className="p-4 sm:p-6 hover:bg-gray-50 transition-colors"
+                    className="p-4 sm:p-6 hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-start gap-4">
-                      <div className="flex-shrink-0 w-full sm:w-32 h-40 sm:h-32 bg-gray-200 rounded-lg overflow-hidden">
+                      <div className="flex-shrink-0 w-full sm:w-32 h-40 sm:h-32 bg-slate-100 dark:bg-slate-800 rounded-lg overflow-hidden">
                         {product.video ? (
                           <video
                             src={getMediaUrl(product.video)}
@@ -1474,61 +1468,47 @@ function AdminDashboardPage() {
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <h3 className="text-base sm:text-lg font-semibold text-gray-900 mb-1 break-words">
+                        <h3 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-white mb-1 break-words">
                           {product.title}
                         </h3>
-                        <p className="text-primary-600 font-bold text-base sm:text-lg mb-2">
+                        <p className="text-primary-600 dark:text-primary-400 font-bold text-base sm:text-lg mb-2">
                           {formatListingPrice(product)}
                         </p>
-                        <p className="text-sm text-gray-600 mb-2 line-clamp-2">
+                        <p className="text-sm text-slate-600 dark:text-slate-400 mb-2 line-clamp-2">
                           {product.description}
                         </p>
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-gray-600 mb-3">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-slate-600 dark:text-slate-400 mb-3">
                           {product.location ? <span className="truncate max-w-full">{product.location}</span> : null}
                           {product.category?.name ? (
                             <>
-                              <span className="text-gray-300 hidden sm:inline" aria-hidden>•</span>
+                              <span className="text-slate-300 dark:text-slate-600 hidden sm:inline" aria-hidden>•</span>
                               <span>{product.category.name}</span>
                             </>
                           ) : null}
                           {product.seller?.name ? (
                             <>
-                              <span className="text-gray-300 hidden sm:inline" aria-hidden>•</span>
+                              <span className="text-slate-300 dark:text-slate-600 hidden sm:inline" aria-hidden>•</span>
                               <span className="truncate">Seller: {product.seller.name}</span>
                             </>
                           ) : null}
-                          <span className="text-gray-300 hidden sm:inline" aria-hidden>•</span>
-                          <span className="inline-flex items-center rounded-md bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                          <span className="text-slate-300 dark:text-slate-600 hidden sm:inline" aria-hidden>•</span>
+                          <span className="inline-flex items-center rounded-md bg-slate-100 dark:bg-slate-800 px-2 py-0.5 text-xs font-medium text-slate-700 dark:text-slate-300">
                             Uploaded by: {formatProductAddType(product.productAddType)}
                           </span>
                         </div>
                         <div className="flex flex-wrap items-center gap-2">
-                          <span
-                            className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              product.status === 'active'
-                                ? 'bg-green-100 text-green-800'
-                                : product.status === 'pending'
-                                ? 'bg-yellow-100 text-yellow-800'
-                                : product.status === 'rejected'
-                                ? 'bg-red-100 text-red-800'
-                                : product.status === 'sold'
-                                ? 'bg-purple-100 text-purple-800'
-                                : product.status === 'inactive'
-                                ? 'bg-gray-100 text-gray-800'
-                                : 'bg-gray-100 text-gray-800'
-                            }`}
-                          >
-                            {product.status === 'pending' && <Clock className="h-3 w-3 inline mr-1" />}
-                            {product.status === 'active' && <CheckCircle className="h-3 w-3 inline mr-1" />}
-                            {product.status === 'rejected' && <XCircle className="h-3 w-3 inline mr-1" />}
-                            {product.status === 'pending' && 'Pending Review'}
-                            {product.status === 'active' && 'Approved'}
-                            {product.status === 'rejected' && 'Rejected'}
-                            {product.status === 'sold' && 'Sold'}
-                            {product.status === 'inactive' && 'Inactive'}
-                          </span>
+                          <StatusBadge
+                            status={product.status}
+                            label={
+                              product.status === 'pending'
+                                ? 'Pending Review'
+                                : product.status === 'active'
+                                ? 'Approved'
+                                : undefined
+                            }
+                          />
                           {product.createdAt && (
-                            <span className="text-xs text-gray-500">
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
                               Posted {new Date(product.createdAt).toLocaleDateString()}
                             </span>
                           )}
@@ -1537,34 +1517,29 @@ function AdminDashboardPage() {
                       <div className="flex flex-row sm:flex-col gap-2 w-full sm:w-auto shrink-0">
                         {canEditListing && product.status === 'pending' && (
                           <>
-                            <button
+                            <Button
                               type="button"
+                              variant="success"
                               onClick={() => openConfirmAction('approve', product)}
                               disabled={processingId === product._id}
-                              className="flex-1 sm:flex-none justify-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                              loading={processingId === product._id}
+                              icon={CheckCircle}
+                              className="flex-1 sm:flex-none"
                               aria-label="Approve product"
                             >
-                              {processingId === product._id ? (
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                              ) : (
-                                <CheckCircle className="h-4 w-4" />
-                              )}
-                              <span>Approve</span>
-                            </button>
-                            <button
+                              Approve
+                            </Button>
+                            <Button
                               type="button"
+                              variant="danger"
                               onClick={() => openRejectModal(product._id)}
                               disabled={processingId === product._id}
-                              className="flex-1 sm:flex-none justify-center px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                              icon={XCircle}
+                              className="flex-1 sm:flex-none"
                               aria-label="Reject product"
                             >
-                              {processingId === product._id ? (
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                              ) : (
-                                <XCircle className="h-4 w-4" />
-                              )}
-                              <span>Reject</span>
-                            </button>
+                              Reject
+                            </Button>
                           </>
                         )}
                         {canEditListing && (product.status === 'active' || product.status === 'inactive') ? (
@@ -1574,14 +1549,14 @@ function AdminDashboardPage() {
                             disabled={processingId === product._id}
                             className={`flex-1 sm:flex-none h-9 px-3 rounded-full flex items-center justify-center gap-1.5 border text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                               product.status === 'active'
-                                ? 'bg-green-50 border-green-200 text-green-700 hover:bg-green-100'
-                                : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+                                ? 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:border-emerald-900 dark:text-emerald-300'
+                                : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100 dark:bg-red-950/40 dark:border-red-900 dark:text-red-300'
                             }`}
                             title={product.status === 'active' ? 'Deactivate product' : 'Activate product'}
                             aria-label={product.status === 'active' ? 'Deactivate product' : 'Activate product'}
                           >
                             {processingId === product._id ? (
-                              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current"></div>
+                              <Loader2 className="h-4 w-4 animate-spin" />
                             ) : product.status === 'active' ? (
                               <AlertCircle className="h-4 w-4" />
                             ) : (
@@ -1590,15 +1565,16 @@ function AdminDashboardPage() {
                             <span className="text-xs font-medium">{product.status === 'active' ? 'Deactivate' : 'Activate'}</span>
                           </button>
                         ) : null}
-                        <button
+                        <Button
                           type="button"
+                          variant="secondary"
                           onClick={() => navigate(`/products/${product._id}`)}
-                          className="flex-1 sm:flex-none justify-center px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors flex items-center gap-2"
+                          icon={Eye}
+                          className="flex-1 sm:flex-none"
                           aria-label="View product"
                         >
-                          <Eye className="h-4 w-4" />
-                          <span>View</span>
-                        </button>
+                          View
+                        </Button>
                       </div>
                     </div>
                   </div>
@@ -1607,23 +1583,23 @@ function AdminDashboardPage() {
 
               {/* Pagination for products (admin listing) */}
               {activeTab !== 'dashboard' && (
-                <div className="px-4 sm:px-6 py-4 border-t border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-sm text-gray-600">
+                <div className="admin-table-pagination px-4 sm:px-6 py-4 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 text-sm text-slate-500 dark:text-slate-400">
                   <div className="text-center sm:text-left">
                     {productTotal > 0 && (
                       <>
                         Showing{' '}
-                        <span className="font-medium">
+                        <span className="font-medium text-slate-700 dark:text-slate-300">
                           {(productPage - 1) * PRODUCT_PAGE_LIMIT + 1}
                         </span>{' '}
                         –{' '}
-                        <span className="font-medium">
+                        <span className="font-medium text-slate-700 dark:text-slate-300">
                           {(productPage - 1) * PRODUCT_PAGE_LIMIT + allProducts.length}
                         </span>{' '}
-                        of <span className="font-medium">{productTotal}</span> products
+                        of <span className="font-medium text-slate-700 dark:text-slate-300">{productTotal}</span> products
                       </>
                     )}
                   </div>
-                  <div className="flex items-center justify-center gap-2">
+                  <div className="flex items-center justify-center gap-1">
                     <button
                       type="button"
                       onClick={() => {
@@ -1638,13 +1614,13 @@ function AdminDashboardPage() {
                         }
                       }}
                       disabled={productPage <= 1}
-                      className="px-3 py-1.5 rounded-md border border-gray-300 text-xs font-medium text-gray-700 bg-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                      className="admin-pagination-btn"
                       aria-label="Previous page"
                     >
-                      Prev
+                      <ChevronLeft className="h-4 w-4" />
                     </button>
-                    <span className="text-xs text-gray-500">
-                      Page <span className="font-medium">{productPage}</span>
+                    <span className="px-2 text-slate-600 dark:text-slate-400">
+                      Page <span className="font-medium text-slate-900 dark:text-white">{productPage}</span>
                     </span>
                     <button
                       type="button"
@@ -1660,10 +1636,10 @@ function AdminDashboardPage() {
                         }
                       }}
                       disabled={!productHasMore}
-                      className="px-3 py-1.5 rounded-md border border-gray-300 text-xs font-medium text-gray-700 bg-white disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                      className="admin-pagination-btn"
                       aria-label="Next page"
                     >
-                      Next
+                      <ChevronRight className="h-4 w-4" />
                     </button>
                   </div>
                 </div>
@@ -1754,7 +1730,7 @@ function AdminDashboardPage() {
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="export-from-date">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="export-from-date">
               From Date
             </label>
             <input
@@ -1764,11 +1740,11 @@ function AdminDashboardPage() {
               max={exportToDate || undefined}
               onChange={(e) => setExportFromDate(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+              className="admin-input w-full"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2" htmlFor="export-to-date">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="export-to-date">
               To Date
             </label>
             <input
@@ -1778,7 +1754,7 @@ function AdminDashboardPage() {
               min={exportFromDate || undefined}
               onChange={(e) => setExportToDate(e.target.value)}
               required
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
+              className="admin-input w-full"
             />
           </div>
         </div>
@@ -1793,130 +1769,113 @@ function AdminDashboardPage() {
         </label>
       </Modal>
 
-      {rejectModalProductId && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-white rounded-xl shadow-xl">
-            <div className="px-5 py-4 border-b flex items-center justify-between">
-              <h3 className="text-lg font-semibold text-gray-900">Reject Product</h3>
-              <button
-                type="button"
-                onClick={() => setRejectModalProductId(null)}
-                className="text-gray-500 hover:text-gray-700"
-                aria-label="Close rejection modal"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Categories</label>
-                <div className="max-h-44 overflow-y-auto border border-gray-200 rounded-lg p-3 space-y-2">
-                  {REJECTION_REASON_CATEGORIES.map((item) => (
-                    <label key={item.category} className="flex items-start gap-2 text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        checked={selectedRejectCategories.includes(item.category)}
-                        onChange={(e) => {
-                          const checked = e.target.checked
-                          setSelectedRejectCategories((prev) =>
-                            checked ? [...prev, item.category] : prev.filter((c) => c !== item.category)
-                          )
-                          if (!checked) {
-                            setRejectSelectionByCategory((prev) => {
-                              const next = { ...prev }
-                              delete next[item.category]
-                              return next
-                            })
-                          }
-                        }}
-                        className="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                      />
-                      <span>{item.category}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Reasons</label>
-                <div className="max-h-64 overflow-y-auto border border-gray-200 rounded-lg p-3 space-y-4">
-                  {selectedRejectCategories.length === 0 ? (
-                    <p className="text-sm text-gray-500">Select at least one category first.</p>
-                  ) : (
-                    selectedRejectCategories.map((category) => {
-                      const categoryReasons =
-                        REJECTION_REASON_CATEGORIES.find((item) => item.category === category)?.reasons || []
-                      const selectedForCategory = Array.isArray(rejectSelectionByCategory[category])
-                        ? rejectSelectionByCategory[category]
-                        : []
-                      return (
-                        <div key={category} className="border border-gray-100 rounded-md p-3">
-                          <p className="text-sm font-semibold text-gray-800 mb-2">{category}</p>
-                          {categoryReasons.length === 0 ? (
-                            <p className="text-sm text-gray-500">No predefined reasons in this category.</p>
-                          ) : (
-                            <div className="space-y-2">
-                              {categoryReasons.map((reasonItem) => (
-                                <label key={`${category}-${reasonItem}`} className="flex items-start gap-2 text-sm text-gray-700">
-                                  <input
-                                    type="checkbox"
-                                    checked={selectedForCategory.includes(reasonItem)}
-                                    onChange={(e) => {
-                                      setRejectSelectionByCategory((prev) => {
-                                        const current = Array.isArray(prev[category]) ? prev[category] : []
-                                        return {
-                                          ...prev,
-                                          [category]: e.target.checked
-                                            ? [...current, reasonItem]
-                                            : current.filter((value) => value !== reasonItem),
-                                        }
-                                      })
-                                    }}
-                                    className="mt-0.5 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                                  />
-                                  <span>{reasonItem}</span>
-                                </label>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+      <Modal
+        open={Boolean(rejectModalProductId)}
+        onClose={() => setRejectModalProductId(null)}
+        title="Reject Product"
+        size="lg"
+        footer={
+          <Modal.Footer
+            onCancel={() => setRejectModalProductId(null)}
+            onConfirm={handleReject}
+            cancelLabel="Cancel"
+            confirmLabel={processingId === rejectModalProductId ? 'Rejecting...' : 'Reject Product'}
+            confirmVariant="danger"
+            loading={processingId === rejectModalProductId}
+          />
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Categories</label>
+            <div className="max-h-44 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-2">
+              {REJECTION_REASON_CATEGORIES.map((item) => (
+                <label key={item.category} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={selectedRejectCategories.includes(item.category)}
+                    onChange={(e) => {
+                      const checked = e.target.checked
+                      setSelectedRejectCategories((prev) =>
+                        checked ? [...prev, item.category] : prev.filter((c) => c !== item.category)
                       )
-                    })
-                  )}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Custom Reason (optional)</label>
-                <textarea
-                  rows={3}
-                  value={rejectCustomReason}
-                  onChange={(e) => setRejectCustomReason(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-primary-600"
-                  placeholder="Add additional rejection details for the seller..."
-                />
-              </div>
-            </div>
-            <div className="px-5 py-4 border-t flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setRejectModalProductId(null)}
-                className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleReject}
-                disabled={processingId === rejectModalProductId}
-                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-              >
-                {processingId === rejectModalProductId ? 'Rejecting...' : 'Reject Product'}
-              </button>
+                      if (!checked) {
+                        setRejectSelectionByCategory((prev) => {
+                          const next = { ...prev }
+                          delete next[item.category]
+                          return next
+                        })
+                      }
+                    }}
+                    className="mt-0.5 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span>{item.category}</span>
+                </label>
+              ))}
             </div>
           </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Reasons</label>
+            <div className="max-h-64 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-3 space-y-4">
+              {selectedRejectCategories.length === 0 ? (
+                <p className="text-sm text-slate-500 dark:text-slate-400">Select at least one category first.</p>
+              ) : (
+                selectedRejectCategories.map((category) => {
+                  const categoryReasons =
+                    REJECTION_REASON_CATEGORIES.find((item) => item.category === category)?.reasons || []
+                  const selectedForCategory = Array.isArray(rejectSelectionByCategory[category])
+                    ? rejectSelectionByCategory[category]
+                    : []
+                  return (
+                    <div key={category} className="border border-slate-100 dark:border-slate-800 rounded-lg p-3">
+                      <p className="text-sm font-semibold text-slate-800 dark:text-slate-200 mb-2">{category}</p>
+                      {categoryReasons.length === 0 ? (
+                        <p className="text-sm text-slate-500 dark:text-slate-400">No predefined reasons in this category.</p>
+                      ) : (
+                        <div className="space-y-2">
+                          {categoryReasons.map((reasonItem) => (
+                            <label key={`${category}-${reasonItem}`} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                              <input
+                                type="checkbox"
+                                checked={selectedForCategory.includes(reasonItem)}
+                                onChange={(e) => {
+                                  setRejectSelectionByCategory((prev) => {
+                                    const current = Array.isArray(prev[category]) ? prev[category] : []
+                                    return {
+                                      ...prev,
+                                      [category]: e.target.checked
+                                        ? [...current, reasonItem]
+                                        : current.filter((value) => value !== reasonItem),
+                                    }
+                                  })
+                                }}
+                                className="mt-0.5 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-800 text-primary-600 focus:ring-primary-500"
+                              />
+                              <span>{reasonItem}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Custom Reason (optional)</label>
+            <textarea
+              rows={3}
+              value={rejectCustomReason}
+              onChange={(e) => setRejectCustomReason(e.target.value)}
+              className="admin-input w-full"
+              placeholder="Add additional rejection details for the seller..."
+            />
+          </div>
         </div>
-      )}
+      </Modal>
         </div>
       </div>
 

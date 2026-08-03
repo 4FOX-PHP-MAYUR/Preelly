@@ -7,6 +7,7 @@ import { clearError, sendOtp, sendPhoneOtp, verifyOtp, verifyPhoneOtp, completeV
 import { AuthSidePanel } from '../components/Auth/AuthSplitLayout'
 import OtpIllustration from '../components/Auth/OtpIllustration'
 import { getCountryByIso } from '@shared/data/countryCodes'
+import { consumeAuthRedirect } from '@shared/utils/authRedirect'
 
 const OTP_LENGTH = 6
 const RESEND_DELAY = 59
@@ -77,7 +78,7 @@ function VerifyPhoneOtpPage() {
 
   useEffect(() => {
     if ((isLoginFlow || isCompleteFlow) && isAuthenticated) {
-      navigate(target === 'seller' ? '/post-ad' : '/dashboard/settings')
+      navigate(consumeAuthRedirect() || (target === 'seller' ? '/post-ad' : '/dashboard/settings'))
       return
     }
 

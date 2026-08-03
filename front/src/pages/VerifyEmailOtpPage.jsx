@@ -7,6 +7,7 @@ import { clearError, sendOtp, sendEmailOtp, verifyOtp, completeVerifyEmail } fro
 import { AuthSidePanel } from '../components/Auth/AuthSplitLayout'
 import OtpIllustration from '../components/Auth/OtpIllustration'
 import { getCountryByIso } from '@shared/data/countryCodes'
+import { consumeAuthRedirect } from '@shared/utils/authRedirect'
 
 const OTP_LENGTH = 6
 const RESEND_DELAY = 59
@@ -79,7 +80,7 @@ function VerifyEmailOtpPage() {
 
   useEffect(() => {
     if (isAuthenticated) {
-      navigate(target === 'seller' ? '/post-ad' : '/dashboard/settings')
+      navigate(consumeAuthRedirect() || (target === 'seller' ? '/post-ad' : '/dashboard/settings'))
     }
   }, [isAuthenticated, navigate, target])
 

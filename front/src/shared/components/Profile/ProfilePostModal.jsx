@@ -14,7 +14,8 @@ import {
   X,
 } from 'lucide-react'
 import { interactionService, productService } from '@shared/services/api'
-import { selectIsAuthenticated, selectIsGuest, selectUser } from '@shared/store/slices/authSlice'
+import { selectUser } from '@shared/store/slices/authSlice'
+import { useRequireAuth } from '@shared/hooks/useRequireAuth'
 import { formatPrice, getMediaUrl, isIdentityVerified } from '@shared/utils/helpers'
 import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
 import { navigateToUser } from '@shared/utils/safeNavigate'
@@ -60,8 +61,7 @@ export default function ProfilePostModal({
   const navigate = useNavigate()
   const titleId = useId()
   const commentInputRef = useRef(null)
-  const isAuthenticated = useSelector(selectIsAuthenticated)
-  const isGuest = useSelector(selectIsGuest)
+  const requireAuth = useRequireAuth()
   const currentUser = useSelector(selectUser)
 
   const [visible, setVisible] = useState(false)
@@ -132,13 +132,6 @@ export default function ProfilePostModal({
       cancelled = true
     }
   }, [product?._id])
-
-  const requireAuth = () => {
-    if (isAuthenticated) return true
-    toast.error('Please login to continue')
-    if (!isGuest) navigate('/login')
-    return false
-  }
 
   const handleLike = async () => {
     if (!requireAuth()) return

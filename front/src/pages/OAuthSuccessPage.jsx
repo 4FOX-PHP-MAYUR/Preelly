@@ -3,6 +3,7 @@ import { useDispatch } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { initializeAuth } from '@shared/store/slices/authSlice'
+import { consumeAuthRedirect } from '@shared/utils/authRedirect'
 
 function parseHashParams(hash) {
   const raw = String(hash || '').replace(/^#/, '')
@@ -29,7 +30,9 @@ function OAuthSuccessPage() {
       .catch(() => {})
       .finally(() => {
         toast.success('Signed in successfully')
-        navigate(target === 'seller' ? '/post-ad' : '/dashboard/settings', { replace: true })
+        navigate(consumeAuthRedirect() || (target === 'seller' ? '/post-ad' : '/dashboard/settings'), {
+          replace: true,
+        })
       })
   }, [dispatch, navigate])
 

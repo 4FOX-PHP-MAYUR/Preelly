@@ -4,11 +4,13 @@ import { MessageCircle, Heart, Trash2, Send, User, Flag } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { interactionService } from '../../services/api'
 import { selectIsAuthenticated, selectUser } from '../../store/slices/authSlice'
+import { useRequireAuth } from '../../hooks/useRequireAuth'
 import DetailCard from './DetailCard'
 
 function Comments({ productId }) {
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const user = useSelector(selectUser)
+  const requireAuth = useRequireAuth()
   const [comments, setComments] = useState([])
   const [loading, setLoading] = useState(true)
   const [submitting, setSubmitting] = useState(false)
@@ -72,11 +74,8 @@ function Comments({ productId }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    
-    if (!isAuthenticated) {
-      toast.error('Please login to comment')
-      return
-    }
+
+    if (!requireAuth('Please login to comment')) return
 
     if (!commentText.trim()) {
       toast.error('Please enter a comment')
@@ -119,10 +118,7 @@ function Comments({ productId }) {
 
   const handleReport = async (commentId, reason) => {
     setReportOpenFor(null)
-    if (!isAuthenticated) {
-      toast.error('Please login to report comments')
-      return
-    }
+    if (!requireAuth('Please login to report comments')) return
     try {
       setReportingId(commentId)
       await interactionService.reportComment(commentId, reason)
@@ -136,10 +132,7 @@ function Comments({ productId }) {
   }
 
   const handleLike = async (commentId) => {
-    if (!isAuthenticated) {
-      toast.error('Please login to like comments')
-      return
-    }
+    if (!requireAuth('Please login to like comments')) return
 
     try {
       const isLiked = likedComments.has(commentId)
@@ -228,9 +221,13 @@ function Comments({ productId }) {
         <div className="mb-5 rounded-xl bg-slate-50 p-4 text-center">
           <p className="text-slate-600">
             Please{' '}
-            <a href="/login" className="font-semibold text-brand hover:underline">
+            <button
+              type="button"
+              onClick={() => requireAuth('Please login to comment')}
+              className="font-semibold text-brand hover:underline"
+            >
               login
-            </a>{' '}
+            </button>{' '}
             to leave a comment
           </p>
         </div>

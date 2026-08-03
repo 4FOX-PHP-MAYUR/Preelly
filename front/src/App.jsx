@@ -70,8 +70,12 @@ function PrivateRoute({ children }) {
   const hasSession = hydrating ? hasOptimisticSession || isAuthenticated : isAuthenticated
 
   if (hydrating && !hasOptimisticSession && !isAuthenticated) return null
-  // Buyers land on a clean /login; only the seller intent carries ?target=seller.
-  if (!hasSession) return <Navigate to={isSellerIntent ? '/login?target=seller' : '/login'} replace />
+  if (!hasSession) {
+    const redirect = encodeURIComponent(`${location.pathname}${location.search}${location.hash}`)
+    // Buyers land on a clean /login; only the seller intent carries ?target=seller.
+    const base = isSellerIntent ? '/login?target=seller' : '/login'
+    return <Navigate to={`${base}${base.includes('?') ? '&' : '?'}redirect=${redirect}`} replace />
+  }
 
   return children
 }

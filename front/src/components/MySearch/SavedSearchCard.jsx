@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react'
 import { Bell } from 'lucide-react'
 import {
   formatSavedDate,
@@ -19,7 +20,12 @@ export default function SavedSearchCard({
   const title = getSearchDisplayName(item)
   const count = getMatchCount(item)
   const tags = getFilterTags(item)
-  const previews = getPreviewImages(item)
+  const allPreviews = getPreviewImages(item)
+  const [failedSrcs, setFailedSrcs] = useState(() => new Set())
+  const previews = useMemo(
+    () => allPreviews.filter((src) => !failedSrcs.has(src)),
+    [allPreviews, failedSrcs]
+  )
   const newCount = item?.newAdsCount || 0
   const notifyOn = getNotificationsEnabled(item)
 
@@ -105,6 +111,7 @@ export default function SavedSearchCard({
                 alt=""
                 loading="lazy"
                 decoding="async"
+                onError={() => setFailedSrcs((prev) => new Set(prev).add(src))}
                 className="absolute h-11 w-11 rounded-[10px] border-2 border-white object-cover shadow-sm transition duration-200 group-hover:scale-[1.03]"
                 style={{ right: i * 16, zIndex: previews.length - i }}
               />

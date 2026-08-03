@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import toast from 'react-hot-toast'
 import { ArrowLeft, Search } from 'lucide-react'
 import SettingsPageShell from '../../components/Dashboard/SettingsPageShell'
+import Pagination from '../../components/ui/Pagination'
 import SavedSearchCard, { SavedSearchCardSkeleton } from '../../components/MySearch/SavedSearchCard'
 import NotificationSettingsModal from '../../components/MySearch/NotificationSettingsModal'
 import MoreOptionsModal from '../../components/MySearch/MoreOptionsModal'
@@ -11,6 +12,8 @@ import RenameSearchModal from '../../components/MySearch/RenameSearchModal'
 import DeleteSearchModal from '../../components/MySearch/DeleteSearchModal'
 import { userService } from '@shared/services/api'
 
+const PAGE_SIZE = 10
+
 export default function DashboardMySearchPage() {
   const navigate = useNavigate()
   const [items, setItems] = useState([])
@@ -18,6 +21,7 @@ export default function DashboardMySearchPage() {
   const [activeTab, setActiveTab] = useState('all')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [page, setPage] = useState(1)
 
   const [activeItem, setActiveItem] = useState(null)
   const [notifyOpen, setNotifyOpen] = useState(false)
@@ -54,6 +58,18 @@ export default function DashboardMySearchPage() {
       return root === tab.label
     })
   }, [items, activeTab, tabs])
+
+  useEffect(() => {
+    setPage(1)
+  }, [activeTab])
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages)
+  }, [page, totalPages])
+
+  const pagedItems = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 
   const patchItem = (id, next) => {
     setItems((prev) => prev.map((s) => (s._id === id ? { ...s, ...next } : s)))
@@ -227,7 +243,7 @@ export default function DashboardMySearchPage() {
           </div>
         ) : (
           <div className="space-y-3" role="list">
-            {filtered.map((item, index) => (
+            {pagedItems.map((item, index) => (
               <div
                 key={item._id}
                 role="listitem"
@@ -244,6 +260,10 @@ export default function DashboardMySearchPage() {
             ))}
           </div>
         )}
+
+        {!loading && !error && filtered.length > 0 ? (
+          <Pagination page={page} totalPages={totalPages} total={filtered.length} onPageChange={setPage} itemLabel="saved searches" />
+        ) : null}
       </div>
 
       <NotificationSettingsModal

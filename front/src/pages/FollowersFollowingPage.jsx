@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import { userService } from '@shared/services/api'
-import { User, ArrowLeft, Users, UserPlus } from 'lucide-react'
+import { User, ArrowLeft } from 'lucide-react'
 import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
 import toast from 'react-hot-toast'
 import { refreshUser, selectIsAuthenticated, selectUser } from '@shared/store/slices/authSlice'
-import { getMediaUrl } from '@shared/utils/helpers'
-import { isUserVerified } from '@shared/utils/helpers'
+import { useRequireAuth } from '@shared/hooks/useRequireAuth'
+import { getMediaUrl, isUserVerified } from '@shared/utils/helpers'
+import SettingsPageShell from '../components/Dashboard/SettingsPageShell'
 
 function FollowersFollowingPage() {
   const { id, type } = useParams() // type is 'followers' or 'following'
@@ -15,6 +16,7 @@ function FollowersFollowingPage() {
   const dispatch = useDispatch()
   const currentUser = useSelector(selectUser)
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const requireAuth = useRequireAuth()
   const [users, setUsers] = useState([])
   const [profileUser, setProfileUser] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -68,11 +70,7 @@ function FollowersFollowingPage() {
   }, [id, type, navigate, isAuthenticated, currentUser?._id])
 
   const handleFollow = async (targetUserId) => {
-    if (!isAuthenticated) {
-      toast.error('Please login to follow users')
-      navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to follow users')) return
 
     try {
       const normalizedTargetId = normalizeId(targetUserId)
@@ -91,152 +89,111 @@ function FollowersFollowingPage() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="animate-pulse">
-          <div className="h-12 bg-gray-200 rounded-lg mb-6"></div>
-          <div className="space-y-4">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-20 bg-gray-200 rounded-lg"></div>
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  const isOwnProfile = currentUser?._id === id
   const title = type === 'followers' ? 'Followers' : 'Following'
   const emptyMessage =
     type === 'followers'
       ? 'This user has no followers yet.'
       : 'This user is not following anyone yet.'
+  const isEmpty = !loading && users.length === 0
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      {/* Header */}
-      <div className="mb-6">
-        <button
-          onClick={() => navigate(`/user/${id}`)}
-          className="flex items-center text-gray-600 hover:text-gray-900 mb-4"
-        >
-          <ArrowLeft className="h-5 w-5 mr-2" />
-          Back to Profile
-        </button>
-        <div className="flex items-center space-x-3">
-          {type === 'followers' ? (
-            <Users className="h-8 w-8 text-primary-600" />
-          ) : (
-            <UserPlus className="h-8 w-8 text-primary-600" />
-          )}
-          <div className="min-w-0">
-            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 break-words">
-              {profileUser?.name}'s {title}
+    <SettingsPageShell>
+      <div className="mx-auto max-w-3xl pb-10">
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-3 sm:mb-8">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">
+              {profileUser?.name ? `${profileUser.name}'s ${title}` : title}
             </h1>
-            <p className="text-gray-600 mt-1">
+            <p className="mt-1 text-sm text-slate-500">
               {users.length} {users.length === 1 ? 'person' : 'people'}
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => navigate(`/user/${id}`)}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-brand transition duration-200 hover:text-brand-700 sm:text-sm"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Profile
+          </button>
         </div>
-      </div>
 
-      {/* Users List */}
-      <div className="bg-white rounded-lg shadow-md">
-        {users.length === 0 ? (
-          <div className="p-12 text-center">
-            <User className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              No {title.toLowerCase()} yet
-            </h3>
-            <p className="text-gray-600">{emptyMessage}</p>
+        {loading ? (
+          <div className="space-y-3" aria-busy="true" aria-live="polite">
+            <span className="sr-only">Loading {title.toLowerCase()}…</span>
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-16 animate-pulse rounded-xl bg-slate-100" />
+            ))}
+          </div>
+        ) : isEmpty ? (
+          <div className="flex flex-col items-center justify-center px-4 py-16 text-center">
+            <User className="h-10 w-10 text-slate-300" aria-hidden />
+            <p className="mt-6 text-base font-bold text-slate-900">No {title.toLowerCase()} yet</p>
+            <p className="mt-2 max-w-sm text-sm text-slate-500">{emptyMessage}</p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-200">
+          <ul className="divide-y divide-slate-100" aria-live="polite">
             {users.map((user) => {
               const isFollowing = followingMap[user._id] || false
               const isCurrentUser = currentUser?._id === user._id
+              const avatarSrc = user.avatar ? getMediaUrl(user.avatar) || user.avatar : null
 
               return (
-                <div
+                <li
                   key={user._id}
-                  className="p-4 hover:bg-gray-50 transition-colors cursor-pointer"
+                  className="flex items-center gap-3 py-3.5 cursor-pointer"
                   onClick={() => navigate(`/user/${user._id}`)}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-4 flex-1">
-                      {/* Avatar */}
-                      {user.avatar ? (
-                        <img
-                          src={getMediaUrl(user.avatar) || user.avatar}
-                          alt={user.name}
-                          className="w-12 h-12 rounded-full object-cover shrink-0"
-                        />
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-primary-100 flex items-center justify-center shrink-0">
-                          <User className="h-6 w-6 text-primary-600" />
-                        </div>
-                      )}
-
-                      {/* User Info */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <h3 className="font-semibold text-gray-900 truncate">
-                            {user.name}
-                          </h3>
-                          {isUserVerified(user) && (
-                            <img
-                              src={VERIFIED_BADGE_IMAGES.small}
-                              alt="Verified"
-                              className="h-4 w-4"
-                              title="Verified Account"
-                            />
-                          )}
-                        </div>
-                        {user.email && (
-                          <p className="text-sm text-gray-600 truncate">
-                            {user.email}
-                          </p>
-                        )}
-                        {user.rating > 0 && (
-                          <p className="text-sm text-yellow-600">
-                            ⭐ {user.rating.toFixed(1)}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Follow Button */}
-                    {!isCurrentUser && isAuthenticated && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleFollow(user._id)
-                        }}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors whitespace-nowrap ${
-                          isFollowing
-                            ? 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            : 'bg-primary-600 text-white hover:bg-primary-700'
-                        }`}
-                      >
-                        {isFollowing ? 'Following' : 'Follow'}
-                      </button>
-                    )}
-                    {isCurrentUser && (
-                      <span className="px-4 py-2 text-gray-500 text-sm">
-                        You
-                      </span>
+                  <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full bg-slate-100">
+                    {avatarSrc ? (
+                      <img src={avatarSrc} alt="" loading="lazy" className="h-full w-full object-cover" />
+                    ) : (
+                      <User className="h-5 w-5 text-slate-400" aria-hidden />
                     )}
                   </div>
-                </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5">
+                      <p className="truncate text-sm font-medium text-slate-900">{user.name}</p>
+                      {isUserVerified(user) ? (
+                        <img
+                          src={VERIFIED_BADGE_IMAGES.small}
+                          alt="Verified"
+                          className="h-4 w-4 shrink-0"
+                          title="Verified Account"
+                        />
+                      ) : null}
+                    </div>
+                    {user.email ? <p className="truncate text-xs text-slate-500">{user.email}</p> : null}
+                    {user.rating > 0 ? (
+                      <p className="mt-0.5 text-xs text-amber-600">⭐ {user.rating.toFixed(1)}</p>
+                    ) : null}
+                  </div>
+
+                  {!isCurrentUser && isAuthenticated ? (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleFollow(user._id)
+                      }}
+                      className={`shrink-0 rounded-md px-5 py-2 text-sm font-semibold transition ${
+                        isFollowing
+                          ? 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                          : 'bg-brand text-white hover:bg-brand-700'
+                      }`}
+                    >
+                      {isFollowing ? 'Following' : 'Follow'}
+                    </button>
+                  ) : null}
+                  {isCurrentUser ? <span className="shrink-0 px-2 text-sm text-slate-400">You</span> : null}
+                </li>
               )
             })}
-          </div>
+          </ul>
         )}
       </div>
-    </div>
+    </SettingsPageShell>
   )
 }
 
 export default FollowersFollowingPage
-

@@ -20,6 +20,7 @@ import { userService, productService, chatService } from '@shared/services/api'
 import { isValidObjectId, getMediaUrl, isIdentityVerified } from '@shared/utils/helpers'
 import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
 import { refreshUser, selectIsAuthenticated, selectIsAdmin, selectUser } from '@shared/store/slices/authSlice'
+import { useRequireAuth } from '@shared/hooks/useRequireAuth'
 import VerificationFlow, { OtpVerificationCard } from '@shared/components/VerificationFlow'
 import IdentityVerificationFlow, { IdentityVerificationCard } from '@shared/components/IdentityVerificationFlow'
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
@@ -30,6 +31,7 @@ import BlockFlow from '../../components/Block/BlockFlow'
 import ReportUserFlow from '../../components/Block/ReportUserFlow'
 import UnblockConfirmModal from '../../components/Block/UnblockConfirmModal'
 import MoreOptionsModal from '../../components/Chat/MoreOptionsModal'
+import ShareProfileModal from '@shared/components/Profile/ShareProfileModal'
 import { productHasVideo } from '@shared/utils/videoHelpers'
 
 function formatCompact(n) {
@@ -44,6 +46,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
   const navigate = useNavigate()
   const location = useLocation()
   const dispatch = useDispatch()
+  const requireAuth = useRequireAuth()
   const currentUser = useSelector(selectUser)
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const isAdmin = useSelector(selectIsAdmin)
@@ -67,6 +70,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
   const [showBlockFlow, setShowBlockFlow] = useState(false)
   const [showReportFlow, setShowReportFlow] = useState(false)
   const [showUnblock, setShowUnblock] = useState(false)
+  const [showShareProfile, setShowShareProfile] = useState(false)
 
   // Self mode (/my-profile) has no route param — resolve to the signed-in user's id.
   const id = selfMode ? (currentUser?._id || '') : params.id
@@ -156,26 +160,10 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
     return () => { cancelled = true }
   }, [isOwnProfile])
 
-  const handleShareProfile = async () => {
-    const url = `${window.location.origin}/user/${id}`
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: displayName, url })
-      } else {
-        await navigator.clipboard.writeText(url)
-        toast.success('Profile link copied')
-      }
-    } catch {
-      /* user cancelled the share sheet — ignore */
-    }
-  }
+  const handleShareProfile = () => setShowShareProfile(true)
 
   const handleFollow = async () => {
-    if (!isAuthenticated) {
-      toast.error('Please login to follow users')
-      navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to follow users')) return
 
     try {
       const res = await userService.followUser(id)
@@ -205,11 +193,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
   }
 
   const handleMessage = async () => {
-    if (!isAuthenticated) {
-      toast.error('Please login to send messages')
-      navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to send messages')) return
     if (blockedByMe) {
       toast.error('Unblock this account to message them')
       return
@@ -462,6 +446,15 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
                       <MessageCircle className="h-3.5 w-3.5" />
                       Message
                     </button>
+                    <button
+                      type="button"
+                      onClick={handleShareProfile}
+                      className="flex h-9 w-9 items-center justify-center rounded-full bg-primary-50 text-primary-700 transition hover:bg-primary-100"
+                      aria-label="Share Profile"
+                      title="Share Profile"
+                    >
+                      <Share2 className="h-4 w-4" />
+                    </button>
                   </>
                 )}
                 {!isOwnProfile && isAuthenticated ? (
@@ -687,6 +680,13 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
         user={profileUser}
         onClose={() => setShowUnblock(false)}
         onUnblocked={() => setBlockedByMe(false)}
+      />
+
+      <ShareProfileModal
+        open={showShareProfile}
+        onClose={() => setShowShareProfile(false)}
+        profileUser={profileUser}
+        profileId={id}
       />
     </>
   )

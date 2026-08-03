@@ -4,7 +4,7 @@ import { useDispatch, useSelector } from 'react-redux'
 import {
   Plus, Bookmark, FileText, Search, CalendarCheck, ShoppingCart, Files, Archive,
   User, MapPin, Landmark, Ban, ShieldCheck, LifeBuoy, HelpCircle, Phone, LogOut, ChevronRight,
-  Menu, X, Settings,
+  Menu, X, Settings, Users, UserPlus,
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { fetchRootCategories } from '@shared/store/slices/categorySlice'
@@ -80,20 +80,24 @@ const QUICK_TILES = [
   { label: 'My Archives', icon: Archive, to: '/dashboard/archives' },
 ]
 
-const MENU_GROUPS = [
-  [
-    { label: 'Profile', icon: User, to: '/dashboard/profile' },
-    { label: 'My Address', icon: MapPin, to: '/dashboard/profile#address' },
-    { label: 'My Bank Details', icon: Landmark, to: '/dashboard/profile#bank-details' },
-    { label: 'Blocked Users', icon: Ban, to: '/dashboard/blocked-users' },
-    { label: 'Privacy & Security', icon: ShieldCheck, to: '/dashboard/settings' },
-  ],
-  [
-    { label: 'Support', icon: LifeBuoy, to: '/dashboard/support' },
-    { label: 'FAQ', icon: HelpCircle, to: '/dashboard/faq' },
-    { label: 'Contact Us', icon: Phone, to: '/dashboard/contact' },
-  ],
-]
+function getMenuGroups(userId) {
+  return [
+    [
+      { label: 'Profile', icon: User, to: '/dashboard/profile' },
+      { label: 'My Address', icon: MapPin, to: '/dashboard/profile#address' },
+      { label: 'My Bank Details', icon: Landmark, to: '/dashboard/profile#bank-details' },
+      { label: 'Followers', icon: Users, to: userId ? `/user/${userId}/followers` : null },
+      { label: 'Following', icon: UserPlus, to: userId ? `/user/${userId}/following` : null },
+      { label: 'Blocked Users', icon: Ban, to: '/dashboard/blocked-users' },
+      { label: 'Privacy & Security', icon: ShieldCheck, to: '/dashboard/settings' },
+    ],
+    [
+      { label: 'Support', icon: LifeBuoy, to: '/dashboard/support' },
+      { label: 'FAQ', icon: HelpCircle, to: '/dashboard/faq' },
+      { label: 'Contact Us', icon: Phone, to: '/dashboard/contact' },
+    ],
+  ]
+}
 
 function isMenuActive(item, pathname, hash) {
   if (!item.to) return false
@@ -111,6 +115,8 @@ function SettingsSideMenu({ onNavigate }) {
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const location = useLocation()
+  const { user } = useSelector((state) => state.auth)
+  const menuGroups = getMenuGroups(user?._id)
 
   const go = (item) => {
     if (item.to) {
@@ -158,7 +164,7 @@ function SettingsSideMenu({ onNavigate }) {
       </div>
 
       <div className="mt-5">
-        {MENU_GROUPS.map((group, gi) => (
+        {menuGroups.map((group, gi) => (
           <div
             key={gi}
             className={gi > 0 ? 'mt-2 border-t border-slate-100 pt-2' : ''}

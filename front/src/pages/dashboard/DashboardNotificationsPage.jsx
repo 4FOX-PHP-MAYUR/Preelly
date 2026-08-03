@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Heart, MessageCircle, UserPlus, ShoppingBag, CheckCircle, Bell, ArrowLeft, ChevronRight, Reply, Check, X } from 'lucide-react'
 import SettingsPageShell from '../../components/Dashboard/SettingsPageShell'
+import Pagination from '../../components/ui/Pagination'
 import { userService } from '@shared/services/api'
 import { getMediaUrl } from '@shared/utils/helpers'
 import { assetUrl } from '@shared/utils/constants'
@@ -68,6 +69,8 @@ function onAvatarError(e) {
   if (e.currentTarget.src === DEFAULT_AVATAR) return
   e.currentTarget.src = DEFAULT_AVATAR
 }
+
+const PAGE_SIZE = 10
 
 /** Filter chips over the notification tabs. */
 const TAB_FILTERS = [
@@ -255,6 +258,7 @@ export default function DashboardNotificationsPage() {
   const [sellingUnread, setSellingUnread] = useState(0)
   const [activeTab, setActiveTab] = useState('all')
   const [error, setError] = useState(null)
+  const [page, setPage] = useState(1)
 
   const fetchNotifications = useCallback(async (tab = 'all') => {
     setLoading(true)
@@ -274,6 +278,7 @@ export default function DashboardNotificationsPage() {
   }, [])
 
   useEffect(() => {
+    setPage(1)
     fetchNotifications(activeTab)
   }, [activeTab, fetchNotifications])
 
@@ -295,8 +300,10 @@ export default function DashboardNotificationsPage() {
   }
 
   const followNotifications = items.filter((n) => n.type === 'follow_request' && !n.isRead)
-  const grouped = groupByDay(items)
   const totalUnread = items.filter((n) => !n.isRead).length
+  const totalPages = Math.max(1, Math.ceil(items.length / PAGE_SIZE))
+  const pagedItems = items.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const grouped = groupByDay(pagedItems)
 
   const subtitle = useMemo(() => {
     if (loading) return 'Loading your latest activity…'
@@ -430,6 +437,10 @@ export default function DashboardNotificationsPage() {
             </div>
           )}
         </div>
+
+        {!loading && items.length > 0 ? (
+          <Pagination page={page} totalPages={totalPages} total={items.length} onPageChange={setPage} itemLabel="notifications" />
+        ) : null}
       </div>
     </SettingsPageShell>
   )

@@ -15,6 +15,7 @@ import toast from 'react-hot-toast'
 import React from 'react'
 import { fetchRootCategories } from '@shared/store/slices/categorySlice'
 import { logout } from '@shared/store/slices/authSlice'
+import { useRequireAuth } from '@shared/hooks/useRequireAuth'
 
 // Small link button used in right column
 function LinkButton({ to = '#', label, Icon }) {
@@ -41,6 +42,7 @@ function ReelsFeedPage() {
   const isCategoryRoute = !!categoryId
   const user = useSelector(selectUser)
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const requireAuth = useRequireAuth()
   const { reels, loading, reelsMeta, priceRange: feedPriceRange, shellLoaded, priceRangeLoaded } = useSelector((state) => state.feed)
   const categoriesState = useSelector((state) => state.categories)
   const { rootCategories = [] } = categoriesState || {}
@@ -599,10 +601,7 @@ function ReelsFeedPage() {
             {/* Chat With Us - support chat (creates or opens a support thread) */}
             <button
               onClick={async () => {
-                if (!isAuthenticated) {
-                  navigate('/login')
-                  return
-                }
+                if (!requireAuth('Please login to chat with support')) return
                 try {
                   const res = await chatService.createSupportChat()
                   const chatId = res?.data?.chat?._id

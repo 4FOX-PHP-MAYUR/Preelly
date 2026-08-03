@@ -59,13 +59,20 @@ function LoginPage() {
 
   const params = new URLSearchParams(location.search)
   const target = params.get('target') === 'seller' ? 'seller' : 'buyer'
+  // Set by the shared "Login Required" modal so guests land back on the page
+  // (and protected action) they were on before being asked to log in. Persisted
+  // to localStorage (like authTarget) so it survives the multi-step OTP/OAuth
+  // hops that follow this page.
+  const redirectParam = params.get('redirect')
+  const redirectTo = redirectParam && redirectParam.startsWith('/') ? redirectParam : null
 
   useEffect(() => {
     localStorage.setItem('authTarget', target)
+    localStorage.setItem('authRedirectTo', redirectTo || '')
     if (isAuthenticated) {
-      navigate(target === 'seller' ? '/post-ad' : '/dashboard/settings')
+      navigate(redirectTo || (target === 'seller' ? '/post-ad' : '/dashboard/settings'))
     }
-  }, [isAuthenticated, navigate, target])
+  }, [isAuthenticated, navigate, target, redirectTo])
 
   useEffect(() => {
     if (error) {

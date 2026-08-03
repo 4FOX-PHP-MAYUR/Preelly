@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast'
 import App from './App'
 import { ChatProvider } from '@shared/components/Chat/ChatContext'
 import { CallProvider } from '@shared/components/Call/CallContext'
+import { LoginPromptProvider } from '@shared/components/LoginPrompt/LoginPromptContext'
 import { store } from '@shared/store/store'
 import './index.css'
 
@@ -18,12 +19,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           v7_relativeSplatPath: true,
         }}
       >
-        <ChatProvider>
-          <CallProvider>
-            <App />
-            <Toaster position="top-right" />
-          </CallProvider>
-        </ChatProvider>
+        <LoginPromptProvider>
+          <ChatProvider>
+            <CallProvider>
+              <App />
+              <Toaster position="top-right" />
+            </CallProvider>
+          </ChatProvider>
+        </LoginPromptProvider>
       </BrowserRouter>
     </Provider>
   </React.StrictMode>,

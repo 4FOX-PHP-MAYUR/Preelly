@@ -26,7 +26,7 @@ import { VERIFIED_BADGE_IMAGES } from '@shared/utils/verifiedBadge'
 import toast from 'react-hot-toast'
 import { useSelector, useDispatch } from 'react-redux'
 import { interactionService, userService, productService } from '@shared/services/api'
-import { refreshUser, selectIsAuthenticated, selectIsGuest, selectUser } from '@shared/store/slices/authSlice'
+import { refreshUser, selectIsAuthenticated, selectUser } from '@shared/store/slices/authSlice'
 import { selectIsMuted, toggleMute } from '@shared/store/slices/uiSlice'
 import { getMediaUrl, isIdentityVerified, isValidObjectId } from '@shared/utils/helpers'
 import { navigateToUser } from '@shared/utils/safeNavigate'
@@ -39,6 +39,7 @@ import AdMoreOptionsModal from '../Profile/AdMoreOptionsModal'
 import MarkAsSoldFlow from '../Profile/MarkAsSoldFlow'
 import BlockFlow from '../../../components/Block/BlockFlow'
 import useProductVideoViewTracking from '@shared/hooks/useProductVideoViewTracking'
+import { useRequireAuth } from '@shared/hooks/useRequireAuth'
 
 /** Keep only the first `count` words of a title (adds an ellipsis if more were dropped). */
 function shortTitle(text, count = 3) {
@@ -63,8 +64,8 @@ function ProductReelCard({
   const navigate = useNavigate()
   const dispatch = useDispatch()
   const isAuthenticated = useSelector(selectIsAuthenticated)
-  const isGuest = useSelector(selectIsGuest)
   const user = useSelector(selectUser)
+  const requireAuth = useRequireAuth()
   const isMuted = useSelector(selectIsMuted) // Global mute state
   const videoRef = useRef(null)
   const [isPlaying, setIsPlaying] = useState(false)
@@ -204,17 +205,13 @@ function ProductReelCard({
     if (!isLiked && isAuthenticated) {
       handleLike(null, true)
     } else if (!isAuthenticated) {
-      toast.error('Please login to like products')
+      requireAuth('Please login to like products')
     }
   }
 
   const handleLike = async (e, fromDoubleClick = false) => {
     if (e) e.stopPropagation()
-    if (!isAuthenticated) {
-      toast.error('Please login to like products')
-      if (!isGuest) navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to like products')) return
 
     const previousLiked = isLiked
     setIsLiked(!isLiked)
@@ -252,11 +249,7 @@ function ProductReelCard({
 
   const handleShare = (e) => {
     e.stopPropagation()
-    if (!isAuthenticated) {
-      toast.error('Please login to share products')
-      if (!isGuest) navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to share products')) return
     const preferPanel =
       embedded &&
       onOpenShare &&
@@ -281,11 +274,7 @@ function ProductReelCard({
 
   const handleFollow = async (e) => {
     if (e) e.stopPropagation()
-    if (!isAuthenticated) {
-      toast.error('Please login to follow users')
-      if (!isGuest) navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to follow users')) return
     const sellerId = product?.seller?._id ? String(product.seller._id) : String(product.seller || '')
     const prev = isFollowing
     // optimistic UI
@@ -318,11 +307,7 @@ function ProductReelCard({
 
   const handleSave = async (e) => {
     e.stopPropagation()
-    if (!isAuthenticated) {
-      toast.error('Please login to save products')
-      if (!isGuest) navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to save products')) return
 
     const previousSaved = isSaved
     setIsSaved(!isSaved)
@@ -341,12 +326,8 @@ function ProductReelCard({
   const handleReport = async (e) => {
     e.stopPropagation()
     setShowMoreMenu(false)
-    
-    if (!isAuthenticated) {
-      toast.error('Please login to report products')
-      if (!isGuest) navigate('/login')
-      return
-    }
+
+    if (!requireAuth('Please login to report products')) return
 
     // Simple report - in production, you'd want a modal with reason selection
     const reason = prompt('Please provide a reason for reporting this product:')
@@ -788,10 +769,7 @@ function ProductReelCard({
                 onClick={(e) => {
                   e.stopPropagation()
                   setShowMoreMenu(false)
-                  if (!isAuthenticated || isGuest) {
-                    toast.error('Please login to block accounts')
-                    return
-                  }
+                  if (!requireAuth('Please login to block accounts')) return
                   setShowBlockFlow(true)
                 }}
                 className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-red-400 hover:bg-white/10"

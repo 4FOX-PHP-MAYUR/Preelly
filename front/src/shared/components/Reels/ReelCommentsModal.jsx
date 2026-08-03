@@ -4,6 +4,7 @@ import { X, Heart, Send, User, Flag, MoreHorizontal, Check, CheckCheck, MapPin, 
 import toast from 'react-hot-toast'
 import { interactionService } from '@shared/services/api'
 import { selectIsAuthenticated, selectUser } from '@shared/store/slices/authSlice'
+import { useRequireAuth } from '@shared/hooks/useRequireAuth'
 import { useChat } from '../Chat/ChatContext'
 import { getMediaUrl } from '@shared/utils/helpers'
 import { formatListingPrice, getProductListingPrice } from '@shared/components/categoryBrowseShared'
@@ -56,6 +57,7 @@ function ReelCommentsModal({
   const isLightPanel = variant === 'light' && asPanel
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const user = useSelector(selectUser)
+  const requireAuth = useRequireAuth()
   const { threads, createOrGetThread, sendMessage, markThreadRead } = useChat()
   const [activeTab, setActiveTab] = useState(initialTab)
   const [comments, setComments] = useState([])
@@ -143,7 +145,8 @@ function ReelCommentsModal({
 
   const handleSendChat = async (e) => {
     e.preventDefault()
-    if (!threadId || !chatMessage.trim() || !isAuthenticated) return
+    if (!threadId || !chatMessage.trim()) return
+    if (!requireAuth('Please login to chat with the seller')) return
     setChatSending(true)
     try {
       await sendMessage(threadId, {
@@ -196,10 +199,7 @@ function ReelCommentsModal({
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!isAuthenticated) {
-      toast.error('Please login to comment')
-      return
-    }
+    if (!requireAuth('Please login to comment')) return
     if (!commentText.trim()) return
     try {
       setSubmitting(true)
@@ -223,10 +223,7 @@ function ReelCommentsModal({
 
   const handleReplyClick = (commentId) => {
     const id = String(commentId)
-    if (!isAuthenticated) {
-      toast.error('Please login to reply')
-      return
-    }
+    if (!requireAuth('Please login to reply')) return
     if (String(replyingToId) === id) {
       setReplyingToId(null)
       setReplyText('')
@@ -238,10 +235,7 @@ function ReelCommentsModal({
 
   const handleReplySubmit = async (e, parentCommentId) => {
     e.preventDefault()
-    if (!isAuthenticated) {
-      toast.error('Please login to reply')
-      return
-    }
+    if (!requireAuth('Please login to reply')) return
     if (!replyText.trim() || submittingReply) return
     const parentId = String(parentCommentId)
     try {
@@ -273,10 +267,7 @@ function ReelCommentsModal({
 
   const handleReport = async (commentId, reason) => {
     setReportOpenFor(null)
-    if (!isAuthenticated) {
-      toast.error('Please login to report')
-      return
-    }
+    if (!requireAuth('Please login to report')) return
     try {
       setReportingId(commentId)
       await interactionService.reportComment(commentId, reason)
@@ -290,10 +281,7 @@ function ReelCommentsModal({
   }
 
   const handleLike = async (commentId) => {
-    if (!isAuthenticated) {
-      toast.error('Please login to like')
-      return
-    }
+    if (!requireAuth('Please login to like')) return
     try {
       const response = await interactionService.likeComment(commentId)
       const count = response.data?.likeCount
@@ -542,7 +530,13 @@ function ReelCommentsModal({
             </div>
           </form>
         ) : (
-          <p className="py-1 text-center text-sm text-slate-400">Log in to comment.</p>
+          <button
+            type="button"
+            onClick={() => requireAuth('Please login to comment')}
+            className="w-full py-1 text-center text-sm text-slate-400 hover:text-slate-600"
+          >
+            Log in to comment.
+          </button>
         )}
       </div>
     </>
@@ -740,7 +734,13 @@ function ReelCommentsModal({
             </button>
           </form>
         ) : (
-          <p className="text-gray-500 text-xs sm:text-sm text-center py-1.5 sm:py-2">Log in to comment.</p>
+          <button
+            type="button"
+            onClick={() => requireAuth('Please login to comment')}
+            className="w-full text-gray-500 text-xs sm:text-sm text-center py-1.5 sm:py-2 hover:text-gray-300"
+          >
+            Log in to comment.
+          </button>
         )}
       </div>
     </>
@@ -773,7 +773,13 @@ function ReelCommentsModal({
         ) : !product?.seller ? (
           <div className="text-center py-6 sm:py-8 text-gray-500 text-xs sm:text-sm px-3">Seller not available for chat.</div>
         ) : !isAuthenticated ? (
-          <div className="text-center py-6 sm:py-8 text-gray-500 text-xs sm:text-sm px-3">Log in to chat with the seller.</div>
+          <button
+            type="button"
+            onClick={() => requireAuth('Please login to chat with the seller')}
+            className="w-full text-center py-6 sm:py-8 text-gray-500 text-xs sm:text-sm px-3 hover:text-gray-300"
+          >
+            Log in to chat with the seller.
+          </button>
         ) : chatMessages.length === 0 ? (
           <div className="text-center py-6 sm:py-8 text-gray-500 text-xs sm:text-sm px-3">No messages yet. Say hello!</div>
         ) : (

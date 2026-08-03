@@ -5,7 +5,8 @@ import toast from 'react-hot-toast'
 import { User, Phone, MessageCircle } from 'lucide-react'
 import { isIdentityVerified, getMediaUrl } from '../../utils/helpers'
 import { VERIFIED_BADGE_IMAGES } from '../../utils/verifiedBadge'
-import { selectIsAuthenticated, selectIsGuest, selectUser } from '../../store/slices/authSlice'
+import { selectUser } from '../../store/slices/authSlice'
+import { useRequireAuth } from '../../hooks/useRequireAuth'
 import { useChat } from '../Chat/ChatContext'
 import DetailCard from './DetailCard'
 import { pickDisplay } from './detailHelpers'
@@ -20,8 +21,7 @@ function formatPhoneForWhatsApp(phone) {
 function SellerInfo({ product }) {
   const seller = product.seller
   const navigate = useNavigate()
-  const isAuthenticated = useSelector(selectIsAuthenticated)
-  const isGuest = useSelector(selectIsGuest)
+  const requireAuth = useRequireAuth()
   const user = useSelector(selectUser)
   const { createOrGetThread } = useChat()
   const [showPhoneNumber, setShowPhoneNumber] = useState(false)
@@ -39,11 +39,7 @@ function SellerInfo({ product }) {
   const sellerRole = pickDisplay(product.sellerType, seller?.role, seller?.userType)
 
   const handleChat = async () => {
-    if (!isAuthenticated) {
-      toast.error('Please login to chat with sellers')
-      if (!isGuest) navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to chat with sellers')) return
     if (isOwner) {
       toast.error('You cannot chat with yourself for your own product')
       return
@@ -107,10 +103,7 @@ function SellerInfo({ product }) {
             <button
               type="button"
               onClick={() => {
-                if (!isAuthenticated || isGuest) {
-                  toast.error('Please login to block accounts')
-                  return
-                }
+                if (!requireAuth('Please login to block accounts')) return
                 setShowBlockFlow(true)
               }}
               className="text-sm font-semibold text-slate-500 transition hover:text-red-600"

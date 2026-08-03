@@ -528,12 +528,27 @@ router.get('/:id/profile', validateObjectId('id'), optionalAuth, async (req, res
       return res.status(404).json({ message: 'User not found' })
     }
 
-    // Get user stats
-    const products = await Product.find({ seller: user._id, status: 'active' })
+    // Get user stats. "totalProducts" (Ads Posted) counts every ad the user has
+    // ever created, regardless of status (pending/active/rejected/sold/inactive)
+    // — hard-deleted ads are gone from the collection so they're excluded
+    // automatically, while archived/status-changed ads stay on the same
+    // document and keep counting. Aggregated in one pass so we never pull full
+    // product documents just to count/sum them.
+    const [statsAgg] = await Product.aggregate([
+      { $match: { seller: user._id } },
+      {
+        $group: {
+          _id: null,
+          totalProducts: { $sum: 1 },
+          totalViews: { $sum: { $ifNull: ['$views', 0] } },
+          totalLikes: { $sum: { $size: { $ifNull: ['$likes', []] } } },
+        },
+      },
+    ])
     const stats = {
-      totalProducts: products.length,
-      totalViews: products.reduce((sum, p) => sum + (p.views || 0), 0),
-      totalLikes: products.reduce((sum, p) => sum + (p.likes?.length || 0), 0),
+      totalProducts: statsAgg?.totalProducts || 0,
+      totalViews: statsAgg?.totalViews || 0,
+      totalLikes: statsAgg?.totalLikes || 0,
     }
 
     res.json({

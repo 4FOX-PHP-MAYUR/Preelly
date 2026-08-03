@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { Heart, MessageCircle, Send, Bookmark, Eye } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { interactionService } from '../../services/api'
-import { selectIsAuthenticated, selectIsGuest } from '../../store/slices/authSlice'
+import { selectIsAuthenticated } from '../../store/slices/authSlice'
+import { useRequireAuth } from '../../hooks/useRequireAuth'
 import { formatCompactCount } from './detailHelpers'
 
 function ActionPill({ icon: Icon, count, onClick, label, iconClassName = 'text-slate-500' }) {
@@ -22,9 +22,8 @@ function ActionPill({ icon: Icon, count, onClick, label, iconClassName = 'text-s
 }
 
 function ProductEngagementRow({ product, viewCount: viewCountProp, embedded = false }) {
-  const navigate = useNavigate()
   const isAuthenticated = useSelector(selectIsAuthenticated)
-  const isGuest = useSelector(selectIsGuest)
+  const requireAuth = useRequireAuth()
   const [isLiked, setIsLiked] = useState(false)
   const [isSaved, setIsSaved] = useState(Boolean(product.saved))
   const [likeCount, setLikeCount] = useState(product.likes?.length || 0)
@@ -48,13 +47,8 @@ function ProductEngagementRow({ product, viewCount: viewCountProp, embedded = fa
     }
   }, [isAuthenticated, product._id])
 
-  const requireAuth = (message) => {
-    toast.error(message)
-    if (!isGuest) navigate('/login')
-  }
-
   const handleLike = async () => {
-    if (!isAuthenticated) return requireAuth('Please login to like products')
+    if (!requireAuth('Please login to like products')) return
     const previousLiked = isLiked
     const previousCount = likeCount
     setIsLiked(!previousLiked)
@@ -71,7 +65,7 @@ function ProductEngagementRow({ product, viewCount: viewCountProp, embedded = fa
   }
 
   const handleSave = async () => {
-    if (!isAuthenticated) return requireAuth('Please login to save products')
+    if (!requireAuth('Please login to save products')) return
     const previousSaved = isSaved
     setIsSaved(!previousSaved)
     try {

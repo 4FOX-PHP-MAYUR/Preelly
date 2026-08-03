@@ -5,6 +5,7 @@ import { fetchProducts, clearProducts } from '@shared/store/slices/productSlice'
 import { fetchRootCategories } from '@shared/store/slices/categorySlice'
 import { fetchFeedShell } from '@shared/store/slices/feedSlice'
 import { selectIsAuthenticated } from '@shared/store/slices/authSlice'
+import { useRequireAuth } from '@shared/hooks/useRequireAuth'
 import { categoryService, productService, userService } from '@shared/services/api'
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
 import ListingToolbar from '../components/Listing/ListingToolbar'
@@ -39,6 +40,7 @@ function SearchResultsPage() {
   const { products, loading, hasMore, page } = useSelector((state) => state.products)
   const { rootCategories, rootLoading: categoriesLoading } = useSelector((state) => state.categories)
   const isAuthenticated = useSelector(selectIsAuthenticated)
+  const requireAuth = useRequireAuth()
   const shellLoaded = useSelector((state) => state.feed?.shellLoaded)
 
   const searchQuery = (searchParams.get('q') || '').trim()
@@ -342,10 +344,7 @@ function SearchResultsPage() {
   }, [isAuthenticated, searchQuery, categoryId, city, minPrice, maxPrice, keywords, sortBy, subcategoryId, buildSavedSearchPayload])
 
   const handleSaveSearch = async () => {
-    if (!isAuthenticated) {
-      navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to save this search')) return
     if (!searchQuery && !categoryId) {
       toast.error('Run a search before saving')
       return

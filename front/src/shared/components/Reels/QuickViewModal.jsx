@@ -18,17 +18,17 @@ import {
 } from 'lucide-react'
 import { useSelector } from 'react-redux'
 import { useNavigate } from 'react-router-dom'
-import { selectIsAuthenticated, selectIsGuest, selectUser } from '@shared/store/slices/authSlice'
+import { selectUser } from '@shared/store/slices/authSlice'
 import { interactionService } from '@shared/services/api'
 import { getMediaUrl } from '@shared/utils/helpers'
+import { useRequireAuth } from '@shared/hooks/useRequireAuth'
 import toast from 'react-hot-toast'
 import ReelCommentsModal from './ReelCommentsModal'
 import ReelShareModal from './ReelShareModal'
 
 function QuickViewModal({ product, onClose, onOpenChat }) {
   const navigate = useNavigate()
-  const isAuthenticated = useSelector(selectIsAuthenticated)
-  const isGuest = useSelector(selectIsGuest)
+  const requireAuth = useRequireAuth()
   const currentUser = useSelector(selectUser)
 
   // ── local interaction state (mirrors ProductReelCard pattern) ──
@@ -80,11 +80,7 @@ function QuickViewModal({ product, onClose, onOpenChat }) {
   // ── Like ──
   const handleLike = async (e) => {
     e.stopPropagation()
-    if (!isAuthenticated) {
-      toast.error('Please login to like products')
-      if (!isGuest) navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to like products')) return
     const prev = isLiked
     setIsLiked(!prev)
     setLikeCount((c) => (prev ? c - 1 : c + 1))
@@ -102,11 +98,7 @@ function QuickViewModal({ product, onClose, onOpenChat }) {
   // ── Save / Bookmark ──
   const handleSave = async (e) => {
     e.stopPropagation()
-    if (!isAuthenticated) {
-      toast.error('Please login to save products')
-      if (!isGuest) navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to save products')) return
     const prev = isSaved
     setIsSaved(!prev)
     try {
@@ -129,11 +121,7 @@ function QuickViewModal({ product, onClose, onOpenChat }) {
   // ── Share ──
   const handleShare = (e) => {
     e.stopPropagation()
-    if (!isAuthenticated) {
-      toast.error('Please login to share products')
-      if (!isGuest) navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to share products')) return
     setShowShare(true)
   }
 
@@ -163,11 +151,7 @@ function QuickViewModal({ product, onClose, onOpenChat }) {
 
   const handleChatButton = (e) => {
     e.stopPropagation()
-    if (!isAuthenticated) {
-      toast.error('Please login to chat')
-      if (!isGuest) navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to chat')) return
     handleClose()
     if (onOpenChat) onOpenChat()
   }

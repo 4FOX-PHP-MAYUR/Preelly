@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { ChevronDown, ChevronUp, MapPin, MessageCircle } from 'lucide-react'
 import toast from 'react-hot-toast'
-import { selectIsAuthenticated, selectIsGuest, selectUser } from '@shared/store/slices/authSlice'
+import { selectUser } from '@shared/store/slices/authSlice'
+import { useRequireAuth } from '@shared/hooks/useRequireAuth'
 import { useChat } from '@shared/components/Chat/ChatContext'
 import { getMediaUrl } from '@shared/utils/helpers'
 import ListingHeaderCard from '@shared/components/ProductDetail/ListingHeaderCard'
@@ -126,8 +127,7 @@ function EmptyPanel() {
 
 function ReelProductDetailPanel({ product }) {
   const navigate = useNavigate()
-  const isAuthenticated = useSelector(selectIsAuthenticated)
-  const isGuest = useSelector(selectIsGuest)
+  const requireAuth = useRequireAuth()
   const user = useSelector(selectUser)
   const { createOrGetThread } = useChat()
   const [startingChat, setStartingChat] = useState(false)
@@ -137,11 +137,7 @@ function ReelProductDetailPanel({ product }) {
   if (!product) return <EmptyPanel />
 
   const handleChatWithSeller = async () => {
-    if (!isAuthenticated) {
-      toast.error('Please login to chat with sellers')
-      if (!isGuest) navigate('/login')
-      return
-    }
+    if (!requireAuth('Please login to chat with sellers')) return
     const sellerId = product.seller?._id || product.seller?.id || product.seller
     if (sellerId && user?._id && String(sellerId) === String(user._id)) {
       toast.error('You cannot chat with yourself for your own product')

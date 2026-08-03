@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Plus, FileSpreadsheet, Eye, ShieldCheck, ShieldOff } from 'lucide-react'
 import { adminService } from '@/services/api'
 import PageHeader from '../../components/AdminUI/PageHeader'
@@ -26,13 +26,17 @@ function getMemberSince(user) {
 function UsersListPage() {
   const navigate = useNavigate()
   const { canCreate, canEdit, canDelete } = usePermission('Users')
+  // Dashboard KPI cards deep-link here with the window and filter they represent
+  // (e.g. /users?status=inactive&fromDate=…). Absent params keep the defaults.
+  const [searchParams] = useSearchParams()
   const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(false)
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [typeFilter, setTypeFilter] = useState('all')
-  const [fromDate, setFromDate] = useState('')
-  const [toDate, setToDate] = useState('')
+  const [search, setSearch] = useState(() => searchParams.get('search') || '')
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || 'all')
+  const [typeFilter, setTypeFilter] = useState(() => searchParams.get('role') || 'all')
+  const [verifiedFilter, setVerifiedFilter] = useState(() => searchParams.get('isVerified') || 'all')
+  const [fromDate, setFromDate] = useState(() => searchParams.get('fromDate') || '')
+  const [toDate, setToDate] = useState(() => searchParams.get('toDate') || '')
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
 
@@ -48,7 +52,8 @@ function UsersListPage() {
     status = statusFilter,
     role = typeFilter,
     from = fromDate,
-    to = toDate
+    to = toDate,
+    verified = verifiedFilter
   ) => {
     try {
       setLoading(true)
@@ -56,6 +61,7 @@ function UsersListPage() {
       if (searchTerm?.trim()) params.search = searchTerm.trim()
       if (status && status !== 'all') params.status = status
       if (role && role !== 'all') params.role = role
+      if (verified && verified !== 'all') params.isVerified = verified
       if (from) params.fromDate = from
       if (to) params.toDate = to
       const res = await adminService.getUsers(params)
@@ -85,9 +91,10 @@ function UsersListPage() {
     setSearch('')
     setStatusFilter('all')
     setTypeFilter('all')
+    setVerifiedFilter('all')
     setFromDate('')
     setToDate('')
-    fetchUsers(1, '', 'all', 'all', '', '')
+    fetchUsers(1, '', 'all', 'all', '', '', 'all')
   }
 
   const handleToggleStatus = async (row) => {
@@ -214,7 +221,13 @@ function UsersListPage() {
     }
   }
 
-  const hasActiveFilters = search || statusFilter !== 'all' || typeFilter !== 'all' || fromDate || toDate
+  const hasActiveFilters =
+    search ||
+    statusFilter !== 'all' ||
+    typeFilter !== 'all' ||
+    verifiedFilter !== 'all' ||
+    fromDate ||
+    toDate
 
   return (
     <AdminPage>
@@ -263,6 +276,18 @@ function UsersListPage() {
               { value: 'all', label: 'All types' },
               { value: 'user', label: 'User' },
               { value: 'admin', label: 'Admin' },
+            ],
+          },
+          {
+            key: 'isVerified',
+            type: 'select',
+            label: 'Verification',
+            value: verifiedFilter,
+            onChange: (e) => setVerifiedFilter(e.target.value),
+            options: [
+              { value: 'all', label: 'All users' },
+              { value: 'true', label: 'Verified' },
+              { value: 'false', label: 'Not verified' },
             ],
           },
           {

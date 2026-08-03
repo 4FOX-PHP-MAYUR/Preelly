@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { adminService } from '@/services/api'
 import {
   AdminPage,
@@ -41,7 +41,27 @@ const EMPTY_FILTERS = {
   paymentStatus: 'all',
   orderPlatform: 'all',
   paymentMethod: 'all',
+  fromDate: '',
+  toDate: '',
   sort: 'latest',
+}
+
+/**
+ * Dashboard KPI cards deep-link here carrying the window and status they
+ * represent (e.g. /transactions?paymentStatus=Failed&fromDate=…).
+ * Anything absent from the URL keeps its default.
+ */
+function filtersFromSearchParams(searchParams) {
+  return {
+    ...EMPTY_FILTERS,
+    search: searchParams.get('search') || '',
+    paymentStatus: searchParams.get('paymentStatus') || 'all',
+    orderPlatform: searchParams.get('orderPlatform') || 'all',
+    paymentMethod: searchParams.get('paymentMethod') || 'all',
+    fromDate: searchParams.get('fromDate') || '',
+    toDate: searchParams.get('toDate') || '',
+    sort: searchParams.get('sort') || 'latest',
+  }
 }
 
 const EMPTY_STATS = {
@@ -119,11 +139,12 @@ function TransactionMobileCard({ row, actions }) {
 function TransactionsListPage() {
   const navigate = useNavigate()
   usePermission('Transactions')
+  const [searchParams] = useSearchParams()
   const [transactions, setTransactions] = useState([])
   const [loading, setLoading] = useState(false)
   const [statsLoading, setStatsLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [filters, setFilters] = useState(EMPTY_FILTERS)
+  const [filters, setFilters] = useState(() => filtersFromSearchParams(searchParams))
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
   const [stats, setStats] = useState(EMPTY_STATS)
@@ -138,6 +159,8 @@ function TransactionsListPage() {
     if (f.paymentStatus !== 'all') params.paymentStatus = f.paymentStatus
     if (f.orderPlatform !== 'all') params.orderPlatform = f.orderPlatform
     if (f.paymentMethod !== 'all') params.paymentMethod = f.paymentMethod
+    if (f.fromDate) params.fromDate = f.fromDate
+    if (f.toDate) params.toDate = f.toDate
     return params
   }
 
@@ -230,6 +253,8 @@ function TransactionsListPage() {
       const params = {}
       if (f.orderPlatform !== 'all') params.orderPlatform = f.orderPlatform
       if (f.paymentMethod !== 'all') params.paymentMethod = f.paymentMethod
+      if (f.fromDate) params.fromDate = f.fromDate
+      if (f.toDate) params.toDate = f.toDate
       const res = await adminService.getTransactionStats(params)
       setStats(res.data || EMPTY_STATS)
     } catch (err) {
@@ -261,8 +286,10 @@ function TransactionsListPage() {
   }, [filters])
 
   useEffect(() => {
+    // `filters` may already be seeded from the URL by a dashboard deep-link, so
+    // the first stats call has to use it rather than the empty defaults.
     fetchTransactions(1)
-    fetchStats(EMPTY_FILTERS)
+    fetchStats(filters)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -436,6 +463,48 @@ function TransactionsListPage() {
             value: filters.paymentMethod,
             onChange: (e) => setFilter('paymentMethod', e.target.value),
             options: [{ value: 'all', label: 'All Methods' }, ...PAYMENT_METHOD_OPTIONS],
+          },
+          {
+            key: 'fromDate',
+            render: () => (
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="txn-from-date"
+                  className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+                >
+                  From Date
+                </label>
+                <input
+                  id="txn-from-date"
+                  type="date"
+                  value={filters.fromDate}
+                  max={filters.toDate || undefined}
+                  onChange={(e) => setFilter('fromDate', e.target.value)}
+                  className="admin-input w-full"
+                />
+              </div>
+            ),
+          },
+          {
+            key: 'toDate',
+            render: () => (
+              <div className="space-y-1.5">
+                <label
+                  htmlFor="txn-to-date"
+                  className="block text-sm font-medium text-slate-700 dark:text-slate-300"
+                >
+                  To Date
+                </label>
+                <input
+                  id="txn-to-date"
+                  type="date"
+                  value={filters.toDate}
+                  min={filters.fromDate || undefined}
+                  onChange={(e) => setFilter('toDate', e.target.value)}
+                  className="admin-input w-full"
+                />
+              </div>
+            ),
           },
           {
             key: 'sort',

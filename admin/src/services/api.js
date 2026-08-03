@@ -157,6 +157,25 @@ function toTestimonialFormData(data = {}) {
   return formData
 }
 
+/**
+ * Admin Dashboard service.
+ *
+ * Every read takes the same filter params (`range`, `fromDate`, `toDate`,
+ * `category`, `packageId`, `paymentStatus`, `productStatus`, `userType`,
+ * `platform`) so cards, charts and tables always describe one window.
+ */
+export const dashboardService = {
+  getSummary: (params) => api.get('/admin/dashboard/summary', { params }),
+  getCharts: (params) => api.get('/admin/dashboard/charts', { params }),
+  getInsights: (params) => api.get('/admin/dashboard/insights', { params }),
+  getFilterOptions: () => api.get('/admin/dashboard/filters'),
+  getPerformance: () => api.get('/admin/dashboard/performance'),
+  getTable: (table, params) => api.get(`/admin/dashboard/tables/${table}`, { params }),
+  getReports: () => api.get('/admin/dashboard/reports'),
+  downloadReport: (type, params) =>
+    api.get(`/admin/dashboard/reports/${type}/download`, { params, responseType: 'blob' }),
+}
+
 // Admin service
 export const adminService = {
   getPendingProducts: (params) => api.get('/admin/products/pending', { params }),

@@ -103,6 +103,10 @@ app.use(passport.initialize())
 app.use(passport.session())
 require('./auth/passport')
 
+// ── API metrics (feeds the admin dashboard's performance panel) ───────────────
+const { apiMetrics } = require('./middleware/apiMetrics')
+app.use('/api', apiMetrics)
+
 // ── Request logger (dev only) ─────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'production') {
   app.use((req, res, next) => {
@@ -173,6 +177,7 @@ app.use('/api',               require('./routes/interactions'))  // before /prod
 app.use('/api/products',      require('./routes/products'))
 app.use('/api/product-drafts', require('./routes/productDrafts'))
 app.use('/api',               require('./routes/dynamicForm'))
+app.use('/api/admin/dashboard', require('./routes/adminDashboard'))
 app.use('/api/admin',         require('./routes/admin'))
 app.use('/api/coupon',        require('./routes/coupons'))
 app.use('/api/buyer-coupon',  require('./routes/buyerCoupons'))

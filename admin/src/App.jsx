@@ -14,6 +14,7 @@ import ForbiddenPage from './pages/ForbiddenPage'
 
 const AdminLoginPage = lazy(() => import('./pages/AdminLoginPage'))
 const AdminDashboardPage = lazy(() => import('./pages/AdminDashboardPage'))
+const AdminDashboardRoutes = lazy(() => import('./pages/dashboard'))
 const AdminCategoriesRoutes = lazy(() => import('./pages/categories'))
 const AdminFiltersRoutes = lazy(() => import('./pages/filters'))
 const AdminDealersRoutes = lazy(() => import('./pages/dealers'))
@@ -107,6 +108,14 @@ function App() {
       <Suspense fallback={null}>
         <Routes>
           <Route path="/login" element={<AdminLoginPage />} />
+          <Route
+            path="/dashboard/*"
+            element={
+              <PermissionRoute module="Dashboard" action="can_view">
+                <AdminDashboardRoutes />
+              </PermissionRoute>
+            }
+          />
           <Route
             path="/products"
             element={

@@ -1,5 +1,6 @@
 import {
   Home,
+  LayoutDashboard,
   Layers,
   Filter,
   Store,
@@ -28,7 +29,10 @@ export const ADMIN_MENU_GROUPS = [
     key: 'overview',
     label: 'Overview',
     items: [
-      { key: 'dashboard', label: 'Dashboard', to: '/', icon: Home },
+      { key: 'dashboard-analytics', label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
+      // The original landing page keeps its route and behaviour; only its label
+      // changes so it no longer competes with the analytics dashboard above.
+      { key: 'dashboard', label: 'Pending Review', to: '/', icon: Home },
     ],
   },
   {
@@ -88,6 +92,7 @@ export const ADMIN_MENU_GROUPS = [
 ]
 
 export const MENU_PERMISSION_MAP = {
+  'dashboard-analytics': 'Dashboard',
   dashboard: 'Dashboard',
   categories: 'Categories',
   filters: 'Filters',
@@ -116,6 +121,7 @@ export const MENU_PERMISSION_MAP = {
 
 export const ADMIN_ROUTE_META = {
   '/': { title: 'Dashboard', breadcrumbs: [{ label: 'Dashboard' }] },
+  '/dashboard': { title: 'Dashboard', breadcrumbs: [{ label: 'Overview' }, { label: 'Dashboard' }] },
   '/categories': { title: 'Categories', breadcrumbs: [{ label: 'Catalog', to: '/categories' }, { label: 'Categories' }] },
   '/filters': { title: 'Filters', breadcrumbs: [{ label: 'Catalog', to: '/filters' }, { label: 'Filters' }] },
   '/dealers': { title: 'Dealers', breadcrumbs: [{ label: 'Marketplace', to: '/dealers' }, { label: 'Dealers' }] },

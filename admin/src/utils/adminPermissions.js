@@ -28,6 +28,7 @@ export const ADMIN_PERMISSION_MODULES = [
 /** Route path prefix → module display name for frontend guards */
 export const ROUTE_PERMISSION_MAP = {
   '/': 'Dashboard',
+  '/dashboard': 'Dashboard',
   '/categories': 'Categories',
   '/filters': 'Filters',
   '/field-types': 'Field Types',

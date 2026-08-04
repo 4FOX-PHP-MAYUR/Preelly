@@ -42,7 +42,7 @@ function HomeCategorySidebar() {
         <div className="mt-3">
           <SidebarCategoryList
             categories={rootCategories}
-            onSelect={(category) => category?._id && navigate(`/categories/${category._id}`)}
+            onSelect={(category) => category?._id && navigate(`/categories/${category._id}/products`)}
           />
         </div>
       </div>

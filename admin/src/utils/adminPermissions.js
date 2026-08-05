@@ -23,6 +23,7 @@ export const ADMIN_PERMISSION_MODULES = [
   'Contacts',
   'Reports',
   'Settings',
+  'Admin Users',
 ]
 
 /** Route path prefix → module display name for frontend guards */
@@ -45,6 +46,8 @@ export const ROUTE_PERMISSION_MAP = {
   '/products': 'Listings',
   '/users': 'Users',
   '/roles': 'Settings',
+  '/role-permissions': 'Settings',
+  '/admin-users': 'Admin Users',
   '/identity-verification': 'Users',
   '/reports': 'Reports',
 }

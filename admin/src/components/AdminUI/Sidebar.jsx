@@ -7,7 +7,7 @@ import {
   ChevronDown,
   Shield,
 } from 'lucide-react'
-import { selectPermissions } from '@shared/store/slices/authSlice'
+import { selectAdminPermissions } from '../../store/adminAuthSlice'
 import BrandLogo from '@shared/components/BrandLogo'
 import { ADMIN_MENU_GROUPS, MENU_PERMISSION_MAP } from './adminNavConfig'
 
@@ -25,7 +25,7 @@ function Sidebar({ mobileOpen = false, onMobileClose }) {
   )
   const location = useLocation()
   const search = location.search || ''
-  const permissions = useSelector(selectPermissions)
+  const permissions = useSelector(selectAdminPermissions)
 
   const canViewModule = (menuKey) => {
     if (!permissions) return true

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { useDispatch, useSelector } from 'react-redux'
-import { selectIsAuthenticated, selectUser, logout } from '@shared/store/slices/authSlice'
+import { useDispatch } from 'react-redux'
+import { logoutAdmin } from '../../store/adminAuthSlice'
 import Sidebar from '../AdminUI/Sidebar'
 import TopNav from '../AdminUI/TopNav'
 import { AdminThemeProvider } from '../AdminUI/AdminThemeContext'
@@ -10,14 +10,12 @@ function AdminLayout({ children }) {
   const location = useLocation()
   const dispatch = useDispatch()
   const navigate = useNavigate()
-  const isAuthenticated = useSelector(selectIsAuthenticated)
-  const user = useSelector(selectUser)
   const [mobileAdminOpen, setMobileAdminOpen] = useState(false)
 
   const isLoginRoute = location.pathname === '/login'
 
   const handleLogout = () => {
-    dispatch(logout('user-click'))
+    dispatch(logoutAdmin())
     navigate('/login')
   }
 

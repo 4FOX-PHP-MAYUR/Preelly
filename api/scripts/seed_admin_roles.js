@@ -15,7 +15,7 @@
 require('dotenv').config()
 const mongoose = require('mongoose')
 const AdminRole = require('../models/AdminRole')
-const User = require('../models/User')
+const AdminUser = require('../models/AdminUser')
 const {
   SUPER_ADMIN_ROLE_NAME,
   AVAILABLE_MODULES,
@@ -101,19 +101,31 @@ async function seed() {
   await assignAllPermissionsToRole(role._id)
   console.log(`Assigned all permissions to ${role.role_name}`)
 
-  // Point admins without a role at Super Admin
-  const assignResult = await User.updateMany(
-    { role: 'admin', $or: [{ adminRole: null }, { adminRole: { $exists: false } }] },
-    { $set: { adminRole: role._id } }
-  )
-  console.log(`Assigned Super Admin to ${assignResult.modifiedCount} admin user(s) without a role`)
+  // Bootstrap the very first Admin Panel login. admin_users is a dedicated
+  // collection — nothing here is migrated from marketplace `users`; if the
+  // collection already has any account, this is a no-op.
+  const existingAdminCount = await AdminUser.countDocuments({ isDeleted: { $ne: true } })
+  if (existingAdminCount === 0) {
+    const seedEmail = (process.env.ADMIN_SEED_EMAIL || 'superadmin@example.com').toLowerCase()
+    const seedPassword = process.env.ADMIN_SEED_PASSWORD || 'ChangeMe123!'
+    const seedName = process.env.ADMIN_SEED_NAME || 'Super Admin'
+    const seedPhone = process.env.ADMIN_SEED_PHONE || '+10000000000'
 
-  // Ensure known SuperAdmin users stay on this role
-  const superUsers = await User.updateMany(
-    { role: 'admin', email: /mankarmayur\.4fox@gmail\.com/i },
-    { $set: { adminRole: role._id } }
-  )
-  console.log(`Ensured mankarmayur Super Admin link: ${superUsers.modifiedCount}`)
+    const superAdminUser = await AdminUser.create({
+      name: seedName,
+      email: seedEmail,
+      phone: seedPhone,
+      password: seedPassword,
+      adminRole: role._id,
+      status: 'active',
+    })
+    console.log('Created initial admin_users account:')
+    console.log(`  email:    ${superAdminUser.email}`)
+    console.log(`  password: ${seedPassword}`)
+    console.log('  Log in via the Admin Panel and change this password immediately.')
+  } else {
+    console.log(`admin_users already has ${existingAdminCount} account(s) — skipping bootstrap.`)
+  }
 
   await mongoose.disconnect()
   console.log('Done.')

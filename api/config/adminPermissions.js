@@ -41,6 +41,7 @@ const AVAILABLE_MODULES = [
   'Contacts',
   'Reports',
   'Settings',
+  'Admin Users',
 ]
 
 /** URL-segment / menu-key → module display name */
@@ -75,6 +76,8 @@ const MODULE_MAP = {
   'user-reports': 'Reports',
   roles: 'Settings',
   modules: 'Settings',
+  'role-assignments': 'Settings',
+  'admin-users': 'Admin Users',
   stats: 'Dashboard',
   'support-unread-count': 'Contacts',
 }
@@ -117,7 +120,6 @@ const ROUTE_PERMISSION_RULES = [
   { pattern: /^\/transactions/, GET: ['Transactions', 'can_view'], POST: ['Transactions', 'can_create'], PATCH: ['Transactions', 'can_edit'], PUT: ['Transactions', 'can_edit'], DELETE: ['Transactions', 'can_delete'] },
 
   // Users & verification
-  { pattern: /^\/users\/[^/]+\/admin-role/, PUT: ['Settings', 'can_edit'] },
   { pattern: /^\/users/, GET: ['Users', 'can_view'], POST: ['Users', 'can_create'], PUT: ['Users', 'can_edit'], PATCH: ['Users', 'can_edit'], DELETE: ['Users', 'can_delete'] },
   { pattern: /^\/identity-verifications/, GET: ['Users', 'can_view'], PUT: ['Users', 'can_edit'], PATCH: ['Users', 'can_edit'] },
 
@@ -133,6 +135,11 @@ const ROUTE_PERMISSION_RULES = [
   // Roles & permissions (Settings)
   { pattern: /^\/roles/, GET: ['Settings', 'can_view'], POST: ['Settings', 'can_create'], PATCH: ['Settings', 'can_edit'], PUT: ['Settings', 'can_edit'], DELETE: ['Settings', 'can_delete'] },
   { pattern: /^\/modules/, GET: ['Settings', 'can_view'] },
+  // Assign Users — mapping layer between admin users and admin roles (Settings)
+  { pattern: /^\/role-assignments/, GET: ['Settings', 'can_view'], POST: ['Settings', 'can_create'], PATCH: ['Settings', 'can_edit'], PUT: ['Settings', 'can_edit'], DELETE: ['Settings', 'can_delete'] },
+
+  // Admin Users — separate module for managing admin accounts (own permission bucket)
+  { pattern: /^\/admin-users/, GET: ['Admin Users', 'can_view'], POST: ['Admin Users', 'can_create'], PATCH: ['Admin Users', 'can_edit'], PUT: ['Admin Users', 'can_edit'], DELETE: ['Admin Users', 'can_delete'] },
 ]
 
 function resolveModuleName(keyOrName) {

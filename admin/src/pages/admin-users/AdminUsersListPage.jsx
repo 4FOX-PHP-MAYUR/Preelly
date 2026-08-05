@@ -13,16 +13,35 @@ import {
 } from '../../components/AdminUI'
 import { usePermission } from '../../hooks/usePermission'
 import toast from 'react-hot-toast'
-import { Plus, FileSpreadsheet } from 'lucide-react'
+import { getMediaUrl } from '@shared/utils/helpers'
+import { Plus, Eye, FileSpreadsheet } from 'lucide-react'
 
-const LIST_PATH = '/roles'
+const LIMIT = 20
+const LIST_PATH = '/admin-users'
 
-function RolesListPage() {
+function formatDate(value) {
+  if (!value) return '—'
+  return new Date(value).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+/**
+ * Admin Users — a dedicated module for managing admin accounts, backed by
+ * its own `admin_users` collection (never the marketplace `users`
+ * collection). Completely independent API surface, permission bucket, and
+ * UI from the Users module's flows, filters, and business logic.
+ */
+function AdminUsersListPage() {
   const navigate = useNavigate()
-  const { canCreate, canEdit, canDelete } = usePermission('Settings')
+  const { canCreate, canEdit, canDelete } = usePermission('Admin Users')
+
+  const [adminUsers, setAdminUsers] = useState([])
   const [roles, setRoles] = useState([])
   const [loading, setLoading] = useState(false)
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+
   const [search, setSearch] = useState('')
+  const [roleFilter, setRoleFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
 
   const [exportOpen, setExportOpen] = useState(false)
@@ -31,48 +50,65 @@ function RolesListPage() {
   const [exportApplyFilters, setExportApplyFilters] = useState(true)
   const [exporting, setExporting] = useState(false)
 
-  const fetchRoles = async (searchTerm = '', status = statusFilter) => {
+  useEffect(() => {
+    adminService
+      .getRoles({ limit: 200 })
+      .then((res) => setRoles(res.data?.roles || []))
+      .catch(() => {})
+  }, [])
+
+  const fetchAdminUsers = async (
+    p = 1,
+    searchTerm = search,
+    role = roleFilter,
+    status = statusFilter
+  ) => {
     try {
       setLoading(true)
-      const params = { limit: 100 }
-      if (searchTerm.trim()) params.search = searchTerm.trim()
+      const params = { limit: LIMIT, page: p }
+      if (searchTerm?.trim()) params.search = searchTerm.trim()
+      if (role && role !== 'all') params.roleId = role
       if (status && status !== 'all') params.status = status
-      const res = await adminService.getRoles(params)
-      setRoles(res.data.roles || [])
+      const res = await adminService.getAdminUsers(params)
+      const data = res.data || {}
+      setAdminUsers(data.adminUsers || [])
+      setTotal(Number(data.total ?? 0))
+      setPage(p)
     } catch (err) {
       console.error(err)
-      toast.error(err.response?.data?.message || 'Failed to load roles')
+      toast.error(err.response?.data?.message || 'Failed to load admin users')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchRoles()
+    fetchAdminUsers(1)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSearch = (e) => {
     e.preventDefault()
-    fetchRoles(search, statusFilter)
+    fetchAdminUsers(1, search, roleFilter, statusFilter)
+  }
+
+  const hasActiveFilters = search || roleFilter !== 'all' || statusFilter !== 'all'
+
+  const clearFilters = () => {
+    setSearch('')
+    setRoleFilter('all')
+    setStatusFilter('all')
+    fetchAdminUsers(1, '', 'all', 'all')
   }
 
   const handleDelete = async (row) => {
-    if (row.is_system) {
-      toast.error('Super Admin role cannot be deleted')
-      return
-    }
-    const assigned = Number(row.userCount) || 0
-    const message =
-      assigned > 0
-        ? `This role is assigned to ${assigned} user(s). Deleting it will remove the role from those users. Continue?`
-        : 'Are you sure you want to delete this role?'
-    if (!window.confirm(message)) return
+    if (!window.confirm(`Remove admin account "${row.name}"? Their role assignment and access will be revoked.`)) return
     try {
-      await adminService.deleteRole(row._id)
-      toast.success(assigned > 0 ? 'Role deleted and users unassigned' : 'Role deleted')
-      fetchRoles(search, statusFilter)
+      await adminService.deleteAdminUser(row._id)
+      toast.success('Admin user removed')
+      fetchAdminUsers(page, search, roleFilter, statusFilter)
     } catch (err) {
-      toast.error(err.response?.data?.message || 'Failed to delete role')
+      toast.error(err.response?.data?.message || 'Failed to remove admin user')
     }
   }
 
@@ -101,11 +137,12 @@ function RolesListPage() {
       setExporting(true)
       const params = { fromDate: exportFromDate, toDate: exportToDate }
       if (exportApplyFilters) {
+        if (roleFilter !== 'all') params.roleId = roleFilter
         if (statusFilter !== 'all') params.status = statusFilter
         if (search) params.search = search
       }
 
-      const res = await adminService.exportRoles(params)
+      const res = await adminService.exportAdminUsers(params)
       const blob = res.data instanceof Blob
         ? res.data
         : new Blob([res.data], {
@@ -114,7 +151,7 @@ function RolesListPage() {
 
       if (blob.type && blob.type.includes('application/json')) {
         const text = await blob.text()
-        let message = 'Failed to export roles'
+        let message = 'Failed to export admin users'
         try {
           message = JSON.parse(text)?.message || message
         } catch { /* ignore */ }
@@ -123,7 +160,7 @@ function RolesListPage() {
 
       const disposition = res.headers?.['content-disposition'] || ''
       const match = disposition.match(/filename="?([^"]+)"?/i)
-      const filename = match?.[1] || `admin-roles-${exportFromDate}_${exportToDate}.xlsx`
+      const filename = match?.[1] || `admin-users-${exportFromDate}_${exportToDate}.xlsx`
 
       const url = window.URL.createObjectURL(blob)
       const link = document.createElement('a')
@@ -160,8 +197,8 @@ function RolesListPage() {
   return (
     <AdminPage>
       <PageHeader
-        title="Admin Roles"
-        subtitle="Manage admin roles"
+        title="Admin Users"
+        subtitle="Manage admin accounts and their assigned role"
         action={
           <>
             <Button variant="secondary" icon={FileSpreadsheet} onClick={openExportModal}>
@@ -169,7 +206,7 @@ function RolesListPage() {
             </Button>
             {canCreate ? (
               <Button onClick={() => navigate(`${LIST_PATH}/new`)} icon={Plus}>
-                Add Role
+                Add Admin User
               </Button>
             ) : null}
           </>
@@ -180,8 +217,19 @@ function RolesListPage() {
         searchValue={search}
         onSearchChange={setSearch}
         onSearchSubmit={handleSearch}
-        searchPlaceholder="Search roles..."
+        searchPlaceholder="Search by name, email, or mobile number..."
         filters={[
+          {
+            key: 'role',
+            type: 'select',
+            label: 'Role',
+            value: roleFilter,
+            onChange: (e) => setRoleFilter(e.target.value),
+            options: [
+              { value: 'all', label: 'All roles' },
+              ...roles.map((r) => ({ value: r._id, label: r.role_name })),
+            ],
+          },
           {
             key: 'status',
             type: 'select',
@@ -196,67 +244,88 @@ function RolesListPage() {
           },
         ]}
         actions={
-          search || statusFilter !== 'all' ? (
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setSearch('')
-                setStatusFilter('all')
-                fetchRoles('', 'all')
-              }}
-            >
+          hasActiveFilters ? (
+            <Button variant="secondary" onClick={clearFilters}>
               Clear
             </Button>
           ) : null
         }
       />
 
+      <p className="text-sm text-slate-500 dark:text-slate-400 -mt-2">
+        Showing <span className="font-medium text-slate-700 dark:text-slate-300">{adminUsers.length}</span> of{' '}
+        <span className="font-medium text-slate-700 dark:text-slate-300">{total}</span> admin users
+      </p>
+
       <DataTable
         columns={[
           {
-            key: 'role_name',
-            title: 'Role Name',
-            render: (r) => (
-              <span className="font-medium">
-                {r.role_name}
-                {r.is_system ? (
-                  <span className="ml-2 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-100 text-amber-800">
-                    System
-                  </span>
-                ) : null}
-              </span>
-            ),
+            key: 'name',
+            title: 'Admin User',
+            render: (r) => {
+              const src = r.avatar ? getMediaUrl(r.avatar) || r.avatar : null
+              return (
+                <div className="flex items-center gap-3 min-w-[180px]">
+                  {src ? (
+                    <img src={src} alt={r.name} className="h-9 w-9 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0" />
+                  ) : (
+                    <div className="h-9 w-9 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-medium text-slate-500 shrink-0">
+                      {(r.name || '?').charAt(0).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <p className="font-medium text-slate-900 dark:text-white">{r.name}</p>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{r.email}</p>
+                  </div>
+                </div>
+              )
+            },
           },
-          { key: 'description', title: 'Description', render: (r) => r.description || '—' },
+          { key: 'phone', title: 'Mobile', render: (r) => r.phone || '—' },
+          { key: 'role', title: 'Role', render: (r) => r.adminRole?.role_name || '—' },
           {
             key: 'status',
             title: 'Status',
             render: (r) => <StatusBadge status={r.status === 'active' ? 'active' : 'inactive'} />,
           },
           {
-            key: 'userCount',
-            title: 'Users',
-            render: (r) => r.userCount ?? 0,
+            key: 'lastLoginAt',
+            title: 'Last Login',
+            render: (r) => (r.lastLoginAt ? formatDate(r.lastLoginAt) : 'Never'),
           },
         ]}
-        data={roles}
+        data={adminUsers}
         loading={loading}
-        emptyTitle="No roles found"
-        emptyDescription="Create your first admin role to get started."
-        onEdit={
-          canEdit
-            ? (role) => navigate(`${LIST_PATH}/${role._id}/edit`)
-            : undefined
-        }
-        onDelete={canDelete ? handleDelete : undefined}
-        canDeleteRow={(role) => !role.is_system}
+        serverSide
         showSearch={false}
+        emptyTitle="No admin users found"
+        emptyDescription="Add your first admin user to get started."
+        pagination={{
+          page,
+          limit: LIMIT,
+          total,
+          onPageChange: (p) => fetchAdminUsers(p, search, roleFilter, statusFilter),
+        }}
+        onEdit={canEdit ? (row) => navigate(`${LIST_PATH}/${row._id}/edit`) : undefined}
+        onDelete={canDelete ? handleDelete : undefined}
+        customActions={(row) => (
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={Eye}
+            onClick={(e) => {
+              e.stopPropagation()
+              navigate(`${LIST_PATH}/${row._id}`)
+            }}
+            aria-label="View admin user"
+          />
+        )}
       />
 
       <Modal
         open={exportOpen}
         onClose={closeExportModal}
-        title="Export Admin Roles to Excel"
+        title="Export Admin Users to Excel"
         size="sm"
         footer={
           <Modal.Footer
@@ -269,15 +338,15 @@ function RolesListPage() {
         }
       >
         <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">
-          Choose the creation-date range you want to export.
+          Choose the account-creation date range you want to export.
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="role-export-from-date">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="admin-user-export-from-date">
               From Date
             </label>
             <input
-              id="role-export-from-date"
+              id="admin-user-export-from-date"
               type="date"
               value={exportFromDate}
               max={exportToDate || undefined}
@@ -287,11 +356,11 @@ function RolesListPage() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="role-export-to-date">
+            <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2" htmlFor="admin-user-export-to-date">
               To Date
             </label>
             <input
-              id="role-export-to-date"
+              id="admin-user-export-to-date"
               type="date"
               value={exportToDate}
               min={exportFromDate || undefined}
@@ -311,4 +380,4 @@ function RolesListPage() {
   )
 }
 
-export default RolesListPage
+export default AdminUsersListPage

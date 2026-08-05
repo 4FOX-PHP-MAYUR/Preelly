@@ -11,6 +11,12 @@ const api = axios.create({
   },
 })
 
+// Admin Panel auth is completely independent of the marketplace app's
+// `token`/`user`/`permissions` localStorage keys — a dedicated key means an
+// admin and a customer session can coexist in the same browser without
+// clobbering each other, even though both apps may share an origin.
+export const ADMIN_TOKEN_STORAGE_KEY = 'admin_token'
+
 // Add token to requests (skip when retrying with cookie-only after 401)
 api.interceptors.request.use((config) => {
   // Layout/auth calls survive route changes; page-scoped calls are cancelled on navigate.
@@ -18,7 +24,7 @@ api.interceptors.request.use((config) => {
     config.signal = getRouteAbortSignal()
   }
   if (!config.__skipBearer) {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY)
     if (token) {
       config.headers.Authorization = `Bearer ${token}`
     }
@@ -32,7 +38,7 @@ api.interceptors.request.use((config) => {
 
 // Drop only a stale Bearer from localStorage — never auto-logout from incidental 401s.
 function stripStaleBearerToken() {
-  localStorage.removeItem('token')
+  localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY)
 }
 
 api.interceptors.response.use(
@@ -42,10 +48,8 @@ api.interceptors.response.use(
     const config = error.config
     const url = String(config?.url || '')
     const isAuthRoute =
-      url.includes('/auth/send-otp') ||
-      url.includes('/auth/verify-otp') ||
-      url.includes('/auth/register') ||
-      url.includes('/auth/logout')
+      url.includes('/admin/auth/login') ||
+      url.includes('/admin/auth/logout')
 
     if (status === 401 && config && !isAuthRoute) {
       const hadBearer = Boolean(config.headers?.Authorization)
@@ -71,6 +75,15 @@ api.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// Admin Panel authentication — completely independent of the marketplace
+// OTP/`users`-collection login flow. Email + password against admin_users.
+export const adminAuthService = {
+  login: (data) => api.post('/admin/auth/login', data),
+  logout: () => api.post('/admin/auth/logout'),
+  me: () => api.get('/admin/auth/me'),
+  changePassword: (data) => api.patch('/admin/auth/change-password', data),
+}
 
 // Category service
 export const categoryService = {
@@ -145,6 +158,24 @@ function toStorageFacilityFormData(data = {}) {
  * string by FormData, which the API's validators and service already expect.
  */
 function toTestimonialFormData(data = {}) {
+  const formData = new FormData()
+  Object.entries(data).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    if (key === 'profileImage') {
+      if (value instanceof File) formData.append('profileImage', value)
+      return
+    }
+    formData.append(key, value)
+  })
+  return formData
+}
+
+/**
+ * Admin Users are sent as multipart so the profile image can ride along.
+ * `profileImage` is a File when adding/replacing the photo; everything else is
+ * coerced to a string by FormData, which the API's admin-users route expects.
+ */
+function toAdminUserFormData(data = {}) {
   const formData = new FormData()
   Object.entries(data).forEach(([key, value]) => {
     if (value === undefined || value === null || value === '') return
@@ -417,10 +448,22 @@ export const adminService = {
   deleteRole: (id) => api.delete(`/admin/roles/${id}`),
   getRolePermissions: (id) => api.get(`/admin/roles/${id}/permissions`),
   saveRolePermissions: (id, permissions) => api.put(`/admin/roles/${id}/permissions`, { permissions }),
-  getRoleUsers: (id) => api.get(`/admin/roles/${id}/users`),
   getModules: () => api.get('/admin/modules'),
-  // User admin role assignment (used from Roles → Assign Users)
-  setUserAdminRole: (userId, adminRole) => api.put(`/admin/users/${userId}/admin-role`, { adminRole }),
+  exportRoles: (params) => api.get('/admin/roles/export', { params, responseType: 'blob' }),
+  // Assign Users endpoints (admin_role_assignments — mapping layer between Admin Users and Admin Roles)
+  getRoleAssignments: (params) => api.get('/admin/role-assignments', { params }),
+  getRoleAssignmentById: (id) => api.get(`/admin/role-assignments/${id}`),
+  createRoleAssignment: (data) => api.post('/admin/role-assignments', data),
+  updateRoleAssignment: (id, data) => api.patch(`/admin/role-assignments/${id}`, data),
+  deleteRoleAssignment: (id) => api.delete(`/admin/role-assignments/${id}`),
+  exportRoleAssignments: (params) => api.get('/admin/role-assignments/export', { params, responseType: 'blob' }),
+  // Admin Users endpoints (dedicated module — separate from the marketplace Users module)
+  getAdminUsers: (params) => api.get('/admin/admin-users', { params }),
+  getAdminUserById: (id) => api.get(`/admin/admin-users/${id}`),
+  createAdminUser: (data) => api.post('/admin/admin-users', toAdminUserFormData(data)),
+  updateAdminUser: (id, data) => api.patch(`/admin/admin-users/${id}`, toAdminUserFormData(data)),
+  deleteAdminUser: (id) => api.delete(`/admin/admin-users/${id}`),
+  exportAdminUsers: (params) => api.get('/admin/admin-users/export', { params, responseType: 'blob' }),
   // Field Types endpoints
   getFieldTypes: (params) => api.get('/admin/field-types', { params }),
   getFieldTypeById: (id) => api.get(`/admin/field-types/${id}`),

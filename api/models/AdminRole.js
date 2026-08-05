@@ -27,6 +27,18 @@ const adminRoleSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    /** Admin (_id in admin_users) who created this role. */
+    created_by: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'AdminUser',
+      default: null,
+    },
+    /** Soft delete — keeps the row (and its role_permissions/history) instead of hard-deleting. */
+    isDeleted: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
   },
   {
     timestamps: true,

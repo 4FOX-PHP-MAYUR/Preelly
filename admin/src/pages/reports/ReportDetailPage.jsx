@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { adminService } from '@/services/api'
-import { selectPermissions } from '@shared/store/slices/authSlice'
+import { selectAdminPermissions } from '../../store/adminAuthSlice'
 import { getMediaUrl } from '@shared/utils/helpers'
 import {
   AdminPage,
@@ -61,7 +61,7 @@ function canEditReports(permissions) {
 function ReportDetailPage() {
   const { userId } = useParams()
   const navigate = useNavigate()
-  const permissions = useSelector(selectPermissions)
+  const permissions = useSelector(selectAdminPermissions)
   const allowActions = canEditReports(permissions)
 
   const [detail, setDetail] = useState(null)

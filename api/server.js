@@ -177,6 +177,7 @@ app.use('/api',               require('./routes/interactions'))  // before /prod
 app.use('/api/products',      require('./routes/products'))
 app.use('/api/product-drafts', require('./routes/productDrafts'))
 app.use('/api',               require('./routes/dynamicForm'))
+app.use('/api/admin/auth',    require('./routes/adminAuth'))
 app.use('/api/admin/dashboard', require('./routes/adminDashboard'))
 app.use('/api/admin',         require('./routes/admin'))
 app.use('/api/coupon',        require('./routes/coupons'))

@@ -6,7 +6,7 @@ import { Toaster } from 'react-hot-toast'
 import App from './App'
 import { ChatProvider } from '@shared/components/Chat/ChatContext'
 import { CallProvider } from '@shared/components/Call/CallContext'
-import { store } from '@shared/store/store'
+import { store } from './store/store'
 import './index.css'
 
 // Vite base is /admin/ (matches nginx). Strip trailing slash for React Router basename.

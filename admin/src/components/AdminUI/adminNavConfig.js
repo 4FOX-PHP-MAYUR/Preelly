@@ -14,6 +14,8 @@ import {
   LayoutList,
   Settings,
   Shield,
+  KeyRound,
+  UserCog,
   Package,
   Warehouse,
   Ticket,
@@ -84,9 +86,11 @@ export const ADMIN_MENU_GROUPS = [
   },
   {
     key: 'settings',
-    label: 'Settings',
+    label: 'Admin Management',
     items: [
       { key: 'admin-roles', label: 'Admin Roles', to: '/roles', icon: Shield },
+      { key: 'role-permissions', label: 'Role Permissions', to: '/role-permissions', icon: KeyRound },
+      { key: 'admin-users', label: 'Admin Users', to: '/admin-users', icon: UserCog },
     ],
   },
 ]
@@ -117,6 +121,8 @@ export const MENU_PERMISSION_MAP = {
   contacts: 'Contacts',
   reports: 'Reports',
   'admin-roles': 'Settings',
+  'role-permissions': 'Settings',
+  'admin-users': 'Admin Users',
 }
 
 export const ADMIN_ROUTE_META = {
@@ -138,7 +144,9 @@ export const ADMIN_ROUTE_META = {
   '/products/approved': { title: 'Approved Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'Approved' }] },
   '/products/sold': { title: 'Sold Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'Sold' }] },
   '/users': { title: 'Users', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Users' }] },
-  '/roles': { title: 'Admin Roles', breadcrumbs: [{ label: 'Settings', to: '/roles' }, { label: 'Admin Roles' }] },
+  '/roles': { title: 'Admin Roles', breadcrumbs: [{ label: 'Admin Management', to: '/roles' }, { label: 'Admin Roles' }] },
+  '/role-permissions': { title: 'Role Permissions', breadcrumbs: [{ label: 'Admin Management', to: '/roles' }, { label: 'Role Permissions' }] },
+  '/admin-users': { title: 'Admin Users', breadcrumbs: [{ label: 'Admin Management', to: '/roles' }, { label: 'Admin Users' }] },
   '/identity-verification': { title: 'Identity Verification', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Verification' }] },
   '/reports': { title: 'User Reports', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Reports' }] },
   '/field-types': { title: 'Field Types', breadcrumbs: [{ label: 'Catalog' }, { label: 'Field Types' }] },
@@ -170,7 +178,8 @@ export const ADMIN_MODULE_FORM_META = {
   'buyers-coupons': { listPath: '/buyers-coupons', section: 'Marketplace', label: 'Buyer Coupons', singular: 'Buyer Coupon' },
   transactions: { listPath: '/transactions', section: 'Marketplace', label: 'Transactions', singular: 'Transaction' },
   users: { listPath: '/users', section: 'Users & Support', label: 'Users', singular: 'User' },
-  roles: { listPath: '/roles', section: 'Settings', label: 'Admin Roles', singular: 'Role' },
+  roles: { listPath: '/roles', section: 'Admin Management', label: 'Admin Roles', singular: 'Role' },
+  'admin-users': { listPath: '/admin-users', section: 'Admin Management', label: 'Admin Users', singular: 'Admin User' },
   reports: { listPath: '/reports', section: 'Users & Support', label: 'Reports', singular: 'Report' },
 }
 
@@ -180,14 +189,14 @@ export function resolveAdminRouteMeta(pathname) {
   if (pathname.startsWith('/roles/') && pathname.includes('/permissions')) {
     return {
       title: 'Role Permissions',
-      breadcrumbs: [{ label: 'Settings', to: '/roles' }, { label: 'Permissions' }],
+      breadcrumbs: [{ label: 'Admin Management', to: '/roles' }, { label: 'Permissions' }],
     }
   }
 
   if (pathname.startsWith('/roles/') && pathname.includes('/assign')) {
     return {
       title: 'Assign Users',
-      breadcrumbs: [{ label: 'Settings', to: '/roles' }, { label: 'Assign Users' }],
+      breadcrumbs: [{ label: 'Admin Management', to: '/roles' }, { label: 'Assign Users' }],
     }
   }
 

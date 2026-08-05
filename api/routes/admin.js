@@ -1,5 +1,7 @@
 const express = require('express')
 const fs = require('fs')
+const path = require('path')
+const multer = require('multer')
 const router = express.Router()
 const Product = require('../models/Product')
 const User = require('../models/User')
@@ -13,6 +15,9 @@ const Filter = require('../models/Filter')
 const CategoryFilter = require('../models/CategoryFilter')
 const Dealer = require('../models/Dealer')
 const AdminRole = require('../models/AdminRole')
+const AdminUser = require('../models/AdminUser')
+const AdminRoleAssignment = require('../models/AdminRoleAssignment')
+const adminRoleAssignmentService = require('../services/adminRoleAssignmentService')
 const FieldType = require('../models/FieldType')
 const FormField = require('../models/FormField')
 const {
@@ -3469,7 +3474,7 @@ router.get('/roles', adminMiddleware, async (req, res) => {
   try {
     const { page = 1, limit = 50, search, status } = req.query
     const skip = (Number(page) - 1) * Number(limit)
-    const query = {}
+    const query = { isDeleted: { $ne: true } }
     if (search && String(search).trim()) {
       query.role_name = new RegExp(String(search).trim(), 'i')
     }
@@ -3481,8 +3486,8 @@ router.get('/roles', adminMiddleware, async (req, res) => {
 
     const roleIds = roles.map((r) => r._id)
     const userCounts = roleIds.length
-      ? await User.aggregate([
-          { $match: { adminRole: { $in: roleIds } } },
+      ? await AdminUser.aggregate([
+          { $match: { adminRole: { $in: roleIds }, isDeleted: { $ne: true } } },
           { $group: { _id: '$adminRole', count: { $sum: 1 } } },
         ])
       : []
@@ -3507,15 +3512,86 @@ router.get('/roles', adminMiddleware, async (req, res) => {
   }
 })
 
+// GET /api/admin/roles/export - export roles to Excel
+const ROLE_EXPORT_MAX_ROWS = 10000
+router.get('/roles/export', adminMiddleware, async (req, res) => {
+  try {
+    const { fromDate, toDate, search, status } = req.query
+    if (!fromDate || !toDate) {
+      return res.status(400).json({ message: 'From date and To date are required for export' })
+    }
+    const from = new Date(fromDate)
+    const to = new Date(toDate)
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      return res.status(400).json({ message: 'Invalid from date or to date' })
+    }
+    if (from.getTime() > to.getTime()) {
+      return res.status(400).json({ message: 'From date cannot be after To date' })
+    }
+    to.setHours(23, 59, 59, 999)
+
+    const query = { isDeleted: { $ne: true }, createdAt: { $gte: from, $lte: to } }
+    if (search && String(search).trim()) query.role_name = new RegExp(String(search).trim(), 'i')
+    if (status === 'active' || status === 'inactive') query.status = status
+
+    const [items, total] = await Promise.all([
+      AdminRole.find(query)
+        .populate('created_by', 'name email')
+        .sort({ createdAt: -1 })
+        .limit(ROLE_EXPORT_MAX_ROWS)
+        .lean(),
+      AdminRole.countDocuments(query),
+    ])
+    const truncated = total > items.length
+
+    const roleIds = items.map((r) => r._id)
+    const userCounts = roleIds.length
+      ? await AdminUser.aggregate([
+          { $match: { adminRole: { $in: roleIds }, isDeleted: { $ne: true } } },
+          { $group: { _id: '$adminRole', count: { $sum: 1 } } },
+        ])
+      : []
+    const countMap = Object.fromEntries(userCounts.map((c) => [String(c._id), c.count]))
+
+    const rows = items.map((r) => ({
+      'Role Name': r.role_name || '',
+      Description: r.description || '',
+      Status: r.status === 'inactive' ? 'Inactive' : 'Active',
+      'Assigned Users': countMap[String(r._id)] || 0,
+      'Created By': r.created_by?.name || r.created_by?.email || '',
+      'Created At': r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : '',
+    }))
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.json_to_sheet(
+      rows.length
+        ? rows
+        : [{ 'Role Name': '', Description: '', Status: '', 'Assigned Users': '', 'Created By': '', 'Created At': '' }]
+    )
+    worksheet['!cols'] = [{ wch: 24 }, { wch: 36 }, { wch: 10 }, { wch: 14 }, { wch: 22 }, { wch: 14 }]
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Admin Roles')
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="admin-roles-${fromDate}_${toDate}.xlsx"`)
+    res.setHeader('X-Export-Total', String(total))
+    res.setHeader('X-Export-Truncated', truncated ? '1' : '0')
+    res.setHeader('Access-Control-Expose-Headers', 'X-Export-Total, X-Export-Truncated, Content-Disposition')
+    res.send(buffer)
+  } catch (error) {
+    console.error('Error exporting roles:', error)
+    res.status(500).json({ message: 'Error exporting roles' })
+  }
+})
+
 // GET /api/admin/roles/:id - get a single role (with permissions matrix)
 router.get('/roles/:id', adminMiddleware, async (req, res) => {
   try {
     const { id } = req.params
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
-    const role = await AdminRole.findById(id).lean()
+    const role = await AdminRole.findOne({ _id: id, isDeleted: { $ne: true } }).lean()
     if (!role) return res.status(404).json({ message: 'Role not found' })
     const permissions = await getPermissionMatrixForRole(id)
-    const userCount = await User.countDocuments({ adminRole: id })
+    const userCount = await AdminUser.countDocuments({ adminRole: id, isDeleted: { $ne: true } })
     res.json({
       role: {
         ...role,
@@ -3559,6 +3635,7 @@ router.post('/roles', adminMiddleware, async (req, res) => {
       description: description ? String(description).trim() : '',
       status: status === 'inactive' ? 'inactive' : 'active',
       is_system: false,
+      created_by: req.user._id,
     })
     await role.save()
 
@@ -3585,7 +3662,7 @@ router.patch('/roles/:id', adminMiddleware, async (req, res) => {
   try {
     const { id } = req.params
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
-    const role = await AdminRole.findById(id)
+    const role = await AdminRole.findOne({ _id: id, isDeleted: { $ne: true } })
     if (!role) return res.status(404).json({ message: 'Role not found' })
     if (isSuperAdminRole(role)) {
       return res.status(403).json({ message: 'Super Admin role cannot be modified' })
@@ -3634,26 +3711,32 @@ router.patch('/roles/:id', adminMiddleware, async (req, res) => {
   }
 })
 
-// DELETE /api/admin/roles/:id - delete a role (unassigns users, clears role_permissions)
+// DELETE /api/admin/roles/:id - soft-delete a role (unassigns users, deactivates their assignments)
 router.delete('/roles/:id', adminMiddleware, async (req, res) => {
   try {
     const { id } = req.params
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
-    const role = await AdminRole.findById(id)
+    const role = await AdminRole.findOne({ _id: id, isDeleted: { $ne: true } })
     if (!role) return res.status(404).json({ message: 'Role not found' })
     if (isSuperAdminRole(role)) {
       return res.status(403).json({ message: 'Super Admin role cannot be deleted' })
     }
 
-    const usersWithRole = await User.countDocuments({ adminRole: id })
-    // Unassign the role from any users so the role can be deleted
+    const usersWithRole = await AdminUser.countDocuments({ adminRole: id, isDeleted: { $ne: true } })
+    // Unassign the role from any admin users so their permissions don't keep resolving to a deleted role
     if (usersWithRole > 0) {
-      await User.updateMany({ adminRole: id }, { $set: { adminRole: null } })
+      await AdminUser.updateMany({ adminRole: id }, { $set: { adminRole: null } })
     }
+    // Keep admin_role_assignments consistent with the now-deleted role.
+    await AdminRoleAssignment.updateMany(
+      { roleId: id, isDeleted: false },
+      { $set: { status: 'inactive', isDeleted: true } }
+    )
 
-    const RolePermission = require('../models/RolePermission')
-    await RolePermission.deleteMany({ role_id: id })
-    await AdminRole.findByIdAndDelete(id)
+    // Soft delete — role_permissions are left intact for audit/history.
+    role.isDeleted = true
+    role.status = 'inactive'
+    await role.save()
 
     res.json({
       message: usersWithRole > 0
@@ -3738,65 +3821,596 @@ router.get('/permissions', adminMiddleware, async (req, res) => {
   }
 })
 
-// GET /api/admin/roles/:id/users - list users assigned to a role
-router.get('/roles/:id/users', adminMiddleware, async (req, res) => {
+// ---------------------------------------------------------------------------
+// Assign Users - mapping layer between Admin Users and Admin Roles
+// Collection: admin_role_assignments
+//
+// This does NOT duplicate role/permission logic — it keeps `AdminUser.adminRole`
+// (already read everywhere: adminMiddleware, checkPermission,
+// getPermissionMapForRole) in sync, so a user's effective permissions update
+// immediately through the existing pipeline.
+// ---------------------------------------------------------------------------
+
+const ASSIGNMENT_POPULATE = [
+  { path: 'adminUserId', select: 'name email status role' },
+  { path: 'roleId', select: 'role_name status is_system' },
+  { path: 'assignedBy', select: 'name email' },
+]
+
+// GET /api/admin/role-assignments - list assignments (search/filter/sort/paginate)
+router.get('/role-assignments', adminMiddleware, async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      roleId,
+      status,
+      fromDate,
+      toDate,
+      sortBy = 'assignedAt',
+      sortDir = 'desc',
+    } = req.query
+    const skip = (Number(page) - 1) * Number(limit)
+
+    const query = { isDeleted: false }
+    if (roleId && Types.ObjectId.isValid(roleId)) query.roleId = roleId
+    if (status === 'active' || status === 'inactive') query.status = status
+    if (fromDate || toDate) {
+      query.assignedAt = {}
+      if (fromDate) {
+        const from = new Date(fromDate)
+        if (!Number.isNaN(from.getTime())) query.assignedAt.$gte = from
+      }
+      if (toDate) {
+        const to = new Date(toDate)
+        if (!Number.isNaN(to.getTime())) {
+          to.setHours(23, 59, 59, 999)
+          query.assignedAt.$lte = to
+        }
+      }
+    }
+
+    // Search by admin name or email — resolve matching users first since
+    // assignments only store the FK.
+    if (search && String(search).trim()) {
+      const re = new RegExp(String(search).trim(), 'i')
+      const userIds = await User.find({ $or: [{ name: re }, { email: re }] }).distinct('_id')
+      query.adminUserId = { $in: userIds }
+    }
+
+    const allowedSortFields = { assignedAt: 1, createdAt: 1, status: 1 }
+    const sortField = allowedSortFields[sortBy] !== undefined ? sortBy : 'assignedAt'
+    const sort = { [sortField]: sortDir === 'asc' ? 1 : -1 }
+
+    const [assignments, total] = await Promise.all([
+      AdminRoleAssignment.find(query)
+        .populate(ASSIGNMENT_POPULATE)
+        .sort(sort)
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      AdminRoleAssignment.countDocuments(query),
+    ])
+
+    res.json({
+      assignments,
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      hasMore: skip + assignments.length < total,
+    })
+  } catch (error) {
+    console.error('Error fetching role assignments:', error)
+    res.status(500).json({ message: 'Error fetching role assignments' })
+  }
+})
+
+// GET /api/admin/role-assignments/export - export assignments to Excel
+const ASSIGNMENT_EXPORT_MAX_ROWS = 10000
+router.get('/role-assignments/export', adminMiddleware, async (req, res) => {
+  try {
+    const { fromDate, toDate, search, roleId, status } = req.query
+    if (!fromDate || !toDate) {
+      return res.status(400).json({ message: 'From date and To date are required for export' })
+    }
+    const from = new Date(fromDate)
+    const to = new Date(toDate)
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      return res.status(400).json({ message: 'Invalid from date or to date' })
+    }
+    if (from.getTime() > to.getTime()) {
+      return res.status(400).json({ message: 'From date cannot be after To date' })
+    }
+    to.setHours(23, 59, 59, 999)
+
+    const query = { isDeleted: false, assignedAt: { $gte: from, $lte: to } }
+    if (roleId && Types.ObjectId.isValid(roleId)) query.roleId = roleId
+    if (status === 'active' || status === 'inactive') query.status = status
+    if (search && String(search).trim()) {
+      const re = new RegExp(String(search).trim(), 'i')
+      const userIds = await User.find({ $or: [{ name: re }, { email: re }] }).distinct('_id')
+      query.adminUserId = { $in: userIds }
+    }
+
+    const [items, total] = await Promise.all([
+      AdminRoleAssignment.find(query)
+        .populate(ASSIGNMENT_POPULATE)
+        .sort({ assignedAt: -1 })
+        .limit(ASSIGNMENT_EXPORT_MAX_ROWS)
+        .lean(),
+      AdminRoleAssignment.countDocuments(query),
+    ])
+    const truncated = total > items.length
+
+    const rows = items.map((a) => ({
+      'Admin Name': a.adminUserId?.name || '',
+      'Admin Email': a.adminUserId?.email || '',
+      Role: a.roleId?.role_name || '',
+      Status: a.status === 'inactive' ? 'Inactive' : 'Active',
+      'Assigned By': a.assignedBy?.name || a.assignedBy?.email || '',
+      'Assigned At': a.assignedAt ? new Date(a.assignedAt).toISOString().slice(0, 10) : '',
+      Notes: a.notes || '',
+    }))
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.json_to_sheet(
+      rows.length
+        ? rows
+        : [{ 'Admin Name': '', 'Admin Email': '', Role: '', Status: '', 'Assigned By': '', 'Assigned At': '', Notes: '' }]
+    )
+    worksheet['!cols'] = [
+      { wch: 24 }, { wch: 28 }, { wch: 20 }, { wch: 10 }, { wch: 22 }, { wch: 14 }, { wch: 30 },
+    ]
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Assign Users')
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="role-assignments-${fromDate}_${toDate}.xlsx"`)
+    res.setHeader('X-Export-Total', String(total))
+    res.setHeader('X-Export-Truncated', truncated ? '1' : '0')
+    res.setHeader('Access-Control-Expose-Headers', 'X-Export-Total, X-Export-Truncated, Content-Disposition')
+    res.send(buffer)
+  } catch (error) {
+    console.error('Error exporting role assignments:', error)
+    res.status(500).json({ message: 'Error exporting role assignments' })
+  }
+})
+
+// GET /api/admin/role-assignments/:id - view a single assignment
+router.get('/role-assignments/:id', adminMiddleware, async (req, res) => {
   try {
     const { id } = req.params
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
-    const role = await AdminRole.findById(id).lean()
-    if (!role) return res.status(404).json({ message: 'Role not found' })
-    const users = await User.find({ adminRole: id })
-      .select('name email phone role status adminRole createdAt')
-      .sort({ name: 1 })
+    const assignment = await AdminRoleAssignment.findOne({ _id: id, isDeleted: false })
+      .populate(ASSIGNMENT_POPULATE)
       .lean()
-    res.json({ role, users })
+    if (!assignment) return res.status(404).json({ message: 'Assignment not found' })
+    res.json({ assignment })
   } catch (error) {
-    console.error('Error fetching role users:', error)
-    res.status(500).json({ message: 'Error fetching role users' })
+    console.error('Error fetching role assignment:', error)
+    res.status(500).json({ message: 'Error fetching assignment' })
+  }
+})
+
+// POST /api/admin/role-assignments - assign a role to an admin user
+router.post('/role-assignments', adminMiddleware, async (req, res) => {
+  try {
+    const { adminUserId, roleId, status = 'active', notes } = req.body
+    const assignment = await adminRoleAssignmentService.assignRole({
+      adminUserId,
+      roleId,
+      status,
+      notes,
+      assignedBy: req.user._id,
+    })
+    res.status(201).json({ message: 'Role assigned', assignment })
+  } catch (error) {
+    if (error instanceof adminRoleAssignmentService.AssignmentError) {
+      return res.status(error.statusCode).json({ message: error.message })
+    }
+    console.error('Error creating role assignment:', error)
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'This user already has an active role assignment' })
+    }
+    res.status(500).json({ message: 'Error assigning role' })
+  }
+})
+
+// PATCH /api/admin/role-assignments/:id - update an assignment (role/status/notes)
+router.patch('/role-assignments/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { roleId, status, notes } = req.body
+    const assignment = await adminRoleAssignmentService.updateAssignment(req.params.id, { roleId, status, notes })
+    res.json({ message: 'Assignment updated', assignment })
+  } catch (error) {
+    if (error instanceof adminRoleAssignmentService.AssignmentError) {
+      return res.status(error.statusCode).json({ message: error.message })
+    }
+    console.error('Error updating role assignment:', error)
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'This user already has an active role assignment' })
+    }
+    res.status(500).json({ message: 'Error updating assignment' })
+  }
+})
+
+// DELETE /api/admin/role-assignments/:id - unassign a role (soft delete, revokes permissions)
+router.delete('/role-assignments/:id', adminMiddleware, async (req, res) => {
+  try {
+    await adminRoleAssignmentService.unassignRole(req.params.id)
+    res.json({ message: 'Role assignment removed' })
+  } catch (error) {
+    if (error instanceof adminRoleAssignmentService.AssignmentError) {
+      return res.status(error.statusCode).json({ message: error.message })
+    }
+    console.error('Error deleting role assignment:', error)
+    res.status(500).json({ message: 'Error removing assignment' })
   }
 })
 
 // ---------------------------------------------------------------------------
-// Update user admin role assignment
+// Admin Users - a completely separate module backed by its OWN `admin_users`
+// collection (AdminUser model). No relationship to the marketplace `users`
+// collection whatsoever — different table, different auth (see
+// routes/adminAuth.js + middleware/admin.js), different lifecycle. Role
+// assignment is delegated to adminRoleAssignmentService so admin_role_assignments
+// stays the single source of truth (no duplicated assignment logic).
 // ---------------------------------------------------------------------------
 
-// PUT /api/admin/users/:id/admin-role - assign admin role to user
-router.put('/users/:id/admin-role', adminMiddleware, async (req, res) => {
-  try {
-    const { adminRole } = req.body
-    const user = await User.findById(req.params.id)
-    if (!user) return res.status(404).json({ message: 'User not found' })
-    if (adminRole) {
-      if (!Types.ObjectId.isValid(adminRole)) {
-        return res.status(400).json({ message: 'Invalid admin role ID' })
-      }
-      const roleDoc = await AdminRole.findById(adminRole)
-      if (!roleDoc) return res.status(404).json({ message: 'Admin role not found' })
-      if (roleDoc.status !== 'active') {
-        return res.status(400).json({ message: 'Cannot assign an inactive role' })
-      }
-      user.adminRole = roleDoc._id
-      if (user.role !== 'admin') {
-        user.role = 'admin'
-      }
-    } else {
-      user.adminRole = null
+const adminAvatarUploadDir = path.join(__dirname, '../uploads/images')
+if (!fs.existsSync(adminAvatarUploadDir)) {
+  fs.mkdirSync(adminAvatarUploadDir, { recursive: true })
+}
+const adminAvatarStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, adminAvatarUploadDir),
+  filename: (req, file, cb) => {
+    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9)
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg'
+    cb(null, `admin-avatar-${unique}${ext}`)
+  },
+})
+const adminAvatarUpload = multer({
+  storage: adminAvatarStorage,
+  limits: { fileSize: 2 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    const allowedExts = ['.jpg', '.jpeg', '.png']
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/jpg']
+    const ext = path.extname(file.originalname || '').toLowerCase()
+    if (allowedMimes.includes(file.mimetype) && allowedExts.includes(ext)) cb(null, true)
+    else cb(new Error('Only JPG, JPEG, or PNG images are allowed'), false)
+  },
+})
+/** Wraps multer so file-type/size errors come back as JSON, not an HTML 500 page. */
+function handleProfileImageUpload(req, res, next) {
+  adminAvatarUpload.single('profileImage')(req, res, (err) => {
+    if (err) {
+      const message = err.code === 'LIMIT_FILE_SIZE' ? 'Profile image must be 2 MB or smaller' : err.message
+      return res.status(400).json({ message: message || 'Invalid profile image upload' })
     }
-    await user.save()
-    const populated = await User.findById(user._id).populate('adminRole', 'role_name status is_system')
+    next()
+  })
+}
+
+const ADMIN_USER_SELECT = '-password'
+const ADMIN_USER_POPULATE = [
+  { path: 'adminRole', select: 'role_name status is_system' },
+  { path: 'createdBy', select: 'name email' },
+]
+
+async function assertUniqueContactDetails({ email, phone, excludeId }) {
+  if (email) {
+    const dupEmail = await AdminUser.findOne({ email, ...(excludeId ? { _id: { $ne: excludeId } } : {}) }).select('_id')
+    if (dupEmail) throw Object.assign(new Error('This email is already in use'), { statusCode: 400 })
+  }
+  if (phone) {
+    const dupPhone = await AdminUser.findOne({ phone, ...(excludeId ? { _id: { $ne: excludeId } } : {}) }).select('_id')
+    if (dupPhone) throw Object.assign(new Error('This mobile number is already in use'), { statusCode: 400 })
+  }
+}
+
+// GET /api/admin/admin-users - list admin accounts (search/filter/sort/paginate)
+router.get('/admin-users', adminMiddleware, async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      roleId,
+      status,
+      sortBy = 'createdAt',
+      sortDir = 'desc',
+    } = req.query
+    const skip = (Number(page) - 1) * Number(limit)
+
+    const query = { isDeleted: { $ne: true } }
+    if (search && String(search).trim()) {
+      const re = new RegExp(String(search).trim(), 'i')
+      query.$or = [{ name: re }, { email: re }, { phone: re }]
+    }
+    if (roleId && Types.ObjectId.isValid(roleId)) query.adminRole = roleId
+    if (status === 'active' || status === 'inactive') query.status = status
+
+    const allowedSortFields = { createdAt: 1, name: 1, email: 1, lastLoginAt: 1 }
+    const sortField = allowedSortFields[sortBy] !== undefined ? sortBy : 'createdAt'
+    const sort = { [sortField]: sortDir === 'asc' ? 1 : -1 }
+
+    const [adminUsers, total] = await Promise.all([
+      AdminUser.find(query)
+        .select(ADMIN_USER_SELECT)
+        .populate(ADMIN_USER_POPULATE)
+        .sort(sort)
+        .skip(skip)
+        .limit(Number(limit))
+        .lean(),
+      AdminUser.countDocuments(query),
+    ])
+
     res.json({
-      message: 'Admin role updated',
-      user: {
-        _id: populated._id,
-        name: populated.name,
-        email: populated.email,
-        role: populated.role,
-        adminRole: populated.adminRole,
-      },
+      adminUsers,
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      hasMore: skip + adminUsers.length < total,
     })
   } catch (error) {
-    console.error('Error updating user admin role:', error)
-    res.status(500).json({ message: 'Error updating admin role' })
+    console.error('Error fetching admin users:', error)
+    res.status(500).json({ message: 'Error fetching admin users' })
+  }
+})
+
+// GET /api/admin/admin-users/export - export admin accounts to Excel
+const ADMIN_USER_EXPORT_MAX_ROWS = 10000
+router.get('/admin-users/export', adminMiddleware, async (req, res) => {
+  try {
+    const { fromDate, toDate, search, roleId, status } = req.query
+    if (!fromDate || !toDate) {
+      return res.status(400).json({ message: 'From date and To date are required for export' })
+    }
+    const from = new Date(fromDate)
+    const to = new Date(toDate)
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+      return res.status(400).json({ message: 'Invalid from date or to date' })
+    }
+    if (from.getTime() > to.getTime()) {
+      return res.status(400).json({ message: 'From date cannot be after To date' })
+    }
+    to.setHours(23, 59, 59, 999)
+
+    const query = { isDeleted: { $ne: true }, createdAt: { $gte: from, $lte: to } }
+    if (roleId && Types.ObjectId.isValid(roleId)) query.adminRole = roleId
+    if (status === 'active' || status === 'inactive') query.status = status
+    if (search && String(search).trim()) {
+      const re = new RegExp(String(search).trim(), 'i')
+      query.$or = [{ name: re }, { email: re }, { phone: re }]
+    }
+
+    const [items, total] = await Promise.all([
+      AdminUser.find(query)
+        .select(ADMIN_USER_SELECT)
+        .populate(ADMIN_USER_POPULATE)
+        .sort({ createdAt: -1 })
+        .limit(ADMIN_USER_EXPORT_MAX_ROWS)
+        .lean(),
+      AdminUser.countDocuments(query),
+    ])
+    const truncated = total > items.length
+
+    const rows = items.map((u) => ({
+      Name: u.name || '',
+      Email: u.email || '',
+      'Mobile Number': u.phone || '',
+      Role: u.adminRole?.role_name || '',
+      Status: u.status === 'inactive' ? 'Inactive' : 'Active',
+      'Last Login': u.lastLoginAt ? new Date(u.lastLoginAt).toISOString().slice(0, 10) : 'Never',
+      'Created By': u.createdBy?.name || u.createdBy?.email || '',
+      'Created At': u.createdAt ? new Date(u.createdAt).toISOString().slice(0, 10) : '',
+    }))
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.json_to_sheet(
+      rows.length
+        ? rows
+        : [{ Name: '', Email: '', 'Mobile Number': '', Role: '', Status: '', 'Last Login': '', 'Created By': '', 'Created At': '' }]
+    )
+    worksheet['!cols'] = [
+      { wch: 24 }, { wch: 28 }, { wch: 16 }, { wch: 20 }, { wch: 10 }, { wch: 14 }, { wch: 22 }, { wch: 14 },
+    ]
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Admin Users')
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="admin-users-${fromDate}_${toDate}.xlsx"`)
+    res.setHeader('X-Export-Total', String(total))
+    res.setHeader('X-Export-Truncated', truncated ? '1' : '0')
+    res.setHeader('Access-Control-Expose-Headers', 'X-Export-Total, X-Export-Truncated, Content-Disposition')
+    res.send(buffer)
+  } catch (error) {
+    console.error('Error exporting admin users:', error)
+    res.status(500).json({ message: 'Error exporting admin users' })
+  }
+})
+
+// GET /api/admin/admin-users/:id - view a single admin account
+router.get('/admin-users/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
+    const adminUser = await AdminUser.findOne({ _id: id, isDeleted: { $ne: true } })
+      .select(ADMIN_USER_SELECT)
+      .populate(ADMIN_USER_POPULATE)
+      .lean()
+    if (!adminUser) return res.status(404).json({ message: 'Admin user not found' })
+    res.json({ adminUser })
+  } catch (error) {
+    console.error('Error fetching admin user:', error)
+    res.status(500).json({ message: 'Error fetching admin user' })
+  }
+})
+
+// POST /api/admin/admin-users - create an admin account (+ optional profile image)
+router.post('/admin-users', adminMiddleware, handleProfileImageUpload, async (req, res) => {
+  let createdAdminUser = null
+  try {
+    const { name, mobileNumber, phone, email, password, confirmPassword, roleId, status = 'active' } = req.body
+    const mobile = String(mobileNumber || phone || '').trim()
+    const trimmedName = String(name || '').trim()
+    const normalizedEmail = String(email || '').trim().toLowerCase()
+
+    if (!trimmedName) return res.status(400).json({ message: 'User name is required' })
+    if (!mobile) return res.status(400).json({ message: 'Mobile number is required' })
+    if (!normalizedEmail) return res.status(400).json({ message: 'Email is required' })
+    if (!password || String(password).length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters' })
+    }
+    if (password !== confirmPassword) {
+      return res.status(400).json({ message: 'Password and Confirm Password do not match' })
+    }
+    if (!roleId || !Types.ObjectId.isValid(roleId)) {
+      return res.status(400).json({ message: 'A valid role is required' })
+    }
+
+    await assertUniqueContactDetails({ email: normalizedEmail, phone: mobile })
+
+    createdAdminUser = new AdminUser({
+      name: trimmedName,
+      phone: mobile,
+      email: normalizedEmail,
+      password,
+      status: status === 'inactive' ? 'inactive' : 'active',
+      avatar: req.file ? `/uploads/images/${req.file.filename}` : null,
+      createdBy: req.user._id,
+    })
+    await createdAdminUser.save()
+
+    // Single source of truth for role assignment — validates the role is
+    // active, prevents duplicates, enforces one-active-role-per-user, and
+    // syncs AdminUser.adminRole so permissions apply immediately.
+    await adminRoleAssignmentService.assignRole({
+      adminUserId: createdAdminUser._id,
+      roleId,
+      status: 'active',
+      assignedBy: req.user._id,
+    })
+
+    const populated = await AdminUser.findById(createdAdminUser._id).select(ADMIN_USER_SELECT).populate(ADMIN_USER_POPULATE).lean()
+    res.status(201).json({ message: 'Admin user created', adminUser: populated })
+  } catch (error) {
+    if (createdAdminUser?._id) {
+      // Roll back the admin user record if role assignment failed, so we
+      // never leave a roleless admin account behind.
+      await AdminUser.deleteOne({ _id: createdAdminUser._id }).catch(() => {})
+    }
+    if (error instanceof adminRoleAssignmentService.AssignmentError || error.statusCode) {
+      return res.status(error.statusCode || 400).json({ message: error.message })
+    }
+    console.error('Error creating admin user:', error)
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Email or mobile number already in use' })
+    }
+    res.status(500).json({ message: 'Error creating admin user' })
+  }
+})
+
+// PATCH /api/admin/admin-users/:id - update an admin account (+ optional profile image)
+router.patch('/admin-users/:id', adminMiddleware, handleProfileImageUpload, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
+    const adminUser = await AdminUser.findOne({ _id: id, isDeleted: { $ne: true } })
+    if (!adminUser) return res.status(404).json({ message: 'Admin user not found' })
+
+    const { name, mobileNumber, phone, email, password, confirmPassword, roleId, status } = req.body
+    const mobile = mobileNumber !== undefined || phone !== undefined ? String(mobileNumber || phone || '').trim() : undefined
+    const normalizedEmail = email !== undefined ? String(email).trim().toLowerCase() : undefined
+
+    if (name !== undefined) {
+      const trimmedName = String(name).trim()
+      if (!trimmedName) return res.status(400).json({ message: 'User name cannot be empty' })
+      adminUser.name = trimmedName
+    }
+    if (mobile !== undefined) {
+      if (!mobile) return res.status(400).json({ message: 'Mobile number cannot be empty' })
+      adminUser.phone = mobile
+    }
+    if (normalizedEmail !== undefined) {
+      if (!normalizedEmail) return res.status(400).json({ message: 'Email cannot be empty' })
+      adminUser.email = normalizedEmail
+    }
+    if (status !== undefined) adminUser.status = status === 'inactive' ? 'inactive' : 'active'
+
+    await assertUniqueContactDetails({ email: normalizedEmail, phone: mobile, excludeId: id })
+
+    if (password) {
+      if (String(password).length < 6) {
+        return res.status(400).json({ message: 'Password must be at least 6 characters' })
+      }
+      if (password !== confirmPassword) {
+        return res.status(400).json({ message: 'Password and Confirm Password do not match' })
+      }
+      adminUser.password = password
+    }
+
+    if (req.file) {
+      adminUser.avatar = `/uploads/images/${req.file.filename}`
+    }
+
+    await adminUser.save()
+
+    if (roleId !== undefined && roleId && String(roleId) !== String(adminUser.adminRole || '')) {
+      if (!Types.ObjectId.isValid(roleId)) return res.status(400).json({ message: 'Invalid role' })
+      const activeAssignment = await AdminRoleAssignment.findOne({
+        adminUserId: id,
+        isDeleted: false,
+        status: 'active',
+      })
+      if (activeAssignment) {
+        await adminRoleAssignmentService.updateAssignment(activeAssignment._id, { roleId })
+      } else {
+        await adminRoleAssignmentService.assignRole({
+          adminUserId: id,
+          roleId,
+          status: 'active',
+          assignedBy: req.user._id,
+        })
+      }
+    }
+
+    const populated = await AdminUser.findById(id).select(ADMIN_USER_SELECT).populate(ADMIN_USER_POPULATE).lean()
+    res.json({ message: 'Admin user updated', adminUser: populated })
+  } catch (error) {
+    if (error instanceof adminRoleAssignmentService.AssignmentError || error.statusCode) {
+      return res.status(error.statusCode || 400).json({ message: error.message })
+    }
+    console.error('Error updating admin user:', error)
+    if (error.code === 11000) {
+      return res.status(400).json({ message: 'Email or mobile number already in use' })
+    }
+    res.status(500).json({ message: 'Error updating admin user' })
+  }
+})
+
+// DELETE /api/admin/admin-users/:id - soft-delete an admin account (revokes role/permissions)
+router.delete('/admin-users/:id', adminMiddleware, async (req, res) => {
+  try {
+    const { id } = req.params
+    if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
+    const adminUser = await AdminUser.findOne({ _id: id, isDeleted: { $ne: true } })
+    if (!adminUser) return res.status(404).json({ message: 'Admin user not found' })
+
+    if (String(adminUser._id) === String(req.user._id)) {
+      return res.status(400).json({ message: 'You cannot remove your own admin account' })
+    }
+
+    adminUser.isDeleted = true
+    adminUser.status = 'inactive'
+    await adminUser.save()
+
+    // Revoke whichever assignment currently grants this user their role.
+    await adminRoleAssignmentService.revokeActiveAssignmentForUser(id)
+
+    res.json({ message: 'Admin user removed' })
+  } catch (error) {
+    console.error('Error deleting admin user:', error)
+    res.status(500).json({ message: 'Error removing admin user' })
   }
 })
 

@@ -1,5 +1,5 @@
 import { useSelector } from 'react-redux'
-import { selectPermissions } from '@shared/store/slices/authSlice'
+import { selectAdminPermissions } from '../store/adminAuthSlice'
 
 /**
  * Hook for checking admin module permissions.
@@ -7,7 +7,7 @@ import { selectPermissions } from '@shared/store/slices/authSlice'
  * for backward compatibility.
  */
 export function usePermission(moduleName) {
-  const permissions = useSelector(selectPermissions)
+  const permissions = useSelector(selectAdminPermissions)
 
   const has = (action) => {
     if (!permissions) return true

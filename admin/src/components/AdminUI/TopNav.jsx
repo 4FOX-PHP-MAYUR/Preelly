@@ -2,14 +2,14 @@ import React, { useMemo } from 'react'
 import { Menu, LogOut, Sun, Moon, User } from 'lucide-react'
 import { useSelector, useDispatch } from 'react-redux'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { selectUser, logout } from '@shared/store/slices/authSlice'
+import { selectAdminUser, logoutAdmin } from '../../store/adminAuthSlice'
 import { getMediaUrl } from '@shared/utils/helpers'
 import Breadcrumbs from './Breadcrumbs'
 import { ADMIN_TAB_META, resolveAdminRouteMeta } from './adminNavConfig'
 import { useAdminTheme } from './AdminThemeContext'
 
 function TopNav({ onMenuClick }) {
-  const user = useSelector(selectUser)
+  const user = useSelector(selectAdminUser)
   const dispatch = useDispatch()
   const navigate = useNavigate()
   const location = useLocation()
@@ -29,7 +29,7 @@ function TopNav({ onMenuClick }) {
   }, [location.pathname, searchParams])
 
   const handleLogout = () => {
-    dispatch(logout('user-click'))
+    dispatch(logoutAdmin())
     navigate('/login')
   }
 

@@ -1,11 +1,10 @@
 import { Navigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import {
-  selectAuthHydrating,
-  selectIsAuthenticated,
-  selectIsAdmin,
-  selectPermissions,
-} from '@shared/store/slices/authSlice'
+  selectAdminAuthHydrating,
+  selectIsAdminAuthenticated,
+  selectAdminPermissions,
+} from '../store/adminAuthSlice'
 import { ROUTE_PERMISSION_MAP } from '../utils/adminPermissions'
 import ForbiddenPage from '../pages/ForbiddenPage'
 
@@ -14,14 +13,12 @@ import ForbiddenPage from '../pages/ForbiddenPage'
  * Direct URL access without permission shows 403.
  */
 function PermissionRoute({ module: moduleName, action = 'can_view', children }) {
-  const isAuthenticated = useSelector(selectIsAuthenticated)
-  const isAdmin = useSelector(selectIsAdmin)
-  const hydrating = useSelector(selectAuthHydrating)
-  const permissions = useSelector(selectPermissions)
+  const isAuthenticated = useSelector(selectIsAdminAuthenticated)
+  const hydrating = useSelector(selectAdminAuthHydrating)
+  const permissions = useSelector(selectAdminPermissions)
 
   if (hydrating) return null
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (!isAdmin) return <Navigate to="/login" replace />
 
   // null permissions = unrestricted (legacy admins without a role)
   if (permissions && moduleName) {

@@ -3,12 +3,11 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import AdminLayout from './components/Layout/AdminLayout'
 import {
-  initializeAuth,
-  selectAuthHydrating,
-  selectIsAuthenticated,
-  selectIsAdmin,
-  selectPermissions,
-} from '@shared/store/slices/authSlice'
+  fetchAdminSession,
+  selectAdminAuthHydrating,
+  selectIsAdminAuthenticated,
+  selectAdminPermissions,
+} from './store/adminAuthSlice'
 import PermissionRoute from './components/PermissionRoute'
 import ForbiddenPage from './pages/ForbiddenPage'
 
@@ -29,6 +28,8 @@ const AdminBuyersCouponsRoutes = lazy(() => import('./pages/buyers-coupons'))
 const AdminTransactionsRoutes = lazy(() => import('./pages/transactions'))
 const AdminReportsRoutes = lazy(() => import('./pages/reports'))
 const AdminRolesRoutes = lazy(() => import('./pages/roles'))
+const AdminRolePermissionsRoutes = lazy(() => import('./pages/role-permissions'))
+const AdminAdminUsersRoutes = lazy(() => import('./pages/admin-users'))
 const AdminIdentityVerificationPage = lazy(() => import('./pages/AdminIdentityVerificationPage'))
 const AdminFieldTypesRoutes = lazy(() => import('./pages/field-types'))
 const AdminFormFieldsRoutes = lazy(() => import('./pages/form-fields'))
@@ -36,12 +37,10 @@ const ProductDetailPage = lazy(() => import('@shared/pages/ProductDetailPage'))
 const ChatThreadPage = lazy(() => import('@shared/pages/ChatThreadPage'))
 
 function AdminRoute({ children }) {
-  const isAuthenticated = useSelector(selectIsAuthenticated)
-  const isAdmin = useSelector(selectIsAdmin)
-  const hydrating = useSelector(selectAuthHydrating)
+  const isAuthenticated = useSelector(selectIsAdminAuthenticated)
+  const hydrating = useSelector(selectAdminAuthHydrating)
   if (hydrating) return null
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (!isAdmin) return <Navigate to="/login" replace />
   return children
 }
 
@@ -61,14 +60,12 @@ function ModulePermissionRoute({ module, children }) {
 /** Dashboard tabs map to modules; block direct ?tab= access without View. */
 function DashboardPermissionGate({ children }) {
   const location = useLocation()
-  const permissions = useSelector(selectPermissions)
-  const hydrating = useSelector(selectAuthHydrating)
-  const isAuthenticated = useSelector(selectIsAuthenticated)
-  const isAdmin = useSelector(selectIsAdmin)
+  const permissions = useSelector(selectAdminPermissions)
+  const hydrating = useSelector(selectAdminAuthHydrating)
+  const isAuthenticated = useSelector(selectIsAdminAuthenticated)
 
   if (hydrating) return null
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (!isAdmin) return <Navigate to="/login" replace />
 
   if (permissions) {
     const params = new URLSearchParams(location.search)
@@ -100,7 +97,7 @@ function App() {
   useEffect(() => {
     if (authBootstrappedRef.current) return
     authBootstrappedRef.current = true
-    dispatch(initializeAuth())
+    dispatch(fetchAdminSession())
   }, [dispatch])
 
   return (
@@ -281,6 +278,22 @@ function App() {
             element={
               <ModulePermissionRoute module="Settings">
                 <AdminRolesRoutes />
+              </ModulePermissionRoute>
+            }
+          />
+          <Route
+            path="/role-permissions"
+            element={
+              <PermissionRoute module="Settings" action="can_view">
+                <AdminRolePermissionsRoutes />
+              </PermissionRoute>
+            }
+          />
+          <Route
+            path="/admin-users/*"
+            element={
+              <ModulePermissionRoute module="Admin Users">
+                <AdminAdminUsersRoutes />
               </ModulePermissionRoute>
             }
           />

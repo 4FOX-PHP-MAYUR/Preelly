@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import { adminService } from '@/services/api'
-import { selectIsAdmin, selectUser } from '@shared/store/slices/authSlice'
+import { selectIsAdminAuthenticated } from '../store/adminAuthSlice'
 import {
   Package,
   CheckCircle,
@@ -43,8 +43,7 @@ function AdminDashboardPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
-  const user = useSelector(selectUser)
-  const isAdmin = useSelector(selectIsAdmin)
+  const isAdmin = useSelector(selectIsAdminAuthenticated)
   const { canEdit: canEditListing } = usePermission('Listings')
   const [pendingProducts, setPendingProducts] = useState([])
   const [allProducts, setAllProducts] = useState([])

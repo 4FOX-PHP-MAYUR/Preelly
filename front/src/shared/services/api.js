@@ -243,6 +243,13 @@ export const testimonialService = {
   listActiveTestimonials: (config) => api.get('/v1/web/testimonials', config),
 }
 
+// Dynamic content pages (public web API — `pages` collection)
+// Powers the `/pages/:slug` route: any page created in the admin panel is
+// automatically reachable here with no code changes.
+export const pageService = {
+  getPageBySlug: (slug, config) => api.get(`/v1/web/pages/${slug}`, config),
+}
+
 // Public checkout-service add-ons (Pay Through Preelly, Pick & Drop, …).
 export const checkoutServicePublicService = {
   listActiveCheckoutServices: (config) => api.get('/v1/web/checkout-services', config),

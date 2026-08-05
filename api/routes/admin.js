@@ -67,6 +67,13 @@ const {
   toTestimonialDto,
   toTestimonialListDto,
 } = require('../dto/testimonial.dto')
+const pageService = require('../core/services/pageService')
+const pageValidator = require('../core/validators/page.validator')
+const {
+  toPaginatedPagesResponse,
+  toPageDto,
+  toPageListDto,
+} = require('../dto/page.dto')
 const {
   resolveTableConfig,
   validateTableConfig,
@@ -3213,6 +3220,203 @@ router.delete(
     } catch (error) {
       console.error('Error deleting testimonial:', error)
       res.status(error.statusCode || 500).json({ message: error.message || 'Error deleting testimonial' })
+    }
+  }
+)
+
+// ---------------------------------------------------------------------------
+// Pages (dynamic static content pages — About Us, Privacy Policy, …)
+// ---------------------------------------------------------------------------
+
+const PAGE_BANNER_IMAGE_MAX_BYTES = 5 * 1024 * 1024 // 5MB
+
+/** Multer writes images into uploads/images — expose the public relative path. */
+function resolvePageBannerImage(req) {
+  return req.file ? `/uploads/images/${req.file.filename}` : null
+}
+
+/** Rejects an uploaded banner image that exceeds the size cap; removes the temp file. */
+function enforcePageBannerImageSize(req, res, next) {
+  if (req.file && req.file.size > PAGE_BANNER_IMAGE_MAX_BYTES) {
+    fs.unlink(req.file.path, () => {})
+    return res.status(400).json({ message: 'Page banner image must be 5MB or smaller' })
+  }
+  next()
+}
+
+// GET /api/admin/pages - paginated list with search + filters
+router.get(
+  '/pages',
+  adminMiddleware,
+  pageValidator.listQueryRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const {
+        page = 1,
+        limit = 20,
+        search,
+        slug,
+        status,
+        fromDate,
+        toDate,
+        sortBy = 'displayOrder',
+        sortDir = 'asc',
+      } = req.query
+      const result = await pageService.listPages({
+        page: Number(page),
+        limit: Number(limit),
+        search,
+        slug,
+        status: status || 'all',
+        fromDate,
+        toDate,
+        sortBy,
+        sortDir,
+      })
+      res.json(toPaginatedPagesResponse(result))
+    } catch (error) {
+      console.error('Error fetching pages:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching pages' })
+    }
+  }
+)
+
+// GET /api/admin/pages/export - Excel download (current filters)
+router.get('/pages/export', adminMiddleware, async (req, res) => {
+  try {
+    const { search, slug, status, fromDate, toDate } = req.query
+    const items = await pageService.listPagesForExport({
+      search,
+      slug,
+      status: status || 'all',
+      fromDate,
+      toDate,
+    })
+
+    const rows = toPageListDto(items).map((p) => ({
+      'Page Title': p.pageTitle,
+      Slug: p.pageSlug,
+      Heading: p.heading,
+      Status: p.status ? 'Active' : 'Inactive',
+      'Display Order': p.displayOrder,
+      'Created At': p.createdAt ? new Date(p.createdAt).toLocaleString() : '',
+      'Updated At': p.updatedAt ? new Date(p.updatedAt).toLocaleString() : '',
+    }))
+
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.json_to_sheet(rows)
+    worksheet['!cols'] = [
+      { wch: 28 }, { wch: 24 }, { wch: 28 },
+      { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 20 },
+    ]
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Pages')
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="pages.xlsx"')
+    res.send(buffer)
+  } catch (error) {
+    console.error('Error exporting pages:', error)
+    res.status(error.statusCode || 500).json({ message: error.message || 'Error exporting pages' })
+  }
+})
+
+// GET /api/admin/pages/:id
+router.get(
+  '/pages/:id',
+  adminMiddleware,
+  pageValidator.mongoIdParamRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const page = await pageService.getPageById(req.params.id)
+      res.json(toPageDto(page))
+    } catch (error) {
+      console.error('Error fetching page:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching page' })
+    }
+  }
+)
+
+// POST /api/admin/pages - create (with optional banner image)
+router.post(
+  '/pages',
+  adminMiddleware,
+  upload.single('pageBannerImage'),
+  enforcePageBannerImageSize,
+  pageValidator.createPageRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const page = await pageService.createPage(
+        { ...req.body, pageBannerImage: resolvePageBannerImage(req) },
+        req.user?._id
+      )
+      res.status(201).json(toPageDto(page))
+    } catch (error) {
+      console.error('Error creating page:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error creating page' })
+    }
+  }
+)
+
+// PATCH /api/admin/pages/:id - update (optional banner replace / clear)
+router.patch(
+  '/pages/:id',
+  adminMiddleware,
+  upload.single('pageBannerImage'),
+  enforcePageBannerImageSize,
+  pageValidator.updatePageRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const page = await pageService.updatePage(
+        req.params.id,
+        { ...req.body, pageBannerImage: resolvePageBannerImage(req) },
+        req.user?._id
+      )
+      res.json(toPageDto(page))
+    } catch (error) {
+      console.error('Error updating page:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error updating page' })
+    }
+  }
+)
+
+// PUT /api/admin/pages/:id/status - activate / deactivate
+router.put(
+  '/pages/:id/status',
+  adminMiddleware,
+  pageValidator.statusRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const page = await pageService.setPageStatus(req.params.id, req.body.status, req.user?._id)
+      res.json({
+        message: `Page ${page.status ? 'activated' : 'deactivated'}`,
+        page: toPageDto(page),
+      })
+    } catch (error) {
+      console.error('Error updating page status:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error updating page status' })
+    }
+  }
+)
+
+// DELETE /api/admin/pages/:id - soft delete
+router.delete(
+  '/pages/:id',
+  adminMiddleware,
+  pageValidator.mongoIdParamRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      await pageService.deletePage(req.params.id, req.user?._id)
+      res.json({ message: 'Page deleted successfully' })
+    } catch (error) {
+      console.error('Error deleting page:', error)
+      res.status(error.statusCode || 500).json({ message: error.message || 'Error deleting page' })
     }
   }
 )

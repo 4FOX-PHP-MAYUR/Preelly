@@ -171,6 +171,24 @@ function toTestimonialFormData(data = {}) {
 }
 
 /**
+ * Pages are sent as multipart so the banner image can ride along.
+ * `pageBannerImage` is a File when replacing the banner; everything else is coerced
+ * to a string by FormData, which the API's validators and service already expect.
+ */
+function toPageFormData(data = {}) {
+  const formData = new FormData()
+  Object.entries(data).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === '') return
+    if (key === 'pageBannerImage') {
+      if (value instanceof File) formData.append('pageBannerImage', value)
+      return
+    }
+    formData.append(key, value)
+  })
+  return formData
+}
+
+/**
  * Admin Users are sent as multipart so the profile image can ride along.
  * `profileImage` is a File when adding/replacing the photo; everything else is
  * coerced to a string by FormData, which the API's admin-users route expects.
@@ -411,6 +429,20 @@ export const adminService = {
   deleteTestimonial: (id) => api.delete(`/admin/testimonials/${id}`),
   exportTestimonials: (params) =>
     api.get('/admin/testimonials/export', { params, responseType: 'blob' }),
+  // Pages admin endpoints (multipart — optional banner image upload)
+  getPages: (params) => api.get('/admin/pages', { params }),
+  getPageById: (id) => api.get(`/admin/pages/${id}`),
+  createPage: (data) =>
+    api.post('/admin/pages', toPageFormData(data), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  updatePage: (id, data) =>
+    api.patch(`/admin/pages/${id}`, toPageFormData(data), {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  setPageStatus: (id, status) => api.put(`/admin/pages/${id}/status`, { status }),
+  deletePage: (id) => api.delete(`/admin/pages/${id}`),
+  exportPages: (params) => api.get('/admin/pages/export', { params, responseType: 'blob' }),
   // Checkout Service endpoints (JSON; highlights ride along as an array)
   getCheckoutServices: (params) => api.get('/admin/checkout-services', { params }),
   getCheckoutServiceById: (id) => api.get(`/admin/checkout-services/${id}`),

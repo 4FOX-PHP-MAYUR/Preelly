@@ -403,3 +403,35 @@ video {
   @apply ring-2 ring-primary-500 border-primary-500;
 }
 
+/* Dynamic CMS page content (rendered HTML from the admin Pages rich-text editor) */
+.cms-page-content h1,
+.cms-page-content h2,
+.cms-page-content h3 {
+  @apply mt-6 mb-3 font-semibold text-slate-900 first:mt-0;
+}
+.cms-page-content p {
+  @apply mb-4;
+}
+.cms-page-content ul {
+  @apply mb-4 ml-5 list-disc space-y-1;
+}
+.cms-page-content ol {
+  @apply mb-4 ml-5 list-decimal space-y-1;
+}
+.cms-page-content a {
+  @apply text-primary-600 underline hover:text-primary-700;
+}
+.cms-page-content img {
+  @apply my-4 max-w-full rounded-lg;
+}
+.cms-page-content table {
+  @apply my-4 w-full border-collapse overflow-hidden rounded-lg border border-slate-200 text-left;
+}
+.cms-page-content th,
+.cms-page-content td {
+  @apply border border-slate-200 px-3 py-2 align-top;
+}
+.cms-page-content th {
+  @apply bg-slate-50 font-semibold;
+}
+

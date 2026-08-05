@@ -23,6 +23,7 @@ const AdminPackagesRoutes = lazy(() => import('./pages/packages'))
 const AdminStorageFacilitiesRoutes = lazy(() => import('./pages/storage-facilities'))
 const AdminCheckoutServicesRoutes = lazy(() => import('./pages/checkout-services'))
 const AdminTestimonialsRoutes = lazy(() => import('./pages/testimonials'))
+const AdminPagesRoutes = lazy(() => import('./pages/pages'))
 const AdminCouponsRoutes = lazy(() => import('./pages/coupons'))
 const AdminBuyersCouponsRoutes = lazy(() => import('./pages/buyers-coupons'))
 const AdminTransactionsRoutes = lazy(() => import('./pages/transactions'))
@@ -238,6 +239,14 @@ function App() {
             element={
               <ModulePermissionRoute module="Testimonials">
                 <AdminTestimonialsRoutes />
+              </ModulePermissionRoute>
+            }
+          />
+          <Route
+            path="/pages/*"
+            element={
+              <ModulePermissionRoute module="Pages">
+                <AdminPagesRoutes />
               </ModulePermissionRoute>
             }
           />

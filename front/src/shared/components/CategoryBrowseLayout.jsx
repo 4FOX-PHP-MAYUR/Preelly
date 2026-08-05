@@ -8,6 +8,7 @@ import {
   MessageCircle,
   Plus,
   Settings,
+  Shield,
   X,
 } from 'lucide-react'
 import BrandLogo from '@shared/components/BrandLogo'
@@ -60,6 +61,11 @@ function CategoryBrowseLayout({
       label: 'My Bookmarks',
       to: isAuthenticated ? '/bookmarks' : '/login',
       icon: Bookmark,
+    },
+    {
+      label: 'Privacy Policy',
+      to: '/pages/privacy-policy',
+      icon: Shield,
     },
     {
       label: 'Messages',

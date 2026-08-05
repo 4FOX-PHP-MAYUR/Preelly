@@ -23,6 +23,7 @@ import {
   BadgePercent,
   ArrowLeftRight,
   Quote,
+  Files,
 } from 'lucide-react'
 
 // App routes are root-relative. Nginx + Vite base=/admin/ mount the app under /admin.
@@ -75,6 +76,13 @@ export const ADMIN_MENU_GROUPS = [
     ],
   },
   {
+    key: 'content',
+    label: 'Content Management',
+    items: [
+      { key: 'pages', label: 'Pages', to: '/pages', icon: Files },
+    ],
+  },
+  {
     key: 'users',
     label: 'Users & Support',
     items: [
@@ -111,6 +119,7 @@ export const MENU_PERMISSION_MAP = {
   coupons: 'Coupons',
   'buyers-coupons': 'Buyer Coupons',
   transactions: 'Transactions',
+  pages: 'Pages',
   products: 'Listings',
   'products-all': 'Listings',
   'products-pending': 'Listings',
@@ -139,6 +148,7 @@ export const ADMIN_ROUTE_META = {
   '/coupons': { title: 'Coupons', breadcrumbs: [{ label: 'Marketplace', to: '/coupons' }, { label: 'Coupons' }] },
   '/buyers-coupons': { title: 'Buyer Coupons', breadcrumbs: [{ label: 'Marketplace', to: '/buyers-coupons' }, { label: 'Buyer Coupons' }] },
   '/transactions': { title: 'Transactions', breadcrumbs: [{ label: 'Marketplace', to: '/transactions' }, { label: 'Transactions' }] },
+  '/pages': { title: 'Pages', breadcrumbs: [{ label: 'Content Management', to: '/pages' }, { label: 'Pages' }] },
   '/products': { title: 'All Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'All Products' }] },
   '/products/pending': { title: 'Pending Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'Pending' }] },
   '/products/approved': { title: 'Approved Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'Approved' }] },
@@ -177,6 +187,7 @@ export const ADMIN_MODULE_FORM_META = {
   coupons: { listPath: '/coupons', section: 'Marketplace', label: 'Coupons', singular: 'Coupon' },
   'buyers-coupons': { listPath: '/buyers-coupons', section: 'Marketplace', label: 'Buyer Coupons', singular: 'Buyer Coupon' },
   transactions: { listPath: '/transactions', section: 'Marketplace', label: 'Transactions', singular: 'Transaction' },
+  pages: { listPath: '/pages', section: 'Content Management', label: 'Pages', singular: 'Page' },
   users: { listPath: '/users', section: 'Users & Support', label: 'Users', singular: 'User' },
   roles: { listPath: '/roles', section: 'Admin Management', label: 'Admin Roles', singular: 'Role' },
   'admin-users': { listPath: '/admin-users', section: 'Admin Management', label: 'Admin Users', singular: 'Admin User' },

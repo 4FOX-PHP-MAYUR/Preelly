@@ -11,6 +11,7 @@ router.use('/packages', require('./routes/packages.routes'))
 router.use('/storage-facilities', require('./routes/storageFacilities.routes'))
 router.use('/checkout-services', require('./routes/checkoutServices.routes'))
 router.use('/testimonials', require('./routes/testimonials.routes'))
+router.use('/pages', require('./routes/pages.routes'))
 router.use('/checkout', require('./routes/checkout.routes'))
 router.use('/search', require('./routes/search.routes'))
 

@@ -50,6 +50,8 @@ const CompleteEmailPage = lazy(() => import('./pages/CompleteEmailPage'))
 const OAuthSuccessPage = lazy(() => import('./pages/OAuthSuccessPage'))
 const WelcomePage = lazy(() => import('./pages/WelcomePage'))
 const BookmarkPage = lazy(() => import('./pages/BookmarkPage'))
+const PageDetailPage = lazy(() => import('./pages/PageDetailPage'))
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'))
 
 function readCachedUserFlag() {
   try {
@@ -354,6 +356,11 @@ function App() {
           />
           <Route path="/user/:id/:type" element={<FollowersFollowingPage />} />
           <Route path="/user/:id" element={<UserProfilePage />} />
+          {/* Dynamic static content pages managed from the admin Pages module —
+              any page created there (about-us, privacy-policy, …) is served here
+              with no code changes. */}
+          <Route path="/pages/:slug" element={<PageDetailPage />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Suspense>
     </Layout>

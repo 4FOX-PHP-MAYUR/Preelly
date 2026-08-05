@@ -384,3 +384,47 @@ video {
   @apply ring-2 ring-primary-500 border-primary-500;
 }
 
+/* Rendered rich-text content (Pages module view page + editor output preview) */
+.admin-richtext-content h1,
+.admin-richtext-content h2,
+.admin-richtext-content h3 {
+  @apply mt-4 mb-2 font-semibold text-slate-900 dark:text-white first:mt-0;
+}
+.admin-richtext-content p {
+  @apply mb-3;
+}
+.admin-richtext-content ul {
+  @apply mb-3 ml-5 list-disc space-y-1;
+}
+.admin-richtext-content ol {
+  @apply mb-3 ml-5 list-decimal space-y-1;
+}
+.admin-richtext-content a {
+  @apply text-primary-600 dark:text-primary-400 underline;
+}
+.admin-richtext-content img {
+  @apply my-3 max-w-full rounded-lg;
+}
+.admin-richtext-content table {
+  @apply my-3 w-full border-collapse overflow-hidden rounded-lg border border-slate-200 dark:border-slate-700 text-left;
+}
+.admin-richtext-content th,
+.admin-richtext-content td {
+  @apply border border-slate-200 dark:border-slate-700 px-3 py-2 align-top;
+}
+.admin-richtext-content th {
+  @apply bg-slate-50 dark:bg-slate-800 font-semibold;
+}
+
+/* react-quill editor sizing to match admin form fields */
+.admin-richtext .ql-container {
+  @apply rounded-b-lg border-0 text-sm text-slate-900 dark:text-slate-100;
+  min-height: 220px;
+}
+.admin-richtext .ql-toolbar {
+  @apply rounded-t-lg border-0 border-b border-slate-200 dark:border-slate-700;
+}
+.admin-richtext .ql-editor {
+  min-height: 220px;
+}
+

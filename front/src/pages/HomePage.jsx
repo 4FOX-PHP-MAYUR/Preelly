@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
-import { Bookmark, ChevronLeft, ChevronRight, MessageCircle, Plus, Settings, X } from 'lucide-react'
+import { Bookmark, ChevronLeft, ChevronRight, MessageCircle, Plus, Settings, Shield, X } from 'lucide-react'
 import BrandLogo from '@shared/components/BrandLogo'
 import HomeTopBar from '../components/Home/HomeTopBar'
 import MarketplaceLogoBlock from '../components/Layout/MarketplaceLogoBlock'
@@ -228,6 +228,11 @@ function HomePage() {
       label: 'My Bookmarks',
       to: isAuthenticated ? '/bookmarks' : '/login',
       icon: Bookmark,
+    },
+    {
+      label: 'Privacy Policy',
+      to: '/pages/privacy-policy',
+      icon: Shield,
     },
     {
       label: 'Messages',

@@ -33,6 +33,7 @@ const AVAILABLE_MODULES = [
   'Storage Facilities',
   'Checkout Services',
   'Testimonials',
+  'Pages',
   'Coupons',
   'Buyer Coupons',
   'Transactions',
@@ -58,6 +59,7 @@ const MODULE_MAP = {
   'storage-facilities': 'Storage Facilities',
   'checkout-services': 'Checkout Services',
   testimonials: 'Testimonials',
+  pages: 'Pages',
   coupons: 'Coupons',
   'buyers-coupons': 'Buyer Coupons',
   'buyer-coupon': 'Buyer Coupons',
@@ -114,6 +116,7 @@ const ROUTE_PERMISSION_RULES = [
   { pattern: /^\/storage-facilities/, GET: ['Storage Facilities', 'can_view'], POST: ['Storage Facilities', 'can_create'], PATCH: ['Storage Facilities', 'can_edit'], PUT: ['Storage Facilities', 'can_edit'], DELETE: ['Storage Facilities', 'can_delete'] },
   { pattern: /^\/checkout-services/, GET: ['Checkout Services', 'can_view'], POST: ['Checkout Services', 'can_create'], PATCH: ['Checkout Services', 'can_edit'], PUT: ['Checkout Services', 'can_edit'], DELETE: ['Checkout Services', 'can_delete'] },
   { pattern: /^\/testimonials/, GET: ['Testimonials', 'can_view'], POST: ['Testimonials', 'can_create'], PATCH: ['Testimonials', 'can_edit'], PUT: ['Testimonials', 'can_edit'], DELETE: ['Testimonials', 'can_delete'] },
+  { pattern: /^\/pages/, GET: ['Pages', 'can_view'], POST: ['Pages', 'can_create'], PATCH: ['Pages', 'can_edit'], PUT: ['Pages', 'can_edit'], DELETE: ['Pages', 'can_delete'] },
 
   // Coupons (admin routes under /api/admin if any; also used for consistency)
   { pattern: /^\/coupons/, GET: ['Coupons', 'can_view'], POST: ['Coupons', 'can_create'], PATCH: ['Coupons', 'can_edit'], PUT: ['Coupons', 'can_edit'], DELETE: ['Coupons', 'can_delete'] },

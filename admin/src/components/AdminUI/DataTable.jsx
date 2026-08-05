@@ -23,6 +23,8 @@ function DataTable({
   emptyDescription,
   actions = true,
   customActions,
+  /** Optional visible label for the actions column header (defaults to a screen-reader-only "Actions") */
+  actionsLabel,
   /** Optional card renderer for small screens; table remains on md+ */
   mobileCardRender,
   className = '',
@@ -154,7 +156,7 @@ function DataTable({
               ))}
               {actions && (
                 <th className="text-right w-[140px]">
-                  <span className="sr-only">Actions</span>
+                  {actionsLabel ? actionsLabel : <span className="sr-only">Actions</span>}
                 </th>
               )}
             </tr>

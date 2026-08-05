@@ -27,6 +27,7 @@ import Panel from '../components/AdminUI/Panel'
 import Button from '../components/AdminUI/Button'
 import Modal from '../components/AdminUI/Modal'
 import DataTable from '../components/AdminUI/DataTable'
+import DropdownMenu from '../components/AdminUI/DropdownMenu'
 import StatusBadge from '../components/AdminUI/StatusBadge'
 import PageHeader from '../components/AdminUI/PageHeader'
 import EmptyState from '../components/AdminUI/EmptyState'
@@ -812,72 +813,46 @@ function AdminDashboardPage() {
     await handleApprove(productId)
   }
 
-  const renderProductActions = (p) => (
-    <>
-      {canEditListing && p.status === 'pending' && (
-        <>
-          <button
-            type="button"
-            onClick={() => openConfirmAction('approve', p)}
-            disabled={processingId === p._id}
-            className="admin-table-action text-emerald-600 dark:text-emerald-400 disabled:opacity-50"
-            title="Approve"
-            aria-label="Approve product"
-          >
-            <CheckCircle className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => openRejectModal(p._id)}
-            disabled={processingId === p._id}
-            className="admin-table-action text-red-600 dark:text-red-400 disabled:opacity-50"
-            title="Reject"
-            aria-label="Reject product"
-          >
-            <XCircle className="h-4 w-4" />
-          </button>
-        </>
-      )}
-      {canEditListing && (p.status === 'active' || p.status === 'inactive') && (
-        <button
-          type="button"
-          onClick={() => handleToggleProductStatus(p._id, p.status)}
-          disabled={processingId === p._id}
-          className={`admin-table-action disabled:opacity-50 ${
-            p.status === 'active'
-              ? 'text-amber-600 dark:text-amber-400'
-              : 'text-emerald-600 dark:text-emerald-400'
-          }`}
-          title={p.status === 'active' ? 'Deactivate' : 'Activate'}
-          aria-label={p.status === 'active' ? 'Deactivate product' : 'Activate product'}
-        >
-          {p.status === 'active' ? <AlertCircle className="h-4 w-4" /> : <CheckCircle className="h-4 w-4" />}
-        </button>
-      )}
-      {canEditListing && (
-        <button
-          type="button"
-          onClick={() => openFeatureModal(p)}
-          className={`admin-table-action ${
-            p.isFeature ? 'text-amber-500 dark:text-amber-400' : 'text-slate-400 dark:text-slate-500'
-          }`}
-          title={p.isFeature ? 'Featured — edit' : 'Not featured — edit'}
-          aria-label="Edit featured status"
-        >
-          <Star className="h-4 w-4" fill={p.isFeature ? 'currentColor' : 'none'} />
-        </button>
-      )}
-      <button
-        type="button"
-        onClick={() => navigate(`/products/${p._id}`)}
-        className="admin-table-action text-slate-500 dark:text-slate-400"
-        title="View"
-        aria-label="View product"
-      >
-        <Eye className="h-4 w-4" />
-      </button>
-    </>
-  )
+  const renderProductActions = (p) => {
+    const isProcessing = processingId === p._id
+    const items = [
+      {
+        label: 'Approve',
+        icon: CheckCircle,
+        onClick: () => openConfirmAction('approve', p),
+        disabled: isProcessing,
+        hidden: !(canEditListing && p.status === 'pending'),
+      },
+      {
+        label: 'Reject',
+        icon: XCircle,
+        onClick: () => openRejectModal(p._id),
+        disabled: isProcessing,
+        danger: true,
+        hidden: !(canEditListing && p.status === 'pending'),
+      },
+      {
+        label: p.status === 'active' ? 'Deactivate' : 'Activate',
+        icon: p.status === 'active' ? AlertCircle : CheckCircle,
+        onClick: () => handleToggleProductStatus(p._id, p.status),
+        disabled: isProcessing,
+        hidden: !(canEditListing && (p.status === 'active' || p.status === 'inactive')),
+      },
+      {
+        label: p.isFeature ? 'Featured — edit' : 'Mark as featured',
+        icon: Star,
+        onClick: () => openFeatureModal(p),
+        active: p.isFeature,
+        hidden: !canEditListing,
+      },
+      {
+        label: 'View',
+        icon: Eye,
+        onClick: () => navigate(`/products/${p._id}`),
+      },
+    ]
+    return <DropdownMenu items={items} label="Product actions" />
+  }
 
   if (!isAdmin) {
     return null
@@ -1367,6 +1342,7 @@ function AdminDashboardPage() {
                 : 'No products match your search.'
             }
             showSearch={false}
+            actionsLabel="Action"
             customActions={renderProductActions}
             mobileCardRender={renderProductMobileCard}
             pagination={{

@@ -457,6 +457,13 @@ export const adminService = {
   getTransactionStats: (params) => api.get('/admin/transactions/stats', { params }),
   exportTransactions: (params) =>
     api.get('/admin/transactions/export', { params, responseType: 'blob' }),
+  // Cart (Marketplace admin module; reads the existing carts collection)
+  getCartItems: (params) => api.get('/admin/cart', { params }),
+  getPendingCartItems: (params) => api.get('/admin/cart/pending', { params }),
+  getPurchasedCartItems: (params) => api.get('/admin/cart/purchased', { params }),
+  getCartItemById: (id) => api.get(`/admin/cart/${id}`),
+  exportCartItems: (params) =>
+    api.get('/admin/cart/export', { params, responseType: 'blob' }),
   // Coupon endpoints (mounted at /api/coupon)
   getCoupons: (params) => api.get('/coupon/list', { params }),
   getCouponById: (id) => api.get(`/coupon/${id}`),

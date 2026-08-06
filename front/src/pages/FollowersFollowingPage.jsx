@@ -33,23 +33,17 @@ function FollowersFollowingPage() {
           type === 'followers' ? userService.getFollowers(id) : userService.getFollowing(id),
         ])
         setProfileUser(profileRes.data)
-        setUsers(type === 'followers' ? usersRes.data.followers || [] : usersRes.data.following || [])
+        const list = type === 'followers' ? usersRes.data.followers || [] : usersRes.data.following || []
+        setUsers(list)
 
-        // If current user is authenticated, check which users they're following
+        // The followers/following endpoints already tell us, per user, whether the
+        // current requester is following them (isFollowing), so just build the map
+        // from that instead of relying on a nonexistent `following` array on the profile.
         if (isAuthenticated && currentUser?._id) {
-          const localFollowing = Array.isArray(currentUser.following) ? currentUser.following : []
-          const optimisticMap = {}
-          localFollowing.forEach((followedUser) => {
-            const followedId = normalizeId(followedUser)
-            if (followedId) optimisticMap[followedId] = true
-          })
-          setFollowingMap(optimisticMap)
-
-          const currentUserProfile = await userService.getCurrentUserProfile()
-          const followingIds = (currentUserProfile.data.following || []).map((u) => normalizeId(u))
           const followingMapObj = {}
-          followingIds.filter(Boolean).forEach((userId) => {
-            followingMapObj[userId] = true
+          list.forEach((user) => {
+            const userId = normalizeId(user)
+            if (userId) followingMapObj[userId] = Boolean(user.isFollowing)
           })
           setFollowingMap(followingMapObj)
         }

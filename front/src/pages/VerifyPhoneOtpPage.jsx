@@ -53,7 +53,7 @@ function VerifyPhoneOtpPage() {
     []
   )
 
-  const loginPath = target === 'seller' ? '/login?target=seller&tab=phone' : '/login?tab=phone'
+  const loginPath = `/login?${target === 'seller' ? 'target=seller&' : ''}tab=phone&phone=${encodeURIComponent(queryPhone)}&countryIso=${encodeURIComponent(queryCountryIso)}`
   const signupPath = target === 'seller' ? '/signup?target=seller' : '/signup'
   const backPath = isLoginFlow || isCompleteFlow ? loginPath : signupPath
   const [phone, setPhone] = useState(queryPhone)

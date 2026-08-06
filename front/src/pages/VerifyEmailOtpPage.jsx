@@ -51,7 +51,7 @@ function VerifyEmailOtpPage() {
     []
   )
 
-  const loginPath = target === 'seller' ? '/login?target=seller&tab=email' : '/login?tab=email'
+  const loginPath = `/login?${target === 'seller' ? 'target=seller&' : ''}tab=email&email=${encodeURIComponent(queryEmail)}`
   const signupPath = target === 'seller' ? '/signup?target=seller' : '/signup'
   const backPath = authMode === 'signup' ? signupPath : loginPath
 

@@ -48,16 +48,32 @@ function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
   const { loading, error, isAuthenticated } = useSelector((state) => state.auth)
-  const { register, handleSubmit, formState: { errors } } = useForm()
+  const params = new URLSearchParams(location.search)
+
+  // Returning from the OTP screen via "Change" — prefill whichever value the
+  // user already submitted so they aren't retyping it from scratch.
+  const queryEmail = params.get('email') || ''
+  const queryCountryIso = params.get('countryIso') || DEFAULT_COUNTRY_ISO
+  const queryPhoneDigits = (() => {
+    const raw = params.get('phone') || ''
+    if (!raw) return ''
+    const dialCode = getCountryByIso(queryCountryIso).code.replace(/\D/g, '')
+    // `phone` arrives as dialCode + local number concatenated (no separator) —
+    // strip the dial code so the input only shows the local digits.
+    return raw.startsWith(dialCode) ? raw.slice(dialCode.length) : raw
+  })()
+
+  const { register, handleSubmit, formState: { errors } } = useForm({
+    defaultValues: { email: queryEmail, phone: queryPhoneDigits },
+  })
   const [oauthLoading, setOauthLoading] = useState(null)
   // Phone tab is the default per the new login design, unless the caller
   // asks for the email tab (e.g. returning from the email OTP screen).
   const [channel, setChannel] = useState(() =>
     new URLSearchParams(location.search).get('tab') === 'email' ? 'email' : 'whatsapp'
   )
-  const [countryIso, setCountryIso] = useState(DEFAULT_COUNTRY_ISO)
+  const [countryIso, setCountryIso] = useState(queryCountryIso)
 
-  const params = new URLSearchParams(location.search)
   const target = params.get('target') === 'seller' ? 'seller' : 'buyer'
   // Set by the shared "Login Required" modal so guests land back on the page
   // (and protected action) they were on before being asked to log in. Persisted

@@ -528,14 +528,15 @@ router.get('/:id/profile', validateObjectId('id'), optionalAuth, async (req, res
       return res.status(404).json({ message: 'User not found' })
     }
 
-    // Get user stats. "totalProducts" (Ads Posted) counts every ad the user has
-    // ever created, regardless of status (pending/active/rejected/sold/inactive)
-    // — hard-deleted ads are gone from the collection so they're excluded
-    // automatically, while archived/status-changed ads stay on the same
-    // document and keep counting. Aggregated in one pass so we never pull full
-    // product documents just to count/sum them.
+    // Get user stats. "totalProducts" (Ads Posted) counts ads the user has
+    // created, excluding ones that are hidden from their profile listings —
+    // status 'inactive' or soft-archived — so this number matches what a
+    // visitor actually sees when they scroll the listings grid below it.
+    // Hard-deleted ads are gone from the collection so they're excluded
+    // automatically. Aggregated in one pass so we never pull full product
+    // documents just to count/sum them.
     const [statsAgg] = await Product.aggregate([
-      { $match: { seller: user._id } },
+      { $match: { seller: user._id, status: { $ne: 'inactive' }, isArchived: { $ne: true } } },
       {
         $group: {
           _id: null,
@@ -587,9 +588,24 @@ router.get('/:id/followers', validateObjectId('id'), optionalAuth, async (req, r
       .sort({ followedAt: -1 })
       .lean()
 
+    let myFollowingIds = new Set()
+    if (req.user) {
+      const myFollowingRecords = await Follow.find({
+        follower: req.user._id,
+        status: 'active',
+      })
+        .select('following')
+        .lean()
+      myFollowingIds = new Set(myFollowingRecords.map((r) => String(r.following)))
+    }
+
     const followers = records
       .filter((r) => r.follower)
-      .map((r) => ({ ...r.follower, followedAt: r.followedAt }))
+      .map((r) => ({
+        ...r.follower,
+        followedAt: r.followedAt,
+        isFollowing: myFollowingIds.has(String(r.follower._id)),
+      }))
 
     res.json({ followers, count: followers.length })
   } catch (error) {
@@ -624,9 +640,24 @@ router.get('/:id/following', validateObjectId('id'), optionalAuth, async (req, r
       .sort({ followedAt: -1 })
       .lean()
 
+    let myFollowingIds = new Set()
+    if (req.user) {
+      const myFollowingRecords = await Follow.find({
+        follower: req.user._id,
+        status: 'active',
+      })
+        .select('following')
+        .lean()
+      myFollowingIds = new Set(myFollowingRecords.map((r) => String(r.following)))
+    }
+
     const following = records
       .filter((r) => r.following)
-      .map((r) => ({ ...r.following, followedAt: r.followedAt }))
+      .map((r) => ({
+        ...r.following,
+        followedAt: r.followedAt,
+        isFollowing: myFollowingIds.has(String(r.following._id)),
+      }))
 
     res.json({ following, count: following.length })
   } catch (error) {

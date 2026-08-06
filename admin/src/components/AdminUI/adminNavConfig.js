@@ -24,6 +24,7 @@ import {
   ArrowLeftRight,
   Quote,
   Files,
+  ShoppingCart,
 } from 'lucide-react'
 
 // App routes are root-relative. Nginx + Vite base=/admin/ mount the app under /admin.
@@ -71,6 +72,17 @@ export const ADMIN_MENU_GROUPS = [
           { key: 'products-pending', label: 'Pending', to: '/products/pending' },
           { key: 'products-approved', label: 'Approved', to: '/products/approved' },
           { key: 'products-sold', label: 'Sold', to: '/products/sold' },
+        ],
+      },
+      {
+        key: 'cart',
+        label: 'Cart',
+        to: '/cart',
+        icon: ShoppingCart,
+        children: [
+          { key: 'cart-all', label: 'All Cart Items', to: '/cart', exact: true },
+          { key: 'cart-pending', label: 'Pending', to: '/cart/pending' },
+          { key: 'cart-purchased', label: 'Purchased', to: '/cart/purchased' },
         ],
       },
     ],
@@ -125,6 +137,10 @@ export const MENU_PERMISSION_MAP = {
   'products-pending': 'Listings',
   'products-approved': 'Listings',
   'products-sold': 'Listings',
+  cart: 'Cart',
+  'cart-all': 'Cart',
+  'cart-pending': 'Cart',
+  'cart-purchased': 'Cart',
   users: 'Users',
   'identity-verification': 'Users',
   contacts: 'Contacts',
@@ -153,6 +169,9 @@ export const ADMIN_ROUTE_META = {
   '/products/pending': { title: 'Pending Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'Pending' }] },
   '/products/approved': { title: 'Approved Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'Approved' }] },
   '/products/sold': { title: 'Sold Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'Sold' }] },
+  '/cart': { title: 'All Cart Items', breadcrumbs: [{ label: 'Marketplace', to: '/cart' }, { label: 'Cart', to: '/cart' }, { label: 'All Cart Items' }] },
+  '/cart/pending': { title: 'Pending Cart Items', breadcrumbs: [{ label: 'Marketplace', to: '/cart' }, { label: 'Cart', to: '/cart' }, { label: 'Pending' }] },
+  '/cart/purchased': { title: 'Purchased Cart Items', breadcrumbs: [{ label: 'Marketplace', to: '/cart' }, { label: 'Cart', to: '/cart' }, { label: 'Purchased' }] },
   '/users': { title: 'Users', breadcrumbs: [{ label: 'Users & Support' }, { label: 'Users' }] },
   '/roles': { title: 'Admin Roles', breadcrumbs: [{ label: 'Admin Management', to: '/roles' }, { label: 'Admin Roles' }] },
   '/role-permissions': { title: 'Role Permissions', breadcrumbs: [{ label: 'Admin Management', to: '/roles' }, { label: 'Role Permissions' }] },

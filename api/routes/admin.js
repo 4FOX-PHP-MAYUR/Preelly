@@ -5435,6 +5435,117 @@ router.get(
 )
 
 // ---------------------------------------------------------------------------
+// Cart (Marketplace admin module — reads the existing `carts` collection only)
+// ---------------------------------------------------------------------------
+
+const adminCartService = require('../core/services/adminCartService')
+const {
+  toPaginatedAdminCartsResponse,
+  toAdminCartDetailDto,
+  toAdminCartExcelRows,
+} = require('../dto/adminCart.dto')
+
+function parseCartListQuery(query = {}, statusOverride) {
+  const { search, category, fromDate, toDate, status } = query
+  return {
+    search,
+    category,
+    fromDate: fromDate || undefined,
+    toDate: toDate || undefined,
+    status: statusOverride || status,
+  }
+}
+
+// GET /api/admin/cart/export — Excel download (current filters)
+router.get('/cart/export', adminMiddleware, async (req, res) => {
+  try {
+    const filters = parseCartListQuery(req.query)
+    const { items, total, truncated } = await adminCartService.exportCartItems(filters)
+    const rows = toAdminCartExcelRows(items)
+
+    const workbook = XLSX.utils.book_new()
+    const worksheet = XLSX.utils.json_to_sheet(
+      rows.length
+        ? rows
+        : [{
+            'Cart ID': '', 'Product Name': '', Category: '', 'Buyer Name': '', 'Buyer Email': '',
+            'Seller Name': '', 'Seller Email': '', Quantity: '', 'Product Price': '', 'Total Amount': '',
+            Currency: '', 'Cart Status': '', 'Added Date': '', 'Updated Date': '',
+          }]
+    )
+    worksheet['!cols'] = [
+      { wch: 26 }, { wch: 26 }, { wch: 16 }, { wch: 20 }, { wch: 26 },
+      { wch: 20 }, { wch: 26 }, { wch: 10 }, { wch: 14 }, { wch: 14 },
+      { wch: 10 }, { wch: 12 }, { wch: 20 }, { wch: 20 },
+    ]
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Cart')
+
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+    const filename = `cart-${filters.fromDate}_${filters.toDate}.xlsx`
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.setHeader('X-Export-Total', String(total))
+    res.setHeader('X-Export-Truncated', truncated ? '1' : '0')
+    res.setHeader('Access-Control-Expose-Headers', 'X-Export-Total, X-Export-Truncated, Content-Disposition')
+    return res.send(buffer)
+  } catch (error) {
+    console.error('Error exporting cart items:', error)
+    res.status(error.statusCode || 500).json({ message: error.message || 'Error exporting cart items' })
+  }
+})
+
+// GET /api/admin/cart/pending — cart rows not yet purchased (ACTIVE / CHECKOUT)
+router.get('/cart/pending', adminMiddleware, async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query
+    const filters = parseCartListQuery(req.query, 'PENDING')
+    const result = await adminCartService.listCartItems({ page: Number(page), limit: Number(limit), ...filters })
+    res.json(toPaginatedAdminCartsResponse(result))
+  } catch (error) {
+    console.error('Error fetching pending cart items:', error)
+    res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching pending cart items' })
+  }
+})
+
+// GET /api/admin/cart/purchased — cart rows with cartStatus = PURCHASED
+router.get('/cart/purchased', adminMiddleware, async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query
+    const filters = parseCartListQuery(req.query, 'PURCHASED')
+    const result = await adminCartService.listCartItems({ page: Number(page), limit: Number(limit), ...filters })
+    res.json(toPaginatedAdminCartsResponse(result))
+  } catch (error) {
+    console.error('Error fetching purchased cart items:', error)
+    res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching purchased cart items' })
+  }
+})
+
+// GET /api/admin/cart — all cart items with search / filters
+router.get('/cart', adminMiddleware, async (req, res) => {
+  try {
+    const { page = 1, limit = 20 } = req.query
+    const filters = parseCartListQuery(req.query)
+    const result = await adminCartService.listCartItems({ page: Number(page), limit: Number(limit), ...filters })
+    res.json(toPaginatedAdminCartsResponse(result))
+  } catch (error) {
+    console.error('Error fetching cart items:', error)
+    res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching cart items' })
+  }
+})
+
+// GET /api/admin/cart/:id — cart item detail view
+router.get('/cart/:id', adminMiddleware, async (req, res) => {
+  try {
+    const item = await adminCartService.getCartItemById(req.params.id)
+    res.json(toAdminCartDetailDto(item))
+  } catch (error) {
+    console.error('Error fetching cart item:', error)
+    res.status(error.statusCode || 500).json({ message: error.message || 'Error fetching cart item' })
+  }
+})
+
+// ---------------------------------------------------------------------------
 // User Reports (admin moderation of reports against users)
 // ---------------------------------------------------------------------------
 

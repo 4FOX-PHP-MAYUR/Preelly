@@ -38,6 +38,7 @@ const AVAILABLE_MODULES = [
   'Buyer Coupons',
   'Transactions',
   'Listings',
+  'Cart',
   'Users',
   'Contacts',
   'Reports',
@@ -68,6 +69,7 @@ const MODULE_MAP = {
   products: 'Listings',
   listings: 'Listings',
   sold: 'Listings',
+  cart: 'Cart',
   users: 'Users',
   'identity-verification': 'Users',
   'identity-verifications': 'Users',
@@ -121,6 +123,9 @@ const ROUTE_PERMISSION_RULES = [
   // Coupons (admin routes under /api/admin if any; also used for consistency)
   { pattern: /^\/coupons/, GET: ['Coupons', 'can_view'], POST: ['Coupons', 'can_create'], PATCH: ['Coupons', 'can_edit'], PUT: ['Coupons', 'can_edit'], DELETE: ['Coupons', 'can_delete'] },
   { pattern: /^\/transactions/, GET: ['Transactions', 'can_view'], POST: ['Transactions', 'can_create'], PATCH: ['Transactions', 'can_edit'], PUT: ['Transactions', 'can_edit'], DELETE: ['Transactions', 'can_delete'] },
+
+  // Cart — read-only admin module (view + export); no create/edit/delete on cart rows
+  { pattern: /^\/cart/, GET: ['Cart', 'can_view'] },
 
   // Users & verification
   { pattern: /^\/users/, GET: ['Users', 'can_view'], POST: ['Users', 'can_create'], PUT: ['Users', 'can_edit'], PATCH: ['Users', 'can_edit'], DELETE: ['Users', 'can_delete'] },

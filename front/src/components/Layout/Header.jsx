@@ -111,6 +111,10 @@ function Header() {
   // top bar via CategoryBrowseLayout — this header would be a second one.
   const isMyProfile = location.pathname === '/my-profile'
   const isUserProfilePage = /^\/user\/[^/]+$/.test(location.pathname)
+  // /user/:id/followers and /user/:id/following render FollowersFollowingPage,
+  // which brings its own home-style header via SettingsPageShell — this header
+  // would be a second one stacked on top of it.
+  const isFollowersFollowingPage = /^\/user\/[^/]+\/(followers|following)$/.test(location.pathname)
   const isCartPage = location.pathname === '/cart'
   // The payment result screens (both the post-ad and cart variants render
   // PaymentResultPage) bring their own MarketplaceTopBar — this header would sit
@@ -136,7 +140,7 @@ function Header() {
 
   return (
     <>
-      {isAuthRoute || isHomePage || isSearchPage || isCategoryProductsPage || isProductDetailPage || isChatPage || isDashboardSettings || isMyProfile || isUserProfilePage || isCartPage || isPaymentResultPage ? null : isPostAdFlow ? (
+      {isAuthRoute || isHomePage || isSearchPage || isCategoryProductsPage || isProductDetailPage || isChatPage || isDashboardSettings || isMyProfile || isUserProfilePage || isFollowersFollowingPage || isCartPage || isPaymentResultPage ? null : isPostAdFlow ? (
         <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
           <div className="w-full px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
             {/* Tagline is part of the logo artwork — do not add a text one. */}

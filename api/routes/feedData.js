@@ -7,6 +7,7 @@ const Category = require('../models/Category')
 const User = require('../models/User')
 const Chat = require('../models/Chat')
 const Comment = require('../models/Comment')
+const Follow = require('../models/Follow')
 const authMiddleware = require('../middleware/auth')
 const { getUserIdFromRequest } = require('../utils/authToken')
 const { enrichReelsProducts } = require('../utils/reelsProductFields')
@@ -518,8 +519,8 @@ function buildFeedAggregationStages ({ userObjectId }) {
   ]
 }
 
-async function fetchRandomVideoFeed ({ userObjectId, params, savedProductIdsSet, feedType = 'trending', viewerId = null }) {
-  const baseMatch = await buildFeedMatch({ params, viewerId })
+async function fetchRandomVideoFeed ({ userObjectId, params, savedProductIdsSet, feedType = 'trending', sellerIds = null, viewerId = null }) {
+  const baseMatch = await buildFeedMatch({ params, sellerIds, viewerId })
   const decodedCursor = decodeCursor(params.cursor)
   const excludeIdStrings = Array.isArray(decodedCursor?.excludeIds)
     ? decodedCursor.excludeIds.map((id) => String(id).trim()).filter(Boolean).slice(0, 1000)
@@ -590,9 +591,34 @@ async function fetchRandomVideoFeed ({ userObjectId, params, savedProductIdsSet,
   })
 }
 
+// Follow relationships live in the `users-follow` collection (models/Follow.js);
+// the User document has no `following` array. One indexed query
+// ({ follower, status }) returns every account the viewer actively follows.
+async function readActiveFollowingIds (userId) {
+  if (!userId || !mongoose.Types.ObjectId.isValid(userId)) return []
+
+  const records = await Follow.find({
+    follower: new mongoose.Types.ObjectId(userId),
+    status: 'active',
+  })
+    .select('following')
+    .lean()
+
+  // De-duplicated so a stale duplicate relationship row cannot repeat a seller
+  // (and therefore their listings) in the feed.
+  const uniqueIds = new Map()
+  for (const record of records) {
+    const id = toCanonicalId(record?.following)
+    if (id && mongoose.Types.ObjectId.isValid(id) && !uniqueIds.has(id)) {
+      uniqueIds.set(id, new mongoose.Types.ObjectId(id))
+    }
+  }
+
+  return [...uniqueIds.values()]
+}
+
 async function fetchFollowingFeed ({ userId, userObjectId, params }) {
-  const currentUser = await User.findById(userId).select('following').lean()
-  const followingIds = Array.isArray(currentUser?.following) ? currentUser.following : []
+  const followingIds = await readActiveFollowingIds(userId)
 
   if (!followingIds.length) {
     return await createFeedResponse({
@@ -606,6 +632,22 @@ async function fetchFollowingFeed ({ userId, userObjectId, params }) {
   }
 
   const savedProductIdsSet = await readSavedProductIdsForUser(userId)
+  const sortMode = normalizeSortBy(params.sortBy)
+
+  // `sellerIds` is applied inside buildFeedMatch, so the followed-seller filter
+  // is part of the same $match as the status/block/category filters — no extra
+  // joins and no per-post lookups.
+  if (sortMode === 'random') {
+    return fetchRandomVideoFeed({
+      userObjectId,
+      params,
+      savedProductIdsSet,
+      feedType: 'following',
+      sellerIds: followingIds,
+      viewerId: userId,
+    })
+  }
+
   return fetchSortedVideoFeed({
     userObjectId,
     params,

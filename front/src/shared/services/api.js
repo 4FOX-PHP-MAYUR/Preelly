@@ -460,7 +460,7 @@ export const userService = {
     api.post('/user/profile', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
-  getFollowers: (userId) => api.get(`/user/${userId}/followers`),
+  getFollowers: (userId, config) => api.get(`/user/${userId}/followers`, config),
   getFollowing: (userId) => api.get(`/user/${userId}/following`),
   searchUsers: (q, limit = 20) => api.get('/user/search', { params: { q, limit } }),
   getFollowRequests: () => api.get('/user/follow-requests'),

@@ -3,11 +3,19 @@ import { useSelector, useDispatch } from 'react-redux'
 import { selectIsAuthenticated, selectUser, logout } from '@shared/store/slices/authSlice'
 import { Bell, CheckCircle2, ChevronDown, LayoutDashboard, LogOut, Menu, Settings, SlidersHorizontal, User, X } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
-import { chatService } from '@shared/services/api'
+import { chatService, userService } from '@shared/services/api'
 import { getSocket } from '@shared/services/socket'
 import BrandLogo from '@shared/components/BrandLogo'
 import SearchBar from '../Search/SearchBar'
 import { getMediaUrl, isUserVerified } from '@shared/utils/helpers'
+
+/** 1234 -> "1.2k", 2000000 -> "2M". Matches the profile page's follower formatting. */
+function formatCompact(n) {
+  const num = Number(n || 0)
+  if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
+  if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'k'
+  return String(num)
+}
 
 /**
  * Site-wide header. Self-contained (owns its own auth/menu state) so it can be
@@ -127,6 +135,28 @@ function Header() {
     location.pathname === '/post-ad/storage' ||
     location.pathname.startsWith('/post-ad/payment')
 
+  // Real follower count for the post-ad header, from the same endpoint the
+  // profile page uses (`users-follow` records with status 'active'). Only the
+  // post-ad variant of this header shows it, so it is fetched nowhere else.
+  const [followersCount, setFollowersCount] = useState(null)
+  const showFollowersCount = isPostAdFlow && !isPaymentResultPage
+
+  useEffect(() => {
+    if (!isAuthenticated || !showFollowersCount || !user?._id) {
+      setFollowersCount(null)
+      return undefined
+    }
+    const controller = new AbortController()
+    userService
+      .getFollowers(user._id, { signal: controller.signal })
+      .then((res) => {
+        const n = res?.data?.count
+        if (typeof n === 'number') setFollowersCount(n)
+      })
+      .catch(() => {})
+    return () => controller.abort()
+  }, [isAuthenticated, showFollowersCount, user?._id])
+
   const handleLogout = () => {
     dispatch(logout('user-click'))
     navigate('/')
@@ -173,7 +203,10 @@ function Header() {
                           <img src="/images/isverified.svg" alt="Verified" className="h-4 w-4 flex-shrink-0" />
                         )}
                       </div>
-                      <span className="block text-xs text-slate-500">5.0k Followers</span>
+                      <span className="block text-xs text-slate-500">
+                        {followersCount == null ? '—' : formatCompact(followersCount)}
+                        {followersCount === 1 ? ' Follower' : ' Followers'}
+                      </span>
                     </div>
                     <ChevronDown className={`h-4 w-4 text-slate-400 flex-shrink-0 hidden sm:block transition-transform ${profileOpen ? 'rotate-180' : ''}`} />
                   </button>

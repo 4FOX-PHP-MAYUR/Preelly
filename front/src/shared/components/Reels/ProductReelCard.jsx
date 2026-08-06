@@ -495,8 +495,14 @@ function ProductReelCard({
     >
       <div className="absolute inset-0 flex items-center justify-center">
         <div className={`relative flex h-full w-full items-center justify-center ${embedded ? 'px-1' : ''}`}>
-          {/* Reel Card + Instagram-style action column */}
-          <div className={`relative flex h-full max-h-full items-end justify-center ${embedded ? 'gap-2 sm:gap-3' : 'gap-3 sm:gap-4 md:gap-5'}`}>
+          {/* Reel Card + Instagram-style action column.
+              `w-full` is required: reelWrapperStyle caps the reel with
+              `max-width: calc(100% - 48px)`, and that percentage resolves against
+              this row. Left shrink-to-fit, the row's width would depend on the
+              reel while the reel's width depends on the row — Safari resolves
+              that circular case to 0 and the reel disappears; Chrome resolves it
+              to a value narrower than the 9:16 aspect ratio asks for. */}
+          <div className={`relative flex h-full max-h-full w-full items-end justify-center ${embedded ? 'gap-2 sm:gap-3' : 'gap-3 sm:gap-4 md:gap-5'}`}>
           <div
             className={`relative reel-wrapper mx-auto w-full group overflow-hidden rounded-2xl ${embedded ? 'bg-black shadow-none rounded-[20px] sm:rounded-[28px]' : 'bg-black shadow-2xl max-w-[480px] md:max-w-[640px] lg:max-w-[720px]'}`}
             style={reelWrapperStyle}

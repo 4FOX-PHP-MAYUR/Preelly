@@ -503,7 +503,7 @@ function ChatSidebar({ chatUnread }) {
   }, [dispatch, rootCategories.length])
 
   const quickLinks = [
-    { label: 'My Bookmarks', to: isAuthenticated ? '/bookmarks' : '/login', icon: Bookmark },
+    { label: 'My Bookmarks', to: isAuthenticated ? '/my-profile?tab=saved' : '/login', icon: Bookmark },
     { label: 'Messages',     to: '/chat', icon: MessageCircle, badge: chatUnread > 0 ? chatUnread : null },
     { label: 'Settings',     to: isAuthenticated ? '/dashboard/settings' : '/login', icon: Settings },
   ]

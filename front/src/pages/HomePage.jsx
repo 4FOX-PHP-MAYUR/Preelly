@@ -226,7 +226,8 @@ function HomePage() {
   const quickLinks = [
     {
       label: 'My Bookmarks',
-      to: isAuthenticated ? '/bookmarks' : '/login',
+      // Saved listings live on the profile's Saved tab.
+      to: isAuthenticated ? '/my-profile?tab=saved' : '/login',
       icon: Bookmark,
     },
     {

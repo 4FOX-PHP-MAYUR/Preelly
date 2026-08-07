@@ -124,6 +124,9 @@ function Header() {
   // would be a second one stacked on top of it.
   const isFollowersFollowingPage = /^\/user\/[^/]+\/(followers|following)$/.test(location.pathname)
   const isCartPage = location.pathname === '/cart'
+  // Admin-authored content pages (/pages/:slug) render PageDetailPage, which brings
+  // the home-style top bar via CategoryBrowseLayout — this header would be a second one.
+  const isDynamicContentPage = location.pathname.startsWith('/pages/')
   // The payment result screens (both the post-ad and cart variants render
   // PaymentResultPage) bring their own MarketplaceTopBar — this header would sit
   // on top of it as a second one.
@@ -170,7 +173,7 @@ function Header() {
 
   return (
     <>
-      {isAuthRoute || isHomePage || isSearchPage || isCategoryProductsPage || isProductDetailPage || isChatPage || isDashboardSettings || isMyProfile || isUserProfilePage || isFollowersFollowingPage || isCartPage || isPaymentResultPage ? null : isPostAdFlow ? (
+      {isAuthRoute || isHomePage || isSearchPage || isCategoryProductsPage || isProductDetailPage || isChatPage || isDashboardSettings || isMyProfile || isUserProfilePage || isFollowersFollowingPage || isCartPage || isPaymentResultPage || isDynamicContentPage ? null : isPostAdFlow ? (
         <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
           <div className="w-full px-4 sm:px-6 lg:px-8 h-14 sm:h-16 flex items-center justify-between gap-2">
             {/* Tagline is part of the logo artwork — do not add a text one. */}
@@ -429,7 +432,7 @@ function Header() {
                 </div>
                 {isAuthenticated ? (
                   <>
-                    <Link to="/bookmarks" className="flex items-center gap-3 px-3 py-2.5 text-slate-700 hover:bg-slate-50 rounded-xl text-sm font-medium" onClick={() => setMobileMenuOpen(false)}>My Bookmarks</Link>
+                    <Link to="/my-profile?tab=saved" className="flex items-center gap-3 px-3 py-2.5 text-slate-700 hover:bg-slate-50 rounded-xl text-sm font-medium" onClick={() => setMobileMenuOpen(false)}>My Bookmarks</Link>
                     <Link to="/chat" className="flex items-center gap-3 px-3 py-2.5 text-slate-700 hover:bg-slate-50 rounded-xl text-sm font-medium" onClick={() => setMobileMenuOpen(false)}>Messages</Link>
                     <Link to="/dashboard" className="flex items-center gap-3 px-3 py-2.5 text-slate-700 hover:bg-slate-50 rounded-xl" onClick={() => setMobileMenuOpen(false)}>
                       {avatarSrc ? (

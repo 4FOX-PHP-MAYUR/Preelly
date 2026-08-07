@@ -41,12 +41,15 @@ function Layout({ children }) {
     location.pathname === '/dashboard/orders' ||
     location.pathname.startsWith('/dashboard/notifications')
   const isMyProfile = location.pathname === '/my-profile'
+  // Admin-authored content pages (/pages/:slug) render the same full-height
+  // home-style shell — no app footer, same as the other shell routes above.
+  const isDynamicContentPage = location.pathname.startsWith('/pages/')
 
   return (
     <div className={`min-h-screen ${isReelsPage ? 'bg-black' : isHomePage || isChatPage || isProductDetailPage || isSearchPage || isCategoryProductsPage || isSettingsShell ? 'bg-white' : isCategoryBrowsePage || isUserProfilePage ? 'bg-[#f7f8fa]' : isAuthRoute ? 'bg-[#f6f7fb]' : isPostAdFlow ? 'bg-white' : 'bg-gray-50'}`}>
       <Header />
       <main className={isPostAdFlow || isSearchPage || isCategoryProductsPage ? 'overflow-x-hidden min-w-0' : 'min-w-0'}>{children}</main>
-      {!isSearchPage && !isCategoryProductsPage && !isSettingsShell && !isMyProfile ? <Footer /> : null}
+      {!isSearchPage && !isCategoryProductsPage && !isSettingsShell && !isMyProfile && !isDynamicContentPage ? <Footer /> : null}
     </div>
   )
 }

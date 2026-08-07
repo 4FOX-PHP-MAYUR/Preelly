@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams, useNavigate, useLocation } from 'react-router-dom'
+import { Link, useParams, useNavigate, useLocation, useSearchParams } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import {
   BadgeCheck,
@@ -34,6 +34,13 @@ import MoreOptionsModal from '../../components/Chat/MoreOptionsModal'
 import ShareProfileModal from '@shared/components/Profile/ShareProfileModal'
 import { productHasVideo } from '@shared/utils/videoHelpers'
 
+// Own-profile content tabs, also addressable as ?tab=<id> so other screens can
+// deep-link straight to one (e.g. the "My Bookmarks" menu entry -> ?tab=saved).
+const PROFILE_TAB_IDS = ['listings', 'saved', 'liked']
+function normalizeProfileTab(value) {
+  return PROFILE_TAB_IDS.includes(String(value)) ? String(value) : 'listings'
+}
+
 function formatCompact(n) {
   const num = Number(n || 0)
   if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
@@ -45,6 +52,8 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
   const params = useParams()
   const navigate = useNavigate()
   const location = useLocation()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const tabParam = searchParams.get('tab')
   const dispatch = useDispatch()
   const requireAuth = useRequireAuth()
   const currentUser = useSelector(selectUser)
@@ -62,8 +71,9 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
   const [showReviews, setShowReviews] = useState(false)
   const [activePost, setActivePost] = useState(null)
   const [stats, setStats] = useState({ totalProducts: 0, totalViews: 0, totalLikes: 0 })
-  // Own-profile content tabs: My Listings / Saved / Liked.
-  const [activeTab, setActiveTab] = useState('listings')
+  // Own-profile content tabs: My Listings / Saved / Liked. Seeded from ?tab= so
+  // a link can open the profile with a specific tab already selected.
+  const [activeTab, setActiveTab] = useState(() => normalizeProfileTab(tabParam))
   const [savedItems, setSavedItems] = useState([])
   const [likedItems, setLikedItems] = useState([])
   const [moreOpen, setMoreOpen] = useState(false)
@@ -159,6 +169,21 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
     )
     return () => { cancelled = true }
   }, [isOwnProfile])
+
+  // Follow ?tab= while mounted too: clicking "My Bookmarks" from this page only
+  // changes the query string, so there is no remount to pick the new tab up.
+  useEffect(() => {
+    setActiveTab(normalizeProfileTab(tabParam))
+  }, [tabParam])
+
+  // Tab clicks write the URL back so refresh/back/share land on the same tab.
+  const selectTab = (tabId) => {
+    setActiveTab(tabId)
+    const next = new URLSearchParams(searchParams)
+    if (tabId === 'listings') next.delete('tab')
+    else next.set('tab', tabId)
+    setSearchParams(next, { replace: true })
+  }
 
   const handleShareProfile = () => setShowShareProfile(true)
 
@@ -492,7 +517,7 @@ function UserProfilePage({ adminMode = false, renderAdminPanel = null, selfMode 
               <button
                 key={tabId}
                 type="button"
-                onClick={() => setActiveTab(tabId)}
+                onClick={() => selectTab(tabId)}
                 aria-label={label}
                 title={label}
                 className={`relative flex flex-1 items-center justify-center py-3 transition ${

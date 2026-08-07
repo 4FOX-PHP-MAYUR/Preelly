@@ -104,6 +104,13 @@ const BODY_BY_ROUTE = {
   // Mobile Google Sign-In: paste a real ID token from Google Sign-In on the
   // device (or set the googleIdToken collection variable).
   'POST /api/auth/google': { idToken: '{{googleIdToken}}' },
+  // Mobile Sign in with Apple. `user` is only present on the first authorization;
+  // later logins send identityToken (and authorizationCode) alone.
+  'POST /api/auth/apple': {
+    identityToken: '{{appleIdentityToken}}',
+    authorizationCode: '{{appleAuthorizationCode}}',
+    user: { name: 'John Doe', email: 'john@example.com' },
+  },
   'POST /api/auth/login': {},
   'POST /api/auth/logout': {},
   'PUT /api/user/reels-progress': { feedKey: 'default', index: 0 },
@@ -712,6 +719,9 @@ const collection = {
     { key: 'deviceId', value: 'postman-device-001' },
     // Paste the Google ID token from Google Sign-In on the device here.
     { key: 'googleIdToken', value: '' },
+    // Paste the Apple identity token / authorization code from the device here.
+    { key: 'appleIdentityToken', value: '' },
+    { key: 'appleAuthorizationCode', value: '' },
   ],
   item: [...byTag.entries()].map(([name, items]) => ({
     name,

@@ -32,6 +32,7 @@ const ROUTES = [
   ['post', '/api/auth/send-otp', 'Auth', 'Send login/signup OTP via email or WhatsApp (login only for WhatsApp)', false],
   ['post', '/api/auth/verify-otp', 'Auth', 'Verify OTP and sign in (email or WhatsApp channel)', false],
   ['post', '/api/auth/google', 'Auth', 'Mobile Google Sign-In: verify Google ID token; returns JWT', false],
+  ['post', '/api/auth/apple', 'Auth', 'Mobile Sign in with Apple: verify Apple identity token; returns JWT', false],
   ['post', '/api/auth/login', 'Auth', 'Deprecated — use send-otp + verify-otp', false],
   ['post', '/api/auth/logout', 'Auth', 'Logout; clears auth cookie', false],
 
@@ -323,6 +324,50 @@ function routeExtensions(method, openApiPath) {
                   type: 'string',
                   description: 'Google ID token (JWT) from Google Sign-In on the device',
                   example: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjExMjIzMzQ0…',
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+  }
+  if (openApiPath === '/api/auth/apple' && method === 'post') {
+    return {
+      description:
+        'Mobile Sign in with Apple. The app posts the identity token (and optionally the ' +
+        'one-time authorizationCode plus the first-login name/email); the server verifies ' +
+        'the token against Apple’s JWKS — signature, issuer, audience, expiry — then returns ' +
+        'the same `{ message, token, user }` payload as OTP sign-in. `user.name`/`user.email` ' +
+        'are display hints only and are never trusted for identity: the account is keyed on ' +
+        'the token’s `sub`, and only an Apple-verified email is used for linking. Private ' +
+        'relay addresses (@privaterelay.appleid.com) are fully supported.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['identityToken'],
+              properties: {
+                identityToken: {
+                  type: 'string',
+                  description: 'Apple identity token (JWT) from the Sign in with Apple SDK',
+                  example: 'eyJraWQiOiJmaDZCczhDIiwiYWxnIjoiUlMyNTYifQ…',
+                },
+                authorizationCode: {
+                  type: 'string',
+                  description: 'Optional one-time Apple authorization code, cross-checked with Apple when configured',
+                },
+                user: {
+                  type: 'object',
+                  description: 'Optional — Apple supplies these on the FIRST authorization only',
+                  properties: {
+                    name: { type: 'string', example: 'John Doe' },
+                    firstName: { type: 'string', example: 'John' },
+                    lastName: { type: 'string', example: 'Doe' },
+                    email: { type: 'string', description: 'Ignored for identity — the verified token wins' },
+                  },
                 },
               },
             },

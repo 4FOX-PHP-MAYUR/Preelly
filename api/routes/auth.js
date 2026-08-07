@@ -20,6 +20,12 @@ const {
 const { getCookieName, getCookieClearOptions, setJwtCookie } = require('../utils/jwt')
 const { verifyGoogleIdToken } = require('../utils/googleIdToken')
 const { resolveGoogleUser } = require('../core/services/googleAuthService')
+const {
+  verifyAppleIdentityToken,
+  exchangeAppleAuthorizationCode,
+  canExchangeAuthorizationCode,
+} = require('../utils/appleIdToken')
+const { resolveAppleUser } = require('../core/services/appleAuthService')
 
 const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET || 'your-secret-key', {
@@ -1308,6 +1314,107 @@ router.post(
       }
       console.error('Google sign-in error:', error)
       return res.status(500).json({ message: 'Server error during Google sign in' })
+    }
+  }
+)
+
+// @route   POST /api/auth/apple
+// @desc    Sign in with Apple for the mobile app: verifies the Apple identity
+//          token against Apple's JWKS and returns the normal Preelly JWT + user
+//          payload, identical in shape to the OTP and Google responses.
+//          `name`/`email` are optional because Apple only sends them on the first
+//          authorization; the identity token is the source of truth either way.
+//          The web browser flow stays on /api/auth/oauth/apple (redirect based).
+// @access  Public
+router.post(
+  '/apple',
+  [
+    body('identityToken').trim().notEmpty().withMessage('Apple identity token is required'),
+    body('authorizationCode').optional({ values: 'falsy' }).isString(),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req)
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg })
+      }
+
+      // Never log req.body here (or anywhere below): it carries the identity
+      // token and the authorization code.
+      console.log('[auth:apple] sign-in attempt received')
+
+      let profile
+      try {
+        profile = await verifyAppleIdentityToken(req.body.identityToken)
+      } catch (error) {
+        if (error?.isOperational) {
+          console.warn(
+            `[auth:apple] token rejected (${error.code}${
+              error.verificationReason ? `: ${error.verificationReason}` : ''
+            })`
+          )
+          return res.status(error.statusCode).json({ message: error.message })
+        }
+        throw error
+      }
+
+      // Optional cross-check: if the app sent the one-time authorization code and
+      // the server has Apple's signing key, redeem it and confirm Apple returns
+      // the same user. A mismatch is a genuine attack signal and is refused.
+      // A failed exchange is not — codes are single-use and expire in ~5 minutes,
+      // so a retry legitimately fails while the identity token stays valid. It is
+      // therefore logged and ignored unless APPLE_REQUIRE_AUTH_CODE=true.
+      const authorizationCode = String(req.body.authorizationCode || '').trim()
+      const requireAuthCode = process.env.APPLE_REQUIRE_AUTH_CODE === 'true'
+      if (authorizationCode && canExchangeAuthorizationCode() && profile.audience) {
+        try {
+          const exchanged = await exchangeAppleAuthorizationCode(authorizationCode, profile.audience)
+          if (exchanged.sub && exchanged.sub !== profile.appleId) {
+            console.warn('[auth:apple] rejected: authorization code belongs to a different Apple user')
+            return res.status(401).json({ message: 'Apple sign in failed. Please try again.' })
+          }
+          console.log('[auth:apple] authorization code verified with Apple')
+        } catch (error) {
+          const reason = error?.verificationReason || error?.code || 'exchange failed'
+          console.warn(`[auth:apple] authorization code not verified (${reason})`)
+          if (requireAuthCode) {
+            return res.status(401).json({ message: 'Apple sign in failed. Please try again.' })
+          }
+        }
+      } else if (requireAuthCode) {
+        console.warn('[auth:apple] rejected: authorization code required but missing or unverifiable')
+        return res.status(400).json({ message: 'Apple authorization code is required' })
+      }
+
+      const { user, isNewUser, linked } = await resolveAppleUser(profile, req.body.user || {})
+
+      if (isNewUser) {
+        console.log(
+          `[auth:apple] new account created (user ${user._id}, email ${
+            profile.email ? (profile.isPrivateRelay ? 'private-relay' : 'provided') : 'withheld'
+          })`
+        )
+      } else if (linked) {
+        console.log(`[auth:apple] linked Apple identity to existing account (user ${user._id})`)
+      } else {
+        console.log(`[auth:apple] existing account signed in (user ${user._id})`)
+      }
+
+      return sendAuthSuccessWithPermissions(
+        res,
+        user,
+        isNewUser ? 'Account created successfully' : 'Login successful'
+      )
+    } catch (error) {
+      // Operational errors from the service (deactivated account, link conflict)
+      // carry a client-safe message; anything else stays generic so database or
+      // Apple internals are never exposed.
+      if (error?.isOperational) {
+        console.warn(`[auth:apple] rejected (${error.code})`)
+        return res.status(error.statusCode).json({ message: error.message })
+      }
+      console.error('Apple sign-in error:', error)
+      return res.status(500).json({ message: 'Server error during Apple sign in' })
     }
   }
 )

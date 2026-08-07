@@ -68,6 +68,14 @@
     {
       "key": "googleIdToken",
       "value": ""
+    },
+    {
+      "key": "appleIdentityToken",
+      "value": ""
+    },
+    {
+      "key": "appleAuthorizationCode",
+      "value": ""
     }
   ],
   "item": [
@@ -581,6 +589,41 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"idToken\": \"{{googleIdToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/auth/apple",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/apple",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "apple"
+              ]
+            },
+            "description": "Mobile Sign in with Apple: verify Apple identity token; returns JWT",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identityToken\": \"{{appleIdentityToken}}\",\n  \"authorizationCode\": \"{{appleAuthorizationCode}}\",\n  \"user\": {\n    \"name\": \"John Doe\",\n    \"email\": \"john@example.com\"\n  }\n}",
               "options": {
                 "raw": {
                   "language": "json"

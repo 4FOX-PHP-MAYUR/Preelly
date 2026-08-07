@@ -101,6 +101,9 @@ const BODY_BY_ROUTE = {
     otp: '123456',
     mode: 'login',
   },
+  // Mobile Google Sign-In: paste a real ID token from Google Sign-In on the
+  // device (or set the googleIdToken collection variable).
+  'POST /api/auth/google': { idToken: '{{googleIdToken}}' },
   'POST /api/auth/login': {},
   'POST /api/auth/logout': {},
   'PUT /api/user/reels-progress': { feedKey: 'default', index: 0 },
@@ -707,6 +710,8 @@ const collection = {
     { key: 'messageId', value: '507f1f77bcf86cd799439017' },
     { key: 'commentId', value: '507f1f77bcf86cd799439018' },
     { key: 'deviceId', value: 'postman-device-001' },
+    // Paste the Google ID token from Google Sign-In on the device here.
+    { key: 'googleIdToken', value: '' },
   ],
   item: [...byTag.entries()].map(([name, items]) => ({
     name,

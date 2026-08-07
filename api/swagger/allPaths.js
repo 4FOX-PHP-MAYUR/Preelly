@@ -31,6 +31,7 @@ const ROUTES = [
   ['post', '/api/auth/verify-phone-otp', 'Auth', 'Verify signup mobile OTP (WhatsApp); returns JWT when fully verified', false],
   ['post', '/api/auth/send-otp', 'Auth', 'Send login/signup OTP via email or WhatsApp (login only for WhatsApp)', false],
   ['post', '/api/auth/verify-otp', 'Auth', 'Verify OTP and sign in (email or WhatsApp channel)', false],
+  ['post', '/api/auth/google', 'Auth', 'Mobile Google Sign-In: verify Google ID token; returns JWT', false],
   ['post', '/api/auth/login', 'Auth', 'Deprecated — use send-otp + verify-otp', false],
   ['post', '/api/auth/logout', 'Auth', 'Logout; clears auth cookie', false],
 
@@ -302,6 +303,34 @@ function buildProductMultipartRequestBody(isUpdate = false) {
 }
 
 function routeExtensions(method, openApiPath) {
+  if (openApiPath === '/api/auth/google' && method === 'post') {
+    return {
+      description:
+        'Mobile Google Sign-In. The app performs Google Sign-In and posts only the ID token; ' +
+        'the server verifies its signature, audience, issuer and expiry, requires a verified ' +
+        'Google email, then returns the same `{ message, token, user }` payload as OTP sign-in. ' +
+        'Identity fields are read from the verified token only — email/name/googleId sent by the ' +
+        'client are ignored. Browsers use the redirect flow at /api/auth/oauth/google instead.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['idToken'],
+              properties: {
+                idToken: {
+                  type: 'string',
+                  description: 'Google ID token (JWT) from Google Sign-In on the device',
+                  example: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjExMjIzMzQ0…',
+                },
+              },
+            },
+          },
+        },
+      },
+    }
+  }
   if (openApiPath === '/api/products' && method === 'post') {
     return {
       requestBody: buildProductMultipartRequestBody(false),

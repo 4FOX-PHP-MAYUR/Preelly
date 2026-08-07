@@ -64,6 +64,10 @@
     {
       "key": "deviceId",
       "value": "postman-device-001"
+    },
+    {
+      "key": "googleIdToken",
+      "value": ""
     }
   ],
   "item": [
@@ -551,6 +555,41 @@
           }
         },
         {
+          "name": "POST /api/auth/google",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/google",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "auth",
+                "google"
+              ]
+            },
+            "description": "Mobile Google Sign-In: verify Google ID token; returns JWT",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"{{googleIdToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
           "name": "POST /api/auth/login",
           "request": {
             "method": "POST",
@@ -747,6 +786,28 @@
               ]
             },
             "description": "Property categories with subcategories (v1 mobile)"
+          }
+        },
+        {
+          "name": "GET /api/v1/classifieds/categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/classifieds/categories",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "v1",
+                "classifieds",
+                "categories"
+              ]
+            },
+            "description": "Get Classified Categories"
           }
         },
         {
@@ -4465,6 +4526,180 @@
           }
         },
         {
+          "name": "GET /api/admin/user-reports/stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/user-reports/stats",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "user-reports",
+                "stats"
+              ]
+            },
+            "description": "User report stats"
+          }
+        },
+        {
+          "name": "GET /api/admin/user-reports/most-reported",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/user-reports/most-reported",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "user-reports",
+                "most-reported"
+              ]
+            },
+            "description": "Most reported users"
+          }
+        },
+        {
+          "name": "GET /api/admin/user-reports/reasons",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/user-reports/reasons",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "user-reports",
+                "reasons"
+              ]
+            },
+            "description": "User report reasons"
+          }
+        },
+        {
+          "name": "GET /api/admin/user-reports",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/user-reports",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "user-reports"
+              ]
+            },
+            "description": "User reports (grouped)"
+          }
+        },
+        {
+          "name": "GET /api/admin/user-reports/:userId",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/user-reports/{{userId}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "user-reports",
+                ":userId"
+              ],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "User report detail"
+          }
+        },
+        {
+          "name": "PUT /api/admin/user-reports/:userId/action",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/user-reports/{{userId}}/action",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "admin",
+                "user-reports",
+                ":userId",
+                "action"
+              ],
+              "variable": [
+                {
+                  "key": "userId",
+                  "value": "507f1f77bcf86cd799439011"
+                }
+              ]
+            },
+            "description": "Resolve user report"
+          }
+        },
+        {
           "name": "GET /api/admin/support-unread-count",
           "request": {
             "method": "GET",
@@ -4743,7 +4978,7 @@
             "description": "Create category",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"New Category\",\n  \"slug\": \"new-category\",\n  \"parentId\": null,\n  \"sortOrder\": 0,\n  \"isActive\": true\n}",
+              "raw": "{\n  \"name\": \"New Category\",\n  \"slug\": \"new-category\",\n  \"parentId\": null,\n  \"sortOrder\": 0,\n  \"isActive\": true,\n  \"colorCode\": \"#FF0000\",\n  \"xOrder\": 0\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -4884,7 +5119,7 @@
             "description": "Update category",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Updated name\",\n  \"slug\": \"updated-slug\",\n  \"parentId\": null,\n  \"sortOrder\": 1,\n  \"isActive\": true\n}",
+              "raw": "{\n  \"name\": \"Updated name\",\n  \"slug\": \"updated-slug\",\n  \"parentId\": null,\n  \"sortOrder\": 1,\n  \"isActive\": true,\n  \"colorCode\": \"#FF0000\",\n  \"xOrder\": 1\n}",
               "options": {
                 "raw": {
                   "language": "json"

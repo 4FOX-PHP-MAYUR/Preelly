@@ -18,6 +18,8 @@ const {
   maybeUpgradeUserPhone,
 } = require('../utils/phone')
 const { getCookieName, getCookieClearOptions, setJwtCookie } = require('../utils/jwt')
+const { verifyGoogleIdToken } = require('../utils/googleIdToken')
+const { resolveGoogleUser } = require('../core/services/googleAuthService')
 
 const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET || 'your-secret-key', {
@@ -1243,6 +1245,69 @@ router.post(
           .json({ message: 'Email service is not configured (Google SMTP env vars missing)' })
       }
       return res.status(500).json({ message: 'Server error while sending OTP' })
+    }
+  }
+)
+
+// @route   POST /api/auth/google
+// @desc    Google Sign-In for the mobile app: verifies a Google ID token
+//          server-side and returns the normal Preelly JWT + user payload, so the
+//          client treats it exactly like the OTP sign-in responses.
+//          The web browser flow stays on /api/auth/oauth/google (redirect based).
+// @access  Public
+router.post(
+  '/google',
+  [body('idToken').trim().notEmpty().withMessage('Google ID token is required')],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req)
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg })
+      }
+
+      // Never log req.body here (or anywhere below): it carries the ID token.
+      console.log('[auth:google] sign-in attempt received')
+
+      let profile
+      try {
+        profile = await verifyGoogleIdToken(req.body.idToken)
+      } catch (error) {
+        if (error?.isOperational) {
+          console.warn(
+            `[auth:google] token rejected (${error.code}${
+              error.verificationReason ? `: ${error.verificationReason}` : ''
+            })`
+          )
+          return res.status(error.statusCode).json({ message: error.message })
+        }
+        throw error
+      }
+
+      const { user, isNewUser, linked } = await resolveGoogleUser(profile)
+
+      if (isNewUser) {
+        console.log(`[auth:google] new account created (user ${user._id})`)
+      } else if (linked) {
+        console.log(`[auth:google] linked Google identity to existing account (user ${user._id})`)
+      } else {
+        console.log(`[auth:google] existing account signed in (user ${user._id})`)
+      }
+
+      return sendAuthSuccessWithPermissions(
+        res,
+        user,
+        isNewUser ? 'Account created successfully' : 'Login successful'
+      )
+    } catch (error) {
+      // Operational errors from the service (deactivated account, link conflict)
+      // carry a client-safe message; anything else stays generic so database or
+      // Google internals are never exposed.
+      if (error?.isOperational) {
+        console.warn(`[auth:google] rejected (${error.code})`)
+        return res.status(error.statusCode).json({ message: error.message })
+      }
+      console.error('Google sign-in error:', error)
+      return res.status(500).json({ message: 'Server error during Google sign in' })
     }
   }
 )

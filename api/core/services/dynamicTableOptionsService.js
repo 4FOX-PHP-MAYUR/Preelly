@@ -345,10 +345,31 @@ async function buildLegacyFilterOptionsMap(filterFields) {
 
 /**
  * Parent category a legacy `categories` dropdown loads its options from.
- * A field scoped to a child category resolves against that child; otherwise the
- * original categoryId is used, so existing fields behave exactly as before.
+ *
+ * The category the request asked for wins. A form field can be matched through
+ * the scope bridges in utils/formFieldScope (a row stored against an ancestor
+ * with categoryFilterId/childCategoryId pointing at the requested category), and
+ * in that case `field.categoryId` is the ancestor — loading options from it lists
+ * the ancestor's children instead of the requested category's. e.g. `brandid` is
+ * stored on "Mobile & Tablets" with categoryFilterId "Mobile Phones": a request
+ * for Mobile Phones must list Apple/Samsung/…, not Mobile Phones/Tablets/…
+ *
+ * `requested.childCategoryId` is preferred when the caller sent one, since that
+ * is the most specific category in the request — which is also what the previous
+ * field-scope lookup resolved to, so those requests are unaffected.
+ * The field's own scope stays as the fallback for callers that pass no context.
  */
-function resolveLegacyCategoryParentId(field = {}) {
+function resolveLegacyCategoryParentId(field = {}, requested = {}) {
+  const requestedChildId = requested.childCategoryId
+  if (requestedChildId && Types.ObjectId.isValid(String(requestedChildId))) {
+    return String(requestedChildId)
+  }
+
+  const requestedCategoryId = requested.categoryId
+  if (requestedCategoryId && Types.ObjectId.isValid(String(requestedCategoryId))) {
+    return String(requestedCategoryId)
+  }
+
   const childCategoryId = field.childCategoryId?._id || field.childCategoryId
   if (childCategoryId && Types.ObjectId.isValid(String(childCategoryId))) {
     return String(childCategoryId)
@@ -356,7 +377,7 @@ function resolveLegacyCategoryParentId(field = {}) {
   return String(field.categoryId || '')
 }
 
-async function buildLegacyCategoryOptionsMap(categoryFields, { useBridgeLogic = false } = {}) {
+async function buildLegacyCategoryOptionsMap(categoryFields, { useBridgeLogic = false, requested = {} } = {}) {
   const catOptionsMap = new Map()
 
   if (!categoryFields.length) return catOptionsMap
@@ -414,7 +435,7 @@ async function buildLegacyCategoryOptionsMap(categoryFields, { useBridgeLogic = 
   }
 
   const uniqueCategoryIds = [
-    ...new Set(categoryFields.map((f) => resolveLegacyCategoryParentId(f)).filter(Boolean)),
+    ...new Set(categoryFields.map((f) => resolveLegacyCategoryParentId(f, requested)).filter(Boolean)),
   ]
 
   const allDescendants = await fetchCategoryDescendants(uniqueCategoryIds)
@@ -430,12 +451,12 @@ function resolveLegacyFilterOptions(field, filterChildrenMap) {
   return filterChildrenMap.get(String(field.filterId?._id || '')) || []
 }
 
-function resolveLegacyCategoryOptions(field, catOptionsMap, { useBridgeLogic = false } = {}) {
+function resolveLegacyCategoryOptions(field, catOptionsMap, { useBridgeLogic = false, requested = {} } = {}) {
   if (useBridgeLogic) {
     const key = `${String(field.categoryId)}_${(field.fieldTitle || '').toLowerCase().trim()}`
     return catOptionsMap.get(key) || []
   }
-  return catOptionsMap.get(resolveLegacyCategoryParentId(field)) || []
+  return catOptionsMap.get(resolveLegacyCategoryParentId(field, requested)) || []
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -512,7 +533,14 @@ async function bulkLoadDynamicOptions(fields) {
  * Load options for all selection fields on a dynamic form.
  * Preserves legacy filters/categories behaviour; uses dynamic loader for other registered tables.
  */
-async function loadOptionsForFormFields(rawFields, { categoryBridgeLogic = false } = {}) {
+async function loadOptionsForFormFields(
+  rawFields,
+  { categoryBridgeLogic = false, requestedCategoryId = null, requestedChildCategoryId = null } = {}
+) {
+  // Category context from the request itself — used only by the legacy
+  // `categories` handler; filters and registry-driven tables are untouched.
+  const requested = { categoryId: requestedCategoryId, childCategoryId: requestedChildCategoryId }
+
   const selectionFields = rawFields.filter((f) =>
     isSelectionFieldType(f.fieldTypeId?.fieldValue)
   )
@@ -536,7 +564,7 @@ async function loadOptionsForFormFields(rawFields, { categoryBridgeLogic = false
 
   const [filterChildrenMap, catOptionsMap, dynamicOptionsMap] = await Promise.all([
     buildLegacyFilterOptionsMap(legacyFilterFields),
-    buildLegacyCategoryOptionsMap(legacyCategoryFields, { useBridgeLogic: categoryBridgeLogic }),
+    buildLegacyCategoryOptionsMap(legacyCategoryFields, { useBridgeLogic: categoryBridgeLogic, requested }),
     bulkLoadDynamicOptions(dynamicFields),
   ])
 
@@ -552,7 +580,10 @@ async function loadOptionsForFormFields(rawFields, { categoryBridgeLogic = false
         return resolveLegacyFilterOptions(field, filterChildrenMap)
       }
       if (config.legacyHandler === 'categories' && usesLegacyHandler(config, field)) {
-        return resolveLegacyCategoryOptions(field, catOptionsMap, { useBridgeLogic: categoryBridgeLogic })
+        return resolveLegacyCategoryOptions(field, catOptionsMap, {
+          useBridgeLogic: categoryBridgeLogic,
+          requested,
+        })
       }
 
       return dynamicOptionsMap.get(String(field._id)) || []

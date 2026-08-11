@@ -136,6 +136,12 @@ app.use('/uploads', express.static(uploadsDir, {
     } else if (filePath.endsWith('.m4s')) {
       res.setHeader('Content-Type', 'video/iso.segment')
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    } else if (filePath.endsWith('.svg')) {
+      // An uploaded SVG is markup and can carry script. The sandbox CSP stops it
+      // running if the file is opened as a page; rendering inside an <img> (how the
+      // app actually uses these) is unaffected.
+      res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'")
+      res.setHeader('X-Content-Type-Options', 'nosniff')
     }
   },
 }))

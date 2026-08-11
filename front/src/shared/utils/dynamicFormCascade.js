@@ -20,14 +20,32 @@ export function isEmptyValue(value) {
 }
 
 /**
- * The field that `sourceField`'s functionName feeds. Declared via
- * `functionForField`, else derived from the function's own name
- * ("getTrimByID" -> "trim").
+ * Nested-tree sources that feed a dependent dropdown by convention rather than by an
+ * admin-configured functionName: `brandid`'s options already carry each brand's models
+ * in `children`, which are exactly the `modelid` dropdown's options. Only applies when
+ * the source really is a nested tree — a flat `brandid` (tableName "filters") keeps
+ * whatever the form fetch resolved for `modelid`.
+ */
+const NESTED_CASCADE_TARGETS = { brandid: 'modelid' }
+
+/** The fieldName `sourceField` feeds, or null when it drives no cascade. */
+function resolveCascadeTargetName(sourceField) {
+  if (hasFieldFunction(sourceField)) {
+    const declared = parseFunctionForFieldNames(sourceField.functionForField)[0]
+    return declared || deriveFunctionTargetFieldName(sourceField.functionName)
+  }
+  if (!hasNestedOptions(sourceField)) return null
+  return NESTED_CASCADE_TARGETS[String(sourceField.fieldName || '').toLowerCase()] || null
+}
+
+/**
+ * The field `sourceField` feeds. For a functionName-driven field that's whatever
+ * `functionForField` declares, else it's derived from the function's own name
+ * ("getTrimByID" -> "trim"); for a nested tree without a functionName it's the
+ * conventional pairing above (brandid -> modelid).
  */
 export function findCascadeTargetField(sourceField, allFields) {
-  if (!hasFieldFunction(sourceField)) return null
-  const declared = parseFunctionForFieldNames(sourceField.functionForField)[0]
-  const targetName = declared || deriveFunctionTargetFieldName(sourceField.functionName)
+  const targetName = resolveCascadeTargetName(sourceField)
   if (!targetName) return null
   return (
     (allFields || []).find(
@@ -73,21 +91,19 @@ export function buildCascadeParams(dependentField, values) {
 export function collectPendingCascades({ allFields, values, computedOptions }) {
   const pending = []
   ;(allFields || []).forEach((sourceField) => {
-    if (!hasFieldFunction(sourceField)) return
-    const value = values?.[sourceField.fieldName]
-    if (isEmptyValue(value)) return
-
     const targetField = findCascadeTargetField(sourceField, allFields)
     if (!targetField) return
     // Already resolved (or in flight) — leave it alone.
     if (computedOptions?.[targetField.fieldName] !== undefined) return
 
-    pending.push({
-      sourceField,
-      targetField,
-      value,
-      nestedOptions: nestedCascadeOptions(sourceField, value),
-    })
+    const value = values?.[sourceField.fieldName]
+    const nestedOptions = nestedCascadeOptions(sourceField, value)
+    // A nested source with nothing picked still resolves — to no options — so the
+    // dependent dropdown shows its placeholder rather than a list that belongs to no
+    // selection. A server-computed cascade has nothing to call yet, so it waits.
+    if (isEmptyValue(value) && !nestedOptions) return
+
+    pending.push({ sourceField, targetField, value, nestedOptions })
   })
   return pending
 }

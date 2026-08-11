@@ -55,6 +55,21 @@ const QUICK_FILTER_LABEL_BY_PANEL = Object.fromEntries(
   Object.entries(QUICK_FILTER_PANELS).map(([label, panel]) => [panel, label]),
 )
 
+// Price slider bounds. The API reports the real min/max of the category's listings,
+// which collapses to a single point when they all cost the same (AED 1 – AED 1) and
+// leaves the slider unusable. These floor the range at AED 1 – AED 10,000 while still
+// widening to whatever the category actually holds, so Motors keeps its full span.
+const PRICE_SLIDER_FLOOR = 1
+const PRICE_SLIDER_MIN_CEILING = 10000
+
+function normalizePriceRange({ minPrice, maxPrice } = {}) {
+  const apiMax = Number(maxPrice)
+  return {
+    min: PRICE_SLIDER_FLOOR,
+    max: Math.max(Number.isFinite(apiMax) ? apiMax : 0, PRICE_SLIDER_MIN_CEILING),
+  }
+}
+
 function CategoryProductsPage() {
   const { categoryId, subcategoryId: routeSubcategoryId } = useParams()
   const navigate = useNavigate()
@@ -70,7 +85,7 @@ function CategoryProductsPage() {
   const [categoryError, setCategoryError] = useState('')
   const [subcategories, setSubcategories] = useState([])
   const didFetchRootsRef = useRef(false)
-  const [priceRange, setPriceRange] = useState({ min: 0, max: 100000 })
+  const [priceRange, setPriceRange] = useState(normalizePriceRange())
   const [facetCities, setFacetCities] = useState([])
   const [facetMileageRange, setFacetMileageRange] = useState({ min: 0, max: 0 })
 
@@ -484,10 +499,10 @@ function CategoryProductsPage() {
     const fetchPriceRange = async () => {
       try {
         const response = await productService.getPriceRange(rootCategoryId)
-        const { minPrice, maxPrice } = response.data
-        setPriceRange({ min: minPrice, max: maxPrice })
+        setPriceRange(normalizePriceRange(response.data))
       } catch (e) {
         console.error('Error fetching price range:', e)
+        setPriceRange(normalizePriceRange())
       }
     }
     fetchPriceRange()

@@ -225,6 +225,32 @@ export const dashboardService = {
     api.get(`/admin/dashboard/reports/${type}/download`, { params, responseType: 'blob' }),
 }
 
+/**
+ * Form field create/update payload → [body, axios config].
+ *
+ * Stays JSON — as it always has, keeping nested tableConfig intact — unless a Field
+ * Icon file is attached, which needs multipart. FormData is flat, so tableConfig is
+ * JSON-encoded on that path and the API decodes it.
+ * @returns {[object|FormData, object|undefined]}
+ */
+const buildFormFieldRequest = (data) => {
+  const payload = data || {}
+  if (!(payload.fieldIcon instanceof File)) {
+    const { fieldIcon, ...rest } = payload
+    return [rest, undefined]
+  }
+  const formData = new FormData()
+  Object.entries(payload).forEach(([key, value]) => {
+    if (value === undefined || value === null) return
+    if (key === 'fieldIcon') {
+      formData.append('fieldIcon', value)
+      return
+    }
+    formData.append(key, typeof value === 'object' ? JSON.stringify(value) : value)
+  })
+  return [formData, { headers: { 'Content-Type': 'multipart/form-data' } }]
+}
+
 // Admin service
 export const adminService = {
   getPendingProducts: (params) => api.get('/admin/products/pending', { params }),
@@ -515,8 +541,14 @@ export const adminService = {
   getFormFieldFilters: (categoryId) => api.get('/admin/form-fields/filters', { params: { categoryId } }),
   getFormFieldOptionTables: () => api.get('/admin/form-fields/option-tables'),
   getFormFieldById: (id) => api.get(`/admin/form-fields/${id}`),
-  createFormField: (data) => api.post('/admin/form-fields', data),
-  updateFormField: (id, data) => api.patch(`/admin/form-fields/${id}`, data),
+  createFormField: (data) => {
+    const [body, config] = buildFormFieldRequest(data)
+    return api.post('/admin/form-fields', body, config)
+  },
+  updateFormField: (id, data) => {
+    const [body, config] = buildFormFieldRequest(data)
+    return api.patch(`/admin/form-fields/${id}`, body, config)
+  },
   deleteFormField: (id) => api.delete(`/admin/form-fields/${id}`),
 }
 

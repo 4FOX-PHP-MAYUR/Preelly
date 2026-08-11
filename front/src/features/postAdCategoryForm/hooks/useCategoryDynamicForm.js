@@ -10,7 +10,8 @@ import {
 } from '../../../shared/store/slices/dynamicFormSlice'
 import { validateFieldValue } from '../../../shared/utils/dynamicFormValidation'
 import { hasFieldFunction, parseFunctionForFieldNames } from '../../../shared/utils/dynamicFormFieldFunction'
-import { hasNestedOptions, deriveFunctionTargetFieldName } from '../../../shared/utils/nestedFieldOptions'
+import { hasNestedOptions } from '../../../shared/utils/nestedFieldOptions'
+import { findCascadeTargetField, nestedCascadeOptions, firstValue } from '../../../shared/utils/dynamicFormCascade'
 import { resolveFieldPrefillValue, isFieldEmpty } from '../../../shared/utils/dynamicFormAiPrefill'
 import { useDynamicFormLoader } from './useDynamicFormLoader'
 import { isScopePickerField, scopeValueOf } from '../../../shared/utils/dynamicFormScope'
@@ -78,32 +79,30 @@ export function useCategoryDynamicForm({ categoryId, initialValues, aiSignals = 
         dispatch(updateScope({ [scopeKey]: scopeValueOf(nextValue) }))
       }
 
-      // Case A: the field that just changed carries its own functionName (e.g. the
-      // "modelid" field's functionName "getTrimByID", functionForField "trimid").
-      // Its target field is whatever functionForField names, or — since this payload
-      // shape doesn't always set that — derived from the function's own name
-      // ("getTrimByID" -> "trim"). When the source field's options are a nested tree
-      // (modelid), the target's (trimid's) options are read straight off the selected
-      // node's `children` — no network call needed, since that data is already in
-      // the payload. Otherwise, the target's options are fetched via network call.
-      if (hasFieldFunction(field)) {
-        const declaredTarget = parseFunctionForFieldNames(field.functionForField)[0]
-        const targetFieldName = declaredTarget || deriveFunctionTargetFieldName(field.functionName)
-        const targetField = allFields.find((f) => f.fieldName.toLowerCase() === targetFieldName)
-
-        if (targetField) {
-          if (hasNestedOptions(field)) {
-            const selectedNode = (field.options || []).find((opt) => String(opt.value) === String(nextValue))
-            dispatch(setComputedOptions({ fieldName: targetField.fieldName, options: selectedNode?.children || [] }))
-          } else {
-            dispatch(
-              fetchFieldFunctionOptions({
-                fieldName: targetField.fieldName,
-                functionName: field.functionName,
-                params: { [field.fieldName]: Array.isArray(nextValue) ? nextValue[0] : nextValue },
-              })
-            )
-          }
+      // Case A: the field that just changed drives another field's options — either
+      // through its own functionName (e.g. "modelid" -> "trimid" via "getTrimByID") or
+      // through the nested-tree pairing findCascadeTargetField knows about (brandid ->
+      // modelid). When the source field's options are a nested tree, the target's
+      // options are read straight off the selected node's `children` — no network call
+      // needed, since that data is already in the payload (and picking nothing resolves
+      // to no options, clearing the target). Otherwise they're fetched.
+      const cascadeTarget = findCascadeTargetField(field, allFields)
+      if (cascadeTarget) {
+        if (hasNestedOptions(field)) {
+          dispatch(
+            setComputedOptions({
+              fieldName: cascadeTarget.fieldName,
+              options: nestedCascadeOptions(field, nextValue) || [],
+            })
+          )
+        } else {
+          dispatch(
+            fetchFieldFunctionOptions({
+              fieldName: cascadeTarget.fieldName,
+              functionName: field.functionName,
+              params: { [field.fieldName]: firstValue(nextValue) },
+            })
+          )
         }
       }
 

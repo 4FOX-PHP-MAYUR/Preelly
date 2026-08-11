@@ -4882,6 +4882,71 @@ async function getRootFiltersForCategory(categoryId) {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Optional form-field icon upload. The file is renamed to its upload timestamp
+// plus the original extension ("car-icon.png" -> "1786201234567.png") and only
+// that filename is stored on the row (see FormField.fieldIcon).
+// ---------------------------------------------------------------------------
+const formFieldIconDir = path.join(__dirname, '../uploads/images')
+if (!fs.existsSync(formFieldIconDir)) {
+  fs.mkdirSync(formFieldIconDir, { recursive: true })
+}
+const formFieldIconUpload = multer({
+  storage: multer.diskStorage({
+    destination: (req, file, cb) => cb(null, formFieldIconDir),
+    filename: (req, file, cb) => {
+      const ext = path.extname(file.originalname || '').toLowerCase() || '.png'
+      cb(null, `${Date.now()}${ext}`)
+    },
+  }),
+  limits: { fileSize: 2 * 1024 * 1024, files: 1 },
+  fileFilter: (req, file, cb) => {
+    // SVG is allowed because icons are usually vector. An SVG can carry script, so
+    // uploads/*.svg is served under a sandbox CSP (see the static handler in
+    // server.js) — that stops script if the file is opened directly, and does not
+    // affect how it renders in an <img>.
+    const allowedExts = ['.jpg', '.jpeg', '.png', '.webp', '.svg']
+    const allowedMimes = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/svg+xml']
+    const ext = path.extname(file.originalname || '').toLowerCase()
+    if (allowedMimes.includes(file.mimetype) && allowedExts.includes(ext)) cb(null, true)
+    else cb(new Error('Field icon must be a JPG, JPEG, PNG, WEBP or SVG image'), false)
+  },
+})
+
+/**
+ * Wraps multer so upload errors come back as JSON. Multer ignores non-multipart
+ * requests, so the existing JSON callers (everything that sends no icon) reach the
+ * route handler untouched.
+ */
+function handleFieldIconUpload(req, res, next) {
+  formFieldIconUpload.single('fieldIcon')(req, res, (err) => {
+    if (err) {
+      const message = err.code === 'LIMIT_FILE_SIZE'
+        ? 'Field icon must be 2 MB or smaller'
+        : err.message
+      return res.status(400).json({ message: message || 'Invalid field icon upload' })
+    }
+    next()
+  })
+}
+
+/** True when a request body flag means "on" — multipart sends booleans as strings. */
+function isFlagEnabled(value) {
+  return value === true || value === 'true' || value === 1 || value === '1'
+}
+
+/** tableConfig arrives JSON-encoded on a multipart request, since FormData is flat. */
+function parseTableConfigInput(tableConfig) {
+  if (typeof tableConfig !== 'string') return tableConfig
+  const trimmed = tableConfig.trim()
+  if (!trimmed) return null
+  try {
+    return JSON.parse(trimmed)
+  } catch {
+    return null
+  }
+}
+
 // GET /api/admin/form-fields/option-tables - registered dynamic option source tables
 router.get('/form-fields/option-tables', adminMiddleware, async (req, res) => {
   try {
@@ -5054,13 +5119,13 @@ router.get('/form-fields/:id', adminMiddleware, async (req, res) => {
 })
 
 // POST /api/admin/form-fields - create
-router.post('/form-fields', adminMiddleware, async (req, res) => {
+router.post('/form-fields', adminMiddleware, handleFieldIconUpload, async (req, res) => {
   try {
     const {
       categoryId, fieldTypeId, filterId, categoryFilterId, childCategoryId,
       fieldTitle, placeholder, fieldName,
       fieldOrder, formStep, validation, tableName, tableConfig, functionName, isActive = true,
-      showOnQuickView = false,
+      showOnQuickView = false, isShowOnDetails = false,
     } = req.body
 
     // Required field validation
@@ -5088,7 +5153,7 @@ router.post('/form-fields', adminMiddleware, async (req, res) => {
 
     let resolvedTableConfig = null
     if (tableName && String(tableName).trim()) {
-      resolvedTableConfig = validateFormFieldTableConfig(tableName, tableConfig)
+      resolvedTableConfig = validateFormFieldTableConfig(tableName, parseTableConfigInput(tableConfig))
     }
 
     // Unique fieldName check (scoped to category + optional category filter + child category)
@@ -5126,6 +5191,8 @@ router.post('/form-fields', adminMiddleware, async (req, res) => {
       functionName: functionName ? String(functionName).trim() : '',
       isActive: isActive !== false && isActive !== 'false',
       showOnQuickView: showOnQuickView === true || showOnQuickView === 'true',
+      isShowOnDetails: isFlagEnabled(isShowOnDetails),
+      fieldIcon: req.file ? req.file.filename : '',
     })
     await formField.save()
 
@@ -5151,7 +5218,7 @@ router.post('/form-fields', adminMiddleware, async (req, res) => {
 })
 
 // PATCH /api/admin/form-fields/:id - update
-router.patch('/form-fields/:id', adminMiddleware, async (req, res) => {
+router.patch('/form-fields/:id', adminMiddleware, handleFieldIconUpload, async (req, res) => {
   try {
     const { id } = req.params
     if (!Types.ObjectId.isValid(id)) return res.status(400).json({ message: 'Invalid id' })
@@ -5162,7 +5229,9 @@ router.patch('/form-fields/:id', adminMiddleware, async (req, res) => {
       categoryId, fieldTypeId, filterId, categoryFilterId, childCategoryId,
       fieldTitle, placeholder, fieldName,
       fieldOrder, formStep, validation, tableName, tableConfig, functionName, isActive, showOnQuickView,
+      isShowOnDetails,
     } = req.body
+    const parsedTableConfig = parseTableConfigInput(tableConfig)
 
     if (categoryId !== undefined) {
       if (!Types.ObjectId.isValid(categoryId)) {
@@ -5203,9 +5272,9 @@ router.patch('/form-fields/:id', adminMiddleware, async (req, res) => {
     if (tableConfig !== undefined || tableName !== undefined) {
       const nextTableName = tableName !== undefined ? formField.tableName : formField.tableName
       if (nextTableName) {
-        formField.tableConfig = validateFormFieldTableConfig(nextTableName, tableConfig !== undefined ? tableConfig : formField.tableConfig)
+        formField.tableConfig = validateFormFieldTableConfig(nextTableName, tableConfig !== undefined ? parsedTableConfig : formField.tableConfig)
       } else {
-        formField.tableConfig = sanitizeTableConfig(tableConfig)
+        formField.tableConfig = sanitizeTableConfig(parsedTableConfig)
       }
     }
     if (functionName !== undefined) formField.functionName = String(functionName).trim()
@@ -5213,6 +5282,11 @@ router.patch('/form-fields/:id', adminMiddleware, async (req, res) => {
     if (showOnQuickView !== undefined) {
       formField.showOnQuickView = showOnQuickView === true || showOnQuickView === 'true'
     }
+    if (isShowOnDetails !== undefined) {
+      formField.isShowOnDetails = isFlagEnabled(isShowOnDetails)
+    }
+    // No new file means the existing icon stays as it is.
+    if (req.file) formField.fieldIcon = req.file.filename
 
     const dup = await findDuplicateFormFieldName(
       formField.categoryId,

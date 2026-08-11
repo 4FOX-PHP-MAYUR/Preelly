@@ -446,6 +446,11 @@ function buildQuickViewFormFieldConfigEntry(row) {
     formStep: row.formStep ?? 1,
     fieldType,
     isMulti: MULTI_FIELD_TYPES.has(fieldType),
+    // loadQuickViewFormFieldRows returns rows matching either flag, so both travel with
+    // the def and each presentation filters on its own.
+    showOnQuickView: row.showOnQuickView === true,
+    isShowOnDetails: row.isShowOnDetails === true,
+    fieldIcon: row.fieldIcon || null,
   }
 }
 
@@ -470,11 +475,14 @@ async function loadQuickViewFormFieldRows(categoryIds) {
     return cached.rows
   }
 
+  // Both quick-view presentations are served from this one query, each filtered by its
+  // own flag downstream: `showOnQuickView` drives quickViewData (the Overview card),
+  // `isShowOnDetails` drives detailQuickView (the meta line under the post title).
   const rows = await FormField.find({
     categoryId: { $in: categoryIds },
     isActive: true,
     isDeleted: false,
-    showOnQuickView: true,
+    $or: [{ showOnQuickView: true }, { isShowOnDetails: true }],
   })
     .populate('fieldTypeId', 'fieldValue')
     .sort({ formStep: 1, fieldOrder: 1 })
@@ -514,6 +522,9 @@ function buildQuickViewFieldDefinitions(product, formFieldMap, schemaRefPaths) {
       refSource,
       isMulti,
       rawValue,
+      showOnQuickView: formConfig.showOnQuickView === true,
+      isShowOnDetails: formConfig.isShowOnDetails === true,
+      fieldIcon: formConfig.fieldIcon || null,
     })
   }
 
@@ -575,6 +586,130 @@ function resolveQuickViewEntries(defs, lookupMaps) {
 }
 
 /**
+ * Feed-card variant of resolveQuickViewEntries: the admin-flagged (`isShowOnDetails`)
+ * fields the home feed renders under the post title, each with the icon uploaded on
+ * its FormField record. Same resolution/formatting path as quickViewData — the only
+ * differences are the icon, the driving flag, and that `fieldValue` is always a string
+ * (multi-select values are joined) so a card can render an entry without type-checking.
+ *
+ * `fieldIcon` is the stored filename, matching the FormField record; consumers build
+ * the URL the same way the admin does (`/uploads/images/<fieldIcon>`). It is null when
+ * no icon was uploaded.
+ */
+function resolveDetailQuickViewEntries(defs, lookupMaps) {
+  const detailQuickView = []
+
+  for (const def of defs) {
+    if (!def.isShowOnDetails) continue
+
+    const { single, multi } = def.refSource
+      ? resolveFieldPresentation(def, lookupMaps)
+      : resolveRawFieldPresentation(def)
+
+    const fieldValue =
+      def.isMulti || Array.isArray(def.rawValue)
+        ? (multi?.length ? multi.join(', ') : '')
+        : single == null
+          ? ''
+          : String(single)
+
+    if (fieldValue === '') continue
+
+    detailQuickView.push({
+      fieldKey: def.fieldKey,
+      fieldTitle: def.fieldTitle || '',
+      fieldValue,
+      fieldIcon: def.fieldIcon || null,
+    })
+  }
+
+  return detailQuickView
+}
+
+/**
+ * Resolve the per-product field definitions plus the display-label lookup maps for a
+ * batch of products. Shared by every quick-view presentation so one batch of DB reads
+ * serves them all — no N+1, and no second pass when a caller wants both quickViewData
+ * and detailQuickView.
+ * @param {object[]} products
+ * @returns {Promise<{ allDefs: object[][], lookupMaps: object }>}
+ */
+async function resolveQuickViewContext(products) {
+  const schemaRefPaths = getProductSchemaRefPaths()
+  const selectFields = getQuickViewProductSelectFields()
+
+  const productIds = products
+    .map((p) => toIdString(p?._id))
+    .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id))
+
+  const dbById = new Map()
+  if (productIds.length) {
+    const docs = await Product.find({ _id: { $in: productIds } })
+      .select(selectFields.join(' '))
+      .lean()
+    for (const doc of docs) dbById.set(String(doc._id), doc)
+  }
+
+  const mergedProducts = products.map((product) => {
+    const stored = dbById.get(String(product._id)) || {}
+    return { ...stored, ...product }
+  })
+
+  const allCategoryIds = [
+    ...new Set(mergedProducts.flatMap((product) => collectCategoryScopeIds(product).map(String))),
+  ]
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id))
+
+  const quickViewRows = await loadQuickViewFormFieldRows(allCategoryIds)
+  const allDefs = mergedProducts.map((product) =>
+    buildQuickViewFieldDefinitions(
+      product,
+      buildQuickViewFormFieldMapForProduct(quickViewRows, product),
+      schemaRefPaths
+    )
+  )
+
+  const idsByModel = {}
+  for (const modelName of Object.keys(REF_SOURCE_REGISTRY)) {
+    if (REF_SOURCE_REGISTRY[modelName]?.modelName === modelName) {
+      idsByModel[modelName] = new Set()
+    }
+  }
+  if (!idsByModel.Filter) idsByModel.Filter = new Set()
+  if (!idsByModel.Category) idsByModel.Category = new Set()
+  if (!idsByModel.Emirate) idsByModel.Emirate = new Set()
+  for (const defs of allDefs) {
+    for (const def of defs) {
+      if (!def.refSource) continue
+      const ids = normalizeToIdList(def.rawValue, def.isMulti)
+      for (const id of ids) {
+        if (def.refSource?.modelName && idsByModel[def.refSource.modelName]) {
+          idsByModel[def.refSource.modelName].add(id)
+        }
+      }
+    }
+  }
+
+  const lookupMaps = await batchLoadDisplayMaps(idsByModel)
+  return { allDefs, lookupMaps }
+}
+
+/**
+ * quickViewData is the `showOnQuickView` subset. The row query also returns fields
+ * flagged only for detailQuickView, so the flag is applied here rather than inside
+ * resolveQuickViewEntries — buildFeaturesForProducts shares that helper and must keep
+ * seeing every multi-select field regardless of either flag.
+ */
+function resolveQuickViewEntriesForFlag(defs, lookupMaps) {
+  return resolveQuickViewEntries(
+    defs.filter((def) => def.showOnQuickView),
+    lookupMaps
+  )
+}
+
+/**
  * Build quickViewData for a batch of products (feed APIs). Batches DB lookups — no N+1.
  * @param {object[]} products
  * @returns {Promise<object[][]>}
@@ -583,68 +718,38 @@ async function buildQuickViewDataForProducts(products = []) {
   if (!Array.isArray(products) || products.length === 0) return []
 
   try {
-    const schemaRefPaths = getProductSchemaRefPaths()
-    const selectFields = getQuickViewProductSelectFields()
-
-    const productIds = products
-      .map((p) => toIdString(p?._id))
-      .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
-      .map((id) => new mongoose.Types.ObjectId(id))
-
-    const dbById = new Map()
-    if (productIds.length) {
-      const docs = await Product.find({ _id: { $in: productIds } })
-        .select(selectFields.join(' '))
-        .lean()
-      for (const doc of docs) dbById.set(String(doc._id), doc)
-    }
-
-    const mergedProducts = products.map((product) => {
-      const stored = dbById.get(String(product._id)) || {}
-      return { ...stored, ...product }
-    })
-
-    const allCategoryIds = [
-      ...new Set(mergedProducts.flatMap((product) => collectCategoryScopeIds(product).map(String))),
-    ]
-      .filter((id) => mongoose.Types.ObjectId.isValid(id))
-      .map((id) => new mongoose.Types.ObjectId(id))
-
-    const quickViewRows = await loadQuickViewFormFieldRows(allCategoryIds)
-    const allDefs = mergedProducts.map((product) =>
-      buildQuickViewFieldDefinitions(
-        product,
-        buildQuickViewFormFieldMapForProduct(quickViewRows, product),
-        schemaRefPaths
-      )
-    )
-
-    const idsByModel = {}
-    for (const modelName of Object.keys(REF_SOURCE_REGISTRY)) {
-      if (REF_SOURCE_REGISTRY[modelName]?.modelName === modelName) {
-        idsByModel[modelName] = new Set()
-      }
-    }
-    if (!idsByModel.Filter) idsByModel.Filter = new Set()
-    if (!idsByModel.Category) idsByModel.Category = new Set()
-    if (!idsByModel.Emirate) idsByModel.Emirate = new Set()
-    for (const defs of allDefs) {
-      for (const def of defs) {
-        if (!def.refSource) continue
-        const ids = normalizeToIdList(def.rawValue, def.isMulti)
-        for (const id of ids) {
-          if (def.refSource?.modelName && idsByModel[def.refSource.modelName]) {
-            idsByModel[def.refSource.modelName].add(id)
-          }
-        }
-      }
-    }
-
-    const lookupMaps = await batchLoadDisplayMaps(idsByModel)
-    return allDefs.map((defs) => resolveQuickViewEntries(defs, lookupMaps))
+    const { allDefs, lookupMaps } = await resolveQuickViewContext(products)
+    return allDefs.map((defs) => resolveQuickViewEntriesForFlag(defs, lookupMaps))
   } catch (err) {
     console.error('[productAttributesResolver] Failed to build quickViewData:', err)
     return products.map(() => [])
+  }
+}
+
+/**
+ * Build both quick-view presentations for a batch of products in a single pass:
+ * `quickViewData` (the `showOnQuickView` fields, as buildQuickViewDataForProducts
+ * returns them) and `detailQuickView` (the `isShowOnDetails` fields plus each
+ * FormField's icon, for the meta line under the post title). The two flags are
+ * independent, so a field can appear in either, both, or neither.
+ *
+ * On failure both arrays come back empty for every product, so a caller can attach
+ * them unconditionally without the feed response breaking.
+ * @param {object[]} products
+ * @returns {Promise<Array<{ quickViewData: object[], detailQuickView: object[] }>>}
+ */
+async function buildQuickViewPresentationsForProducts(products = []) {
+  if (!Array.isArray(products) || products.length === 0) return []
+
+  try {
+    const { allDefs, lookupMaps } = await resolveQuickViewContext(products)
+    return allDefs.map((defs) => ({
+      quickViewData: resolveQuickViewEntriesForFlag(defs, lookupMaps),
+      detailQuickView: resolveDetailQuickViewEntries(defs, lookupMaps),
+    }))
+  } catch (err) {
+    console.error('[productAttributesResolver] Failed to build quick view presentations:', err)
+    return products.map(() => ({ quickViewData: [], detailQuickView: [] }))
   }
 }
 
@@ -754,6 +859,18 @@ async function buildFeaturesForProducts(products = []) {
 async function buildQuickViewDataPresentation(product = {}) {
   const [quickViewData = []] = await buildQuickViewDataForProducts([product])
   return quickViewData
+}
+
+/**
+ * Build the detailQuickView array for a single product — the `isShowOnDetails` fields
+ * with their icons, identical to what the trending/following feeds return, so the
+ * detail page and the feed cards render the same meta line from the same source.
+ * @param {object} product
+ * @returns {Promise<object[]>}
+ */
+async function buildDetailQuickViewPresentation(product = {}) {
+  const [{ detailQuickView } = {}] = await buildQuickViewPresentationsForProducts([product])
+  return detailQuickView || []
 }
 
 /**
@@ -959,7 +1076,9 @@ async function buildDetailFeaturesPresentation(product = {}) {
 module.exports = {
   buildProductAttributesPresentation,
   buildQuickViewDataPresentation,
+  buildDetailQuickViewPresentation,
   buildQuickViewDataForProducts,
+  buildQuickViewPresentationsForProducts,
   buildFeaturesForProducts,
   buildDetailFeaturesPresentation,
   resolveStoredFeaturesColumn,

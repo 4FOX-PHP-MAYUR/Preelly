@@ -1,6 +1,6 @@
 const mongoose = require('mongoose')
 const Product = require('../models/Product')
-const { buildQuickViewDataForProducts, buildDetailFeaturesPresentation } = require('./productAttributesResolver')
+const { buildQuickViewPresentationsForProducts, buildDetailFeaturesPresentation } = require('./productAttributesResolver')
 
 function toIdString (value) {
   if (value == null || value === '') return null
@@ -129,8 +129,8 @@ async function enrichReelsProducts (products) {
 
   const categoryNameByProductId = await fetchCategoryNamesByProductId(products)
   const withVehicleFields = products.map((p) => attachReelsVehicleFields(p, filterNames))
-  const [quickViewDataByIndex, detailFeaturesByIndex] = await Promise.all([
-    buildQuickViewDataForProducts(withVehicleFields),
+  const [quickViewByIndex, detailFeaturesByIndex] = await Promise.all([
+    buildQuickViewPresentationsForProducts(withVehicleFields),
     // Mirror product detail: merge stored `features` column with admin checkbox fields.
     Promise.all(withVehicleFields.map((product) => buildDetailFeaturesPresentation(product))),
   ])
@@ -138,7 +138,10 @@ async function enrichReelsProducts (products) {
   return withVehicleFields.map((product, index) => ({
     ...product,
     categoryName: categoryNameByProductId.get(toIdString(product._id)) || null,
-    quickViewData: quickViewDataByIndex[index] || [],
+    quickViewData: quickViewByIndex[index]?.quickViewData || [],
+    // Admin-flagged (showOnQuickView) fields with their icons, for the meta line the
+    // feed card renders under the post title.
+    detailquickView: quickViewByIndex[index]?.detailQuickView || [],
     features: detailFeaturesByIndex[index] || [],
   }))
 }

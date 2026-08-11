@@ -43,7 +43,14 @@ async function getDynamicForm(req, res) {
       })
     }
 
-    const optionsLoader = await loadOptionsForFormFields(rawFields, { categoryBridgeLogic: false })
+    // `categories` dropdowns load their options from the category this request
+    // asked for, not from the form field's stored categoryId — those differ when
+    // the field was matched through a scope bridge (see utils/formFieldScope).
+    const optionsLoader = await loadOptionsForFormFields(rawFields, {
+      categoryBridgeLogic: false,
+      requestedCategoryId: categoryId,
+      requestedChildCategoryId: childCategoryId,
+    })
 
     const builtFields = rawFields.map((f) => {
       const fieldTypeValue = f.fieldTypeId?.fieldValue || 'text'

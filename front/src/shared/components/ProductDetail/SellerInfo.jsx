@@ -7,8 +7,9 @@ import { isIdentityVerified, getMediaUrl } from '../../utils/helpers'
 import { VERIFIED_BADGE_IMAGES } from '../../utils/verifiedBadge'
 import { selectUser } from '../../store/slices/authSlice'
 import { useRequireAuth } from '../../hooks/useRequireAuth'
-import { useChat } from '../Chat/ChatContext'
+import ReelCommentsModal from '../Reels/ReelCommentsModal'
 import DetailCard from './DetailCard'
+import SlideOverPanel from './SlideOverPanel'
 import { pickDisplay } from './detailHelpers'
 import BlockFlow from '../../../components/Block/BlockFlow'
 
@@ -23,9 +24,9 @@ function SellerInfo({ product }) {
   const navigate = useNavigate()
   const requireAuth = useRequireAuth()
   const user = useSelector(selectUser)
-  const { createOrGetThread } = useChat()
   const [showPhoneNumber, setShowPhoneNumber] = useState(false)
   const [showBlockFlow, setShowBlockFlow] = useState(false)
+  const [showChatPanel, setShowChatPanel] = useState(false)
 
   if (!seller) return null
 
@@ -38,27 +39,16 @@ function SellerInfo({ product }) {
   const whatsappPhone = formatPhoneForWhatsApp(phone)
   const sellerRole = pickDisplay(product.sellerType, seller?.role, seller?.userType)
 
-  const handleChat = async () => {
+  // Opens the same slide-over the home page uses for its Chat action — the drawer's
+  // chat tab creates or resumes the thread itself — instead of navigating away to
+  // /chat/:id and losing the listing.
+  const handleChat = () => {
     if (!requireAuth('Please login to chat with sellers')) return
     if (isOwner) {
       toast.error('You cannot chat with yourself for your own product')
       return
     }
-    try {
-      const thread = await createOrGetThread({
-        product: { id: product._id, title: product.title, image: getMediaUrl(product.images?.[0]) || '' },
-        buyer: { id: user?._id, name: user?.name || user?.email || 'You' },
-        seller: { id: sellerId || 'seller', name: seller?.name || seller?.email || 'Seller' },
-      })
-      if (thread) {
-        navigate(`/chat/${thread.id}`)
-      } else {
-        toast.error('Unable to start chat right now')
-      }
-    } catch (error) {
-      console.error('Error creating chat:', error)
-      toast.error('Failed to start chat. Please try again.')
-    }
+    setShowChatPanel(true)
   }
 
   return (
@@ -165,6 +155,22 @@ function SellerInfo({ product }) {
           </a>
         </div>
       )}
+
+      {showChatPanel && product?._id ? (
+        <SlideOverPanel onClose={() => setShowChatPanel(false)}>
+          {(close) => (
+            <ReelCommentsModal
+              asPanel
+              variant="light"
+              productId={String(product._id)}
+              productTitle={product.title}
+              product={product}
+              initialTab="chat"
+              onClose={close}
+            />
+          )}
+        </SlideOverPanel>
+      ) : null}
 
       <BlockFlow
         open={showBlockFlow}

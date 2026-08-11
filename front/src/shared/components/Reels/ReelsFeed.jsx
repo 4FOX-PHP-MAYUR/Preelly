@@ -2,6 +2,17 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { useInView } from 'react-intersection-observer'
 import ProductReelCard from './ProductReelCard'
 
+/**
+ * Fetch the next page once the viewer reaches the second-last reel, so the following
+ * batch is already appended by the time they swipe onto the last one. The sentinel
+ * slide below is kept as a backstop for the cases this can't cover (a page shorter
+ * than the lookahead, or a jump straight to the end).
+ */
+const LOAD_MORE_LOOKAHEAD = 2
+
+/** A page that failed can be retried after this long; see requestLoadMore. */
+const LOAD_MORE_RETRY_MS = 3000
+
 function ReelsFeed({
   products,
   onLoadMore,
@@ -27,6 +38,7 @@ function ReelsFeed({
   const containerRef = useRef(null)
   const hasRestoredRef = useRef(false)
   const lastLoadMoreAtRef = useRef(0)
+  const lastLoadMoreLengthRef = useRef(-1)
   const [visibleIndex, setVisibleIndex] = useState(0)
   // Use visualViewport when available (better for mobile/keyboard); fallback to innerHeight
   // Subtract header offset so fixed header doesn't overlap reels
@@ -92,14 +104,37 @@ function ReelsFeed({
     }
   }, [measureContainerHeight, products.length])
 
-  useEffect(() => {
-    if (inView && hasMore && !loading) {
-      const now = Date.now()
-      if (now - lastLoadMoreAtRef.current < 600) return
-      lastLoadMoreAtRef.current = now
-      onLoadMore()
+  /**
+   * Single entry point for every load-more trigger (lookahead, sentinel, end-of-list
+   * navigation), so they can't stack into duplicate requests.
+   *
+   * At most one request per distinct list length: once a page is asked for, the next
+   * request is only allowed after `products.length` changes — which it does as soon as
+   * the page is appended. That holds even while `loading` is briefly false between the
+   * dispatch and the pending state. The cooldown is the escape hatch: if a page fails
+   * and the length never changes, scrolling can retry it a few seconds later instead of
+   * being blocked forever.
+   */
+  const requestLoadMore = useCallback(() => {
+    if (!hasMore || loading || typeof onLoadMore !== 'function') return
+    const now = Date.now()
+    if (lastLoadMoreLengthRef.current === products.length && now - lastLoadMoreAtRef.current < LOAD_MORE_RETRY_MS) {
+      return
     }
-  }, [inView, hasMore, loading, onLoadMore])
+    lastLoadMoreLengthRef.current = products.length
+    lastLoadMoreAtRef.current = now
+    onLoadMore()
+  }, [hasMore, loading, onLoadMore, products.length])
+
+  // Prefetch on reaching the second-last reel.
+  useEffect(() => {
+    if (products.length === 0) return
+    if (visibleIndex >= products.length - LOAD_MORE_LOOKAHEAD) requestLoadMore()
+  }, [visibleIndex, products.length, requestLoadMore])
+
+  useEffect(() => {
+    if (inView) requestLoadMore()
+  }, [inView, requestLoadMore])
 
   // Restore scroll position from saved index (e.g. on reload) – set visible reel immediately, then scroll when container has height
   useEffect(() => {
@@ -147,7 +182,7 @@ function ReelsFeed({
     
     if (clampedIndex === visibleIndex && direction === 'down' && hasMore && !loading) {
       // If at the end and scrolling down, trigger load more
-      onLoadMore()
+      requestLoadMore()
       return
     }
     
@@ -166,7 +201,7 @@ function ReelsFeed({
     setTimeout(() => {
       isScrolling.current = false
     }, 500)
-  }, [visibleIndex, containerHeight, products.length, hasMore, loading, onLoadMore])
+  }, [visibleIndex, containerHeight, products.length, hasMore, loading, requestLoadMore])
 
   // Navigate to next reel
   const navigateNext = useCallback(() => {

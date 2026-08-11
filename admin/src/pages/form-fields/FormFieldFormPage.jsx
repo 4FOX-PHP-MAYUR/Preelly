@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { adminService } from '@/services/api'
+import { getMediaUrl } from '@shared/utils/helpers'
 import AdminFormShell from '../../components/AdminUI/AdminFormShell'
 import Input from '../../components/AdminUI/Input'
 import Select from '../../components/AdminUI/Select'
@@ -47,6 +48,11 @@ const emptyForm = {
   functionName: '',
   isActive: true,
   showOnQuickView: false,
+  isShowOnDetails: false,
+  // The saved filename (edit only), the newly picked File, and its local preview URL.
+  fieldIcon: '',
+  fieldIconFile: null,
+  fieldIconPreview: '',
 }
 
 function rowToForm(row) {
@@ -76,6 +82,10 @@ function rowToForm(row) {
     functionName: row.functionName || '',
     isActive: row.isActive !== false,
     showOnQuickView: row.showOnQuickView === true,
+    isShowOnDetails: row.isShowOnDetails === true,
+    fieldIcon: row.fieldIcon || '',
+    fieldIconFile: null,
+    fieldIconPreview: '',
   }
 }
 
@@ -301,6 +311,17 @@ function FormFieldFormPage() {
     if (errors.fieldName) setErrors((prev) => ({ ...prev, fieldName: undefined }))
   }
 
+  // Picking nothing (or cancelling the picker) leaves any saved icon untouched — the
+  // API only replaces fieldIcon when a file actually comes with the request.
+  const handleFieldIconChange = (e) => {
+    const file = e.target.files?.[0] || null
+    setForm((prev) => ({
+      ...prev,
+      fieldIconFile: file,
+      fieldIconPreview: file ? URL.createObjectURL(file) : '',
+    }))
+  }
+
   const regenerateFieldName = () => {
     const generated = toFieldName(form.fieldTitle)
     setForm((prev) => ({ ...prev, fieldName: generated }))
@@ -358,7 +379,9 @@ function FormFieldFormPage() {
         functionName: form.functionName.trim(),
         isActive: form.isActive,
         showOnQuickView: form.showOnQuickView,
+        isShowOnDetails: form.isShowOnDetails,
       }
+      if (form.fieldIconFile) payload.fieldIcon = form.fieldIconFile
       const tc = form.tableConfig || {}
       const hasTableConfig = Object.values(tc).some((v) => String(v || '').trim())
       if (hasTableConfig) {
@@ -703,11 +726,44 @@ function FormFieldFormPage() {
         )}
       </FormSection>
 
-      <Checkbox
-        label="Show On Quick View"
-        checked={form.showOnQuickView}
-        onChange={(e) => setForm({ ...form, showOnQuickView: e.target.checked })}
-      />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
+        <Checkbox
+          label="Show On Quick View"
+          checked={form.showOnQuickView}
+          onChange={(e) => setForm({ ...form, showOnQuickView: e.target.checked })}
+        />
+        <Checkbox
+          label="Show On Details"
+          checked={form.isShowOnDetails}
+          onChange={(e) => setForm({ ...form, isShowOnDetails: e.target.checked })}
+        />
+        <div>
+          <label className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+            Field Icon
+          </label>
+          <div className="flex items-center gap-3 flex-wrap">
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/svg+xml"
+              onChange={handleFieldIconChange}
+              className="admin-input file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary-50 file:text-primary-700"
+            />
+            {(form.fieldIconPreview || form.fieldIcon) && (
+              <img
+                src={form.fieldIconPreview || getMediaUrl(`images/${form.fieldIcon}`)}
+                alt="Field icon"
+                className="h-10 w-10 rounded-lg object-cover border border-slate-200 dark:border-slate-700"
+              />
+            )}
+          </div>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
+            Optional. PNG, JPG, WEBP or SVG, up to 2 MB.
+            {isEdit && form.fieldIcon && !form.fieldIconFile
+              ? ' Leave empty to keep the current icon.'
+              : ''}
+          </p>
+        </div>
+      </div>
     </AdminFormShell>
   )
 }

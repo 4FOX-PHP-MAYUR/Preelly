@@ -13,7 +13,7 @@ import { MARKETPLACE_LOGO_CELL } from '../components/Layout/marketplaceLayoutSty
 // Fixed service fees for the two badges (AED). Kept here so the summary math is
 // self-contained; move to config/.env if these ever become dynamic.
 const PAY_VIA_PREELLY_FEE = 10
-// Pick & Drop "Starts with"/Fix Cost — sourced from api/.env (VITE_PICK_DROP_FEE).
+// Pick & Drop "Starts with"/Fix Cost — sourced from front/.env (VITE_PICK_DROP_FEE).
 const PICK_DROP_FEE = Number(import.meta.env.VITE_PICK_DROP_FEE) || 29.99
 // Additional delivery cost shown in the Pick & Drop popup (dummy value).
 const PICK_DROP_DELIVERY_COST = 89.99
@@ -21,9 +21,9 @@ const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
 const MAP_LIBRARIES = ['places']
 // Dubai, UAE — default map center when geolocation isn't available.
 const DEFAULT_CENTER = { lat: 25.2048, lng: 55.2708 }
-// VAT % is sourced from api/.env (VITE_VAT_PERCENTAGE); falls back to 5.
+// VAT % is sourced from front/.env (VITE_VAT_PERCENTAGE); falls back to 5.
 const VAT_PERCENT = Number(import.meta.env.VITE_VAT_PERCENTAGE) || 5
-// Charge shown in the Preelly Pay conditions popup (api/.env → VITE_PREELLY_PAY_CHARGE).
+// Charge shown in the Preelly Pay conditions popup (front/.env → VITE_PREELLY_PAY_CHARGE).
 const PREELLY_PAY_CHARGE = Number(import.meta.env.VITE_PREELLY_PAY_CHARGE) || 7
 const CURRENCY = 'AED'
 
@@ -182,7 +182,7 @@ function PickDropMap({ position, onChange }) {
     return (
       <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
         <p className="text-sm text-yellow-800">
-          Map unavailable: set VITE_GOOGLE_MAPS_API_KEY in api/.env.
+          Map unavailable: set VITE_GOOGLE_MAPS_API_KEY in front/.env to enable it.
         </p>
       </div>
     )

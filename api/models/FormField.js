@@ -103,6 +103,21 @@ const FormFieldSchema = new Schema(
       type: Boolean,
       default: false,
     },
+    // Whether the field is surfaced on the product details page. Optional, and
+    // stored the same way as showOnQuickView — false (0) unless explicitly set.
+    isShowOnDetails: {
+      type: Boolean,
+      default: false,
+    },
+    // Optional icon for the field: the generated filename ALONE (e.g.
+    // "1786201234567.png"), never a path or URL. The file itself lives in
+    // uploads/images — see handleFieldIconUpload in routes/admin.js — so the folder
+    // can move without rewriting stored rows.
+    fieldIcon: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     isDeleted: {
       type: Boolean,
       default: false,

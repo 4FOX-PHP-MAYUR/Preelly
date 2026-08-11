@@ -8,7 +8,7 @@ import toast from 'react-hot-toast'
 // from the admin-managed checkout service.
 export const MAX_PREELLY_CONDITIONS = 5
 export const CURRENCY = 'AED'
-// Default charge shown in the popup (api/.env → VITE_PREELLY_PAY_CHARGE).
+// Default charge shown in the popup (front/.env → VITE_PREELLY_PAY_CHARGE).
 export const PREELLY_PAY_CHARGE = Number(import.meta.env.VITE_PREELLY_PAY_CHARGE) || 7
 
 export function money(value) {

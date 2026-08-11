@@ -25,7 +25,11 @@ const {
   buildVehicleDetailPresentation,
   HANDLED_REQUEST_KEYS,
 } = require('../utils/productVehicleFields')
-const { buildProductAttributesPresentation, buildDetailFeaturesPresentation } = require('../utils/productAttributesResolver')
+const {
+  buildProductAttributesPresentation,
+  buildDetailFeaturesPresentation,
+  buildDetailQuickViewPresentation,
+} = require('../utils/productAttributesResolver')
 const { enrichReelsProducts } = require('../utils/reelsProductFields')
 const { resolveOrderPlatform } = require('../utils/paymentLabels')
 const { getBlockedUserIds, isBlockedBetween } = require('../core/services/blockService')
@@ -221,8 +225,10 @@ router.get('/price-range', async (req, res) => {
       {
         $group: {
           _id: null,
-          minPrice: { $min: '$price' },
-          maxPrice: { $max: '$price' },
+          // productPrice, matching what the price filter queries — bounds taken from
+          // any other field would describe a range the filter can't act on.
+          minPrice: { $min: '$productPrice' },
+          maxPrice: { $max: '$productPrice' },
         },
       },
     ])
@@ -555,10 +561,11 @@ router.get('/', async (req, res) => {
       query.$and.push({ $or: cityMatchOr })
     }
 
+    // The price filter matches productPrice — the listing's own price field.
     if (minPrice || maxPrice) {
-      query.price = {}
-      if (minPrice) query.price.$gte = Number(minPrice)
-      if (maxPrice) query.price.$lte = Number(maxPrice)
+      query.productPrice = {}
+      if (minPrice) query.productPrice.$gte = Number(minPrice)
+      if (maxPrice) query.productPrice.$lte = Number(maxPrice)
     }
 
     if (search && search.trim() !== '') {
@@ -1118,10 +1125,11 @@ router.get('/reels-feed', async (req, res) => {
         // Invalid regex, skip
       }
     }
+    // The price filter matches productPrice — the listing's own price field.
     if (validMinPrice != null || validMaxPrice != null) {
-      query.price = {}
-      if (validMinPrice != null) query.price.$gte = validMinPrice
-      if (validMaxPrice != null) query.price.$lte = validMaxPrice
+      query.productPrice = {}
+      if (validMinPrice != null) query.productPrice.$gte = validMinPrice
+      if (validMaxPrice != null) query.productPrice.$lte = validMaxPrice
     }
     if (search) {
       query.$text = { $search: search }
@@ -1403,10 +1411,11 @@ router.get('/search', async (req, res) => {
       try { match.location = new RegExp(location, 'i') } catch (e) {}
     }
 
+    // The price filter matches productPrice — the listing's own price field.
     if (minPrice != null || maxPrice != null) {
-      match.price = {}
-      if (minPrice != null && Number.isFinite(minPrice)) match.price.$gte = minPrice
-      if (maxPrice != null && Number.isFinite(maxPrice)) match.price.$lte = maxPrice
+      match.productPrice = {}
+      if (minPrice != null && Number.isFinite(minPrice)) match.productPrice.$gte = minPrice
+      if (maxPrice != null && Number.isFinite(maxPrice)) match.productPrice.$lte = maxPrice
     }
 
     // Listings from blocked accounts never surface in search results.
@@ -1634,10 +1643,19 @@ router.get('/:id', validateObjectId('id'), async (req, res) => {
     }
     const productWithSaved = withSaved(product, savedStorage)
     const sellerId = product.seller?._id || product.seller
-    const [presentation, attributesPresentation, detailFeatures, commentCount, postCount, followingCount] = await Promise.all([
+    const [
+      presentation,
+      attributesPresentation,
+      detailFeatures,
+      detailQuickView,
+      commentCount,
+      postCount,
+      followingCount,
+    ] = await Promise.all([
       buildVehicleDetailPresentation(productWithSaved),
       buildProductAttributesPresentation(productWithSaved),
       buildDetailFeaturesPresentation(productWithSaved),
+      buildDetailQuickViewPresentation(productWithSaved),
       Comment.countDocuments({ product: req.params.id, status: 'approved' }),
       sellerId ? Product.countDocuments({ seller: sellerId, status: 'active' }) : Promise.resolve(0),
       sellerId ? Follow.countDocuments({ follower: sellerId, status: 'active' }) : Promise.resolve(0),
@@ -1651,6 +1669,9 @@ router.get('/:id', validateObjectId('id'), async (req, res) => {
       vehicleFeatures: presentation.vehicleFeatures,
       productAttributes: attributesPresentation.productAttributes,
       productMultiAttributes: attributesPresentation.productMultiAttributes,
+      // Admin-flagged (isShowOnDetails) fields with their icons — same array the
+      // trending/following feeds return, so both render the same meta line.
+      detailquickView: detailQuickView,
       commentCount,
       sellerStats: { postCount, followingCount },
     })

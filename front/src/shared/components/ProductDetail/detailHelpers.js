@@ -42,6 +42,36 @@ export function mapQuickViewRows(quickViewData) {
     .filter((row) => row.label && row.value != null && row.value !== '')
 }
 
+/**
+ * Normalizes the feed APIs' `detailquickView` — the admin-flagged (showOnQuickView)
+ * fields rendered under the post title, each carrying the icon uploaded on its
+ * FormField record. `fieldIcon` is the stored filename; the URL is built the same way
+ * the admin builds it (`/uploads/images/<fieldIcon>`). Anything without a usable value
+ * is dropped, so a partially configured field can't render an empty chip.
+ */
+export function mapDetailQuickViewRows(detailQuickView) {
+  if (!Array.isArray(detailQuickView)) return []
+  return detailQuickView
+    .map((entry) => {
+      const key = safeToString(entry?.fieldKey) || ''
+      const icon = safeToString(entry?.fieldIcon)
+      return {
+        key,
+        label: safeToString(entry?.fieldTitle) || '',
+        value: formatQuickViewValue(key, safeToString(entry?.fieldValue)),
+        iconPath: icon ? `images/${icon}` : null,
+      }
+    })
+    .filter((row) => row.value)
+}
+
+/** Thousands separators for plain integers — but never for a year, where "2,025" is wrong. */
+function formatQuickViewValue(fieldKey, value) {
+  if (!value || /year/i.test(fieldKey)) return value
+  if (!/^\d+$/.test(value)) return value
+  return Number(value).toLocaleString()
+}
+
 export function safeToString(v) {
   if (v === null || v === undefined) return null
   if (typeof v === 'string') {

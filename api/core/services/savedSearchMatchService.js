@@ -38,10 +38,12 @@ function buildProductMatchFromSavedSearch(doc) {
   const maxRaw = doc.filters?.maxPrice ?? doc.selectedFilters?.maxPrice
   const min = minRaw !== '' && minRaw != null ? Number(minRaw) : null
   const max = maxRaw !== '' && maxRaw != null ? Number(maxRaw) : null
+  // Same field the live price filter matches on (productPrice), so a saved search
+  // keeps notifying on exactly what it would return when re-run.
   if ((min != null && !Number.isNaN(min)) || (max != null && !Number.isNaN(max))) {
-    match.price = {}
-    if (min != null && !Number.isNaN(min)) match.price.$gte = min
-    if (max != null && !Number.isNaN(max)) match.price.$lte = max
+    match.productPrice = {}
+    if (min != null && !Number.isNaN(min)) match.productPrice.$gte = min
+    if (max != null && !Number.isNaN(max)) match.productPrice.$lte = max
   }
 
   const queryText = doc.query || doc.keyword || ''

@@ -256,10 +256,11 @@ async function buildFeedMatch ({ params, sellerIds, viewerId = null }) {
     } catch {}
   }
 
+  // The price filter matches productPrice — the listing's own price field.
   if (validMinPrice != null || validMaxPrice != null) {
-    query.price = {}
-    if (validMinPrice != null) query.price.$gte = validMinPrice
-    if (validMaxPrice != null) query.price.$lte = validMaxPrice
+    query.productPrice = {}
+    if (validMinPrice != null) query.productPrice.$gte = validMinPrice
+    if (validMaxPrice != null) query.productPrice.$lte = validMaxPrice
   }
 
   if (search) {
@@ -867,8 +868,10 @@ async function fetchPriceRange ({ categoryId }) {
     {
       $group: {
         _id: null,
-        minPrice: { $min: '$price' },
-        maxPrice: { $max: '$price' },
+        // productPrice, matching what the price filter queries — bounds taken from
+        // any other field would describe a range the filter can't act on.
+        minPrice: { $min: '$productPrice' },
+        maxPrice: { $max: '$productPrice' },
       },
     },
   ])
@@ -968,10 +971,11 @@ async function fetchReelsForUser ({ userId, userObjectId, savedProductIdsSet, pa
     } catch {}
   }
 
+  // The price filter matches productPrice — the listing's own price field.
   if (validMinPrice != null || validMaxPrice != null) {
-    query.price = {}
-    if (validMinPrice != null) query.price.$gte = validMinPrice
-    if (validMaxPrice != null) query.price.$lte = validMaxPrice
+    query.productPrice = {}
+    if (validMinPrice != null) query.productPrice.$gte = validMinPrice
+    if (validMaxPrice != null) query.productPrice.$lte = validMaxPrice
   }
 
   if (search) query.$text = { $search: search }

@@ -155,10 +155,15 @@ function HomePage() {
     setActiveTab(nextTab)
   }
 
-  const loadMore = () => {
+  // Memoized so ReelsFeed's prefetch effect isn't re-run on every HomePage render.
+  // The `cursor` carries the ids already served, so each page returns fresh reels even
+  // with sortBy=random, and `hasMore` false stops the paging.
+  const loadMore = useCallback(() => {
     if (!hasMore || loading || !nextCursor) return
-    dispatch(fetchFeedPage(buildFeedParams({ cursor: nextCursor })))
-  }
+    const params = { limit: REELS_PAGE_LIMIT, feedType: activeTab, refresh: false, sortBy: 'random', cursor: nextCursor }
+    if (selectedCategoryId) params.categoryId = selectedCategoryId
+    dispatch(fetchFeedPage(params))
+  }, [dispatch, hasMore, loading, nextCursor, activeTab, selectedCategoryId])
 
   const handleRefreshFeed = () => {
     hasReadSavedIndexRef.current = false

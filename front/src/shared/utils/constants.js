@@ -21,8 +21,8 @@ export const SOCKET_URL =
     : pageOrigin || 'http://localhost:8029'
 
 // Absolute API/media origin — always the real backend, never the front's own
-// dev-server origin. Set explicitly by vite.config.js (define) from api/.env's
-// BACKEND_URL, so media URLs resolve correctly even outside the Vite dev proxy.
+// dev-server origin. Comes from front/.env's VITE_BACKEND_URL (vite.config.js reads
+// env from this folder only), so media URLs resolve correctly even outside the dev proxy.
 export const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || SOCKET_URL
 
 // Admin panel runs on a separate Vite app (default localhost:8031 in dev).

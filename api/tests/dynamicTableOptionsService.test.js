@@ -90,6 +90,53 @@ function testLegacyCategoryParentId() {
   console.log('✓ legacy category parent id prefers childCategoryId')
 }
 
+function testResolveLegacyCategoryParentIdWithRequestedCategory() {
+  const storedCategoryId = '64b7f1e2c3d4e5f6a7b8c9d0'   // ancestor the field is stored on
+  const requestedCategoryId = '64b7f1e2c3d4e5f6a7b8c9d2' // category the API was called with
+  const requestedChildId = '64b7f1e2c3d4e5f6a7b8c9d3'
+  const fieldChildId = '64b7f1e2c3d4e5f6a7b8c9d1'
+
+  // The bridge case: field stored on an ancestor, request asks for the leaf.
+  // Options must come from the requested category, not the stored one.
+  assert.strictEqual(
+    resolveLegacyCategoryParentId({ categoryId: storedCategoryId }, { categoryId: requestedCategoryId }),
+    requestedCategoryId
+  )
+
+  // A childCategoryId on the field no longer wins over the requested category.
+  assert.strictEqual(
+    resolveLegacyCategoryParentId(
+      { categoryId: storedCategoryId, childCategoryId: fieldChildId },
+      { categoryId: requestedCategoryId }
+    ),
+    requestedCategoryId
+  )
+
+  // When the caller narrows to a child category, that is the most specific
+  // category in the request and wins.
+  assert.strictEqual(
+    resolveLegacyCategoryParentId(
+      { categoryId: storedCategoryId },
+      { categoryId: requestedCategoryId, childCategoryId: requestedChildId }
+    ),
+    requestedChildId
+  )
+
+  // Invalid/absent request context falls back to the previous field-scope logic.
+  for (const requested of [{}, { categoryId: null }, { categoryId: 'not-an-objectid' }, undefined]) {
+    assert.strictEqual(
+      resolveLegacyCategoryParentId({ categoryId: storedCategoryId }, requested),
+      storedCategoryId
+    )
+    assert.strictEqual(
+      resolveLegacyCategoryParentId({ categoryId: storedCategoryId, childCategoryId: fieldChildId }, requested),
+      fieldChildId
+    )
+  }
+
+  console.log('✓ legacy category parent id honours the requested categoryId')
+}
+
 testNormalizeColumnName()
 testResolveEmiratesConfig()
 testValidateEmiratesConfig()
@@ -97,4 +144,5 @@ testRejectInvalidColumn()
 testRejectUnregisteredTable()
 testLegacyFiltersDefaults()
 testLegacyCategoryParentId()
+testResolveLegacyCategoryParentIdWithRequestedCategory()
 console.log('\nAll dynamicTableOptionsService tests passed.')

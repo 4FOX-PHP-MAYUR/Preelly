@@ -222,7 +222,7 @@ function LoginPage() {
             label="Mobile Number"
             countryIso={countryIso}
             onCountryIsoChange={setCountryIso}
-            placeholder="Enter your Phone Number"
+            placeholder="Phone number"
             error={errors.phone?.message}
             {...register('phone', {
               required: channel === 'whatsapp' ? 'Mobile number is required' : false,

@@ -33,7 +33,7 @@ export const AuthField = forwardRef(function AuthField({
         <input
           ref={ref}
           {...inputProps}
-          className={`h-[52px] w-full rounded-[14px] border border-[#dfe1ec] bg-white pr-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#3128ff] focus:ring-4 focus:ring-[#3128ff]/10 ${Icon ? 'pl-12' : 'pl-4'} ${className}`.trim()}
+          className={`h-[52px] w-full rounded-[14px] border border-[#dfe1ec] bg-white pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#3128ff] focus:ring-4 focus:ring-[#3128ff]/10 sm:text-base ${Icon ? 'pl-11' : 'pl-4'} ${className}`.trim()}
         />
       </div>
       {error ? <p className="mt-2 text-sm text-red-500">{error}</p> : null}
@@ -66,7 +66,7 @@ function CountryCodePicker({ countryIso, onCountryIsoChange }) {
   }, [])
 
   const filteredCountries = useMemo(
-    () => searchCountries(open ? query : '', open ? 12 : 0),
+    () => searchCountries(open ? query : '', open ? Infinity : 0),
     [open, query]
   )
 
@@ -97,9 +97,16 @@ function CountryCodePicker({ countryIso, onCountryIsoChange }) {
   return (
     <div
       ref={containerRef}
-      className="relative w-[104px] shrink-0 sm:w-[112px]"
+      className="relative w-[118px] shrink-0 sm:w-[128px]"
     >
-      <div className="relative flex h-[52px] items-center gap-1 rounded-[14px] border border-[#dfe1ec] bg-white px-3 transition focus-within:border-[#3128ff] focus-within:ring-4 focus-within:ring-[#3128ff]/10">
+      <div
+        className="relative flex h-[52px] items-center gap-1.5 rounded-[14px] border border-[#dfe1ec] bg-white px-2.5 transition focus-within:border-[#3128ff] focus-within:ring-4 focus-within:ring-[#3128ff]/10"
+        onMouseDown={(event) => {
+          if (event.target === inputRef.current) return
+          event.preventDefault()
+          inputRef.current?.focus()
+        }}
+      >
         <span className="pointer-events-none text-base leading-none">{selected.flag}</span>
         <input
           ref={inputRef}
@@ -112,7 +119,7 @@ function CountryCodePicker({ countryIso, onCountryIsoChange }) {
           }}
           onFocus={() => {
             setOpen(true)
-            inputRef.current?.select()
+            setQuery('')
           }}
           onBlur={handleBlur}
           onKeyDown={(event) => {
@@ -175,20 +182,20 @@ export const AuthPhoneField = forwardRef(function AuthPhoneField({
       <label className="mb-2 block text-sm font-medium text-slate-800">
         {label}
       </label>
-      <div className="flex gap-3">
+      <div className="flex gap-2">
         <CountryCodePicker
           countryIso={countryIso}
           onCountryIsoChange={onCountryIsoChange}
         />
 
         <div className="relative min-w-0 flex-1">
-          <Phone className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
+          <Phone className="pointer-events-none absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400" />
           <input
             ref={ref}
             type="tel"
             inputMode="tel"
             {...inputProps}
-            className={`h-[52px] w-full rounded-[14px] border border-[#dfe1ec] bg-white pl-12 pr-4 text-base text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#3128ff] focus:ring-4 focus:ring-[#3128ff]/10 ${className}`.trim()}
+            className={`h-[52px] w-full rounded-[14px] border border-[#dfe1ec] bg-white pl-11 pr-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#3128ff] focus:ring-4 focus:ring-[#3128ff]/10 sm:text-base ${className}`.trim()}
           />
         </div>
       </div>

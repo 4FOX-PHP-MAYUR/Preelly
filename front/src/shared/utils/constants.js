@@ -7,6 +7,15 @@ export const API_URL =
       ? '/api'
       : envApi || 'http://localhost:8029/api'
 
+/**
+ * Absolute (or proxy-relative) URL for an API path — for full-page browser
+ * navigations like OAuth start, where axios' baseURL doesn't apply. A hardcoded
+ * "/api/..." here 404s on any deployment where the backend is mounted under a
+ * sub-path (e.g. nginx /preelly-api) instead of the front's own origin.
+ */
+export const apiUrl = (path) =>
+  `${String(API_URL).replace(/\/+$/, '')}/${String(path || '').replace(/^\/+/, '')}`
+
 // Socket.IO — connect to the same origin the app is served from, so a reverse proxy
 // forwards /socket.io to the backend exactly like it does /api. A VITE_SOCKET_URL
 // pointing at localhost is only honored when the app itself runs on localhost; that

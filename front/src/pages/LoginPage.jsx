@@ -11,6 +11,7 @@ import AuthSplitLayout, {
   AuthSocialButton,
 } from '../components/Auth/AuthSplitLayout'
 import { DEFAULT_COUNTRY_ISO, getCountryByIso } from '@shared/data/countryCodes'
+import { apiUrl } from '@shared/utils/constants'
 
 function GoogleIcon() {
   return (
@@ -155,7 +156,7 @@ function LoginPage() {
 
   const startSocialLogin = (provider) => {
     setOauthLoading(provider)
-    const url = `/api/auth/oauth/${provider}?target=${encodeURIComponent(target)}`
+    const url = apiUrl(`/auth/oauth/${provider}?target=${encodeURIComponent(target)}`)
     window.location.href = url
   }
 

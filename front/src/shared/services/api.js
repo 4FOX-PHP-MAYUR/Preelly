@@ -1,6 +1,6 @@
 import axios from 'axios'
 import { isValidObjectId } from '../utils/helpers'
-import { API_URL } from '../utils/constants'
+import { API_URL, apiUrl } from '../utils/constants'
 import { getDeviceId } from '../utils/deviceId'
 import { getRouteAbortSignal } from './apiScope'
 
@@ -475,7 +475,7 @@ export const userService = {
     const params = new URLSearchParams({ mode: 'link' })
     const token = localStorage.getItem('token')
     if (token) params.set('token', token)
-    window.location.href = `/api/auth/oauth/${encodeURIComponent(provider)}?${params.toString()}`
+    window.location.href = apiUrl(`/auth/oauth/${encodeURIComponent(provider)}?${params.toString()}`)
   },
   getLocations: () => api.get('/user/locations'),
   addLocation: (data) => api.post('/user/locations', data),

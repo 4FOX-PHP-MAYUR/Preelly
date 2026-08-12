@@ -133,6 +133,29 @@ const persistAuthPayload = (data) => {
   }
 }
 
+/**
+ * Sign in with Apple (web popup) — posts the Apple identity token to the same
+ * /auth/apple endpoint the mobile app uses, so an Apple user gets the same
+ * Preelly account on either platform. The response is the standard
+ * { message, token, user } auth payload, hence the shared persist helper.
+ */
+export const appleLogin = createAsyncThunk(
+  'auth/appleLogin',
+  async ({ identityToken, authorizationCode, user }, { rejectWithValue }) => {
+    try {
+      const response = await authService.appleLogin({ identityToken, authorizationCode, user })
+      persistAuthPayload(response.data)
+      return response.data
+    } catch (error) {
+      return rejectWithValue({
+        message: error.response?.data?.message || 'Apple sign in failed. Please try again.',
+        code: error.response?.data?.code || null,
+        status: error.response?.status || null,
+      })
+    }
+  }
+)
+
 export const completeVerifyEmail = createAsyncThunk(
   'auth/completeVerifyEmail',
   async ({ email, otp }, { rejectWithValue }) => {
@@ -441,6 +464,21 @@ const authSlice = createSlice({
         state.permissions = action.payload.user?.permissions || null
       })
       .addCase(verifyOtp.rejected, (state, action) => {
+        state.loading = false
+        state.error = action.payload
+      })
+      .addCase(appleLogin.pending, (state) => {
+        state.loading = true
+        state.error = null
+      })
+      .addCase(appleLogin.fulfilled, (state, action) => {
+        state.loading = false
+        state.user = action.payload.user
+        state.token = action.payload.token
+        state.isAuthenticated = !!action.payload.token
+        state.permissions = action.payload.user?.permissions || null
+      })
+      .addCase(appleLogin.rejected, (state, action) => {
         state.loading = false
         state.error = action.payload
       })

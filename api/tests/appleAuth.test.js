@@ -334,6 +334,51 @@ async function main () {
     }
   })
 
+  // ── Web popup flow (same endpoint, Services ID audience) ──────────────────
+  await test('web: first login through the Services ID creates the account', async () => {
+    const profile = await verifyAppleIdentityToken(
+      signToken({ aud: SERVICES_ID, email: EMAIL, email_verified: 'true' })
+    )
+    // Shape the browser sends: name split in two, no email (the token's wins).
+    const { user, isNewUser } = await resolveAppleUser(profile, { firstName: 'Web', lastName: 'User' })
+    assert.strictEqual(isNewUser, true)
+    assert.strictEqual(profile.audience, SERVICES_ID)
+    assert.strictEqual(user.appleProviderId, APPLE_ID)
+    assert.strictEqual(user.email, EMAIL)
+    assert.strictEqual(user.name, 'Web User')
+  })
+
+  await test('web login finds the account created on mobile (same Apple user)', async () => {
+    const mobile = await verifyAppleIdentityToken(signToken({ aud: BUNDLE_ID, email: EMAIL, email_verified: 'true' }))
+    const created = await resolveAppleUser(mobile, { name: 'Mobile User' })
+    assert.strictEqual(created.isNewUser, true)
+
+    // Later web login: different audience, and Apple sends no name/email again.
+    const web = await verifyAppleIdentityToken(signToken({ aud: SERVICES_ID }))
+    const returning = await resolveAppleUser(web, {})
+    assert.strictEqual(returning.isNewUser, false)
+    assert.strictEqual(returning.user._id, created.user._id, 'must be the same account')
+    assert.strictEqual(returning.user.name, 'Mobile User', 'name must survive the web login')
+    assert.strictEqual(users.length, 1, 'no duplicate account across platforms')
+  })
+
+  await test('mobile login finds the account created on the web (reverse direction)', async () => {
+    const web = await verifyAppleIdentityToken(signToken({ aud: SERVICES_ID, email: EMAIL, email_verified: 'true' }))
+    const created = await resolveAppleUser(web, { firstName: 'Web', lastName: 'User' })
+
+    const mobile = await verifyAppleIdentityToken(signToken({ aud: BUNDLE_ID }))
+    const returning = await resolveAppleUser(mobile, {})
+    assert.strictEqual(returning.isNewUser, false)
+    assert.strictEqual(returning.user._id, created.user._id)
+    assert.strictEqual(users.length, 1)
+  })
+
+  await test('web: a deactivated account is refused with the same 403', async () => {
+    users = [makeDoc({ _id: 'a7', appleProviderId: APPLE_ID, status: 'inactive' })]
+    const profile = await verifyAppleIdentityToken(signToken({ aud: SERVICES_ID }))
+    await expectError(() => resolveAppleUser(profile, {}), { code: 'ACCOUNT_DEACTIVATED', statusCode: 403 })
+  })
+
   await test('client-supplied email/appleId can never override the token', async () => {
     const profile = await verifyAppleIdentityToken(signToken({ email: EMAIL, email_verified: 'true' }))
     const { user } = await resolveAppleUser(profile, {

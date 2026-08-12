@@ -1319,12 +1319,16 @@ router.post(
 )
 
 // @route   POST /api/auth/apple
-// @desc    Sign in with Apple for the mobile app: verifies the Apple identity
-//          token against Apple's JWKS and returns the normal Preelly JWT + user
-//          payload, identical in shape to the OTP and Google responses.
-//          `name`/`email` are optional because Apple only sends them on the first
-//          authorization; the identity token is the source of truth either way.
-//          The web browser flow stays on /api/auth/oauth/apple (redirect based).
+// @desc    Sign in with Apple for BOTH the mobile app and the web app: verifies
+//          the Apple identity token against Apple's JWKS and returns the normal
+//          Preelly JWT + user payload, identical in shape to the OTP and Google
+//          responses. `name`/`email` are optional because Apple only sends them on
+//          the first authorization; the identity token is the source of truth
+//          either way. The token's `aud` is the app's bundle ID on mobile and the
+//          Services ID in the browser — both are accepted audiences, so the same
+//          Apple account resolves to the same Preelly user on either platform.
+//          (The older /api/auth/oauth/apple redirect route still exists but the
+//          web app no longer uses it.)
 // @access  Public
 router.post(
   '/apple',

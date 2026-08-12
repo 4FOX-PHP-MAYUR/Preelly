@@ -13,6 +13,7 @@ import {
 } from '../components/Auth/AuthSplitLayout'
 import { DEFAULT_COUNTRY_ISO, getCountryByIso } from '@shared/data/countryCodes'
 import { apiUrl } from '@shared/utils/constants'
+import { useAppleSignIn } from '@shared/hooks/useAppleSignIn'
 
 function GoogleIcon() {
   return (
@@ -117,6 +118,14 @@ function SignupPage() {
     window.location.href = url
   }
 
+  // Apple has no separate signup call: /auth/apple creates the account on a first
+  // authorization and signs the user in on every later one, so the button is the
+  // same here as on the login page.
+  const { startAppleSignIn } = useAppleSignIn({
+    onStart: () => setOauthLoading('apple'),
+    onFinish: () => setOauthLoading(null),
+  })
+
   return (
     <div className="min-h-screen bg-[#f6f7fb] px-4 py-8 sm:px-6 lg:px-8">
       <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)] lg:items-center">
@@ -211,7 +220,7 @@ function SignupPage() {
               </AuthSocialButton>
               <AuthSocialButton
                 label="Continue with Apple"
-                onClick={() => startSocialSignup('apple')}
+                onClick={startAppleSignIn}
                 disabled={!!oauthLoading}
                 active={oauthLoading === 'apple'}
               >

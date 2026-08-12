@@ -12,6 +12,7 @@ import AuthSplitLayout, {
 } from '../components/Auth/AuthSplitLayout'
 import { DEFAULT_COUNTRY_ISO, getCountryByIso } from '@shared/data/countryCodes'
 import { apiUrl } from '@shared/utils/constants'
+import { useAppleSignIn } from '@shared/hooks/useAppleSignIn'
 
 function GoogleIcon() {
   return (
@@ -160,6 +161,14 @@ function LoginPage() {
     window.location.href = url
   }
 
+  // Apple runs in a popup and posts the identity token to /auth/apple (the same
+  // endpoint the mobile app uses) instead of leaving the page like Google's
+  // redirect flow; the isAuthenticated effect above handles the navigation.
+  const { startAppleSignIn } = useAppleSignIn({
+    onStart: () => setOauthLoading('apple'),
+    onFinish: () => setOauthLoading(null),
+  })
+
   return (
     <AuthSplitLayout
       title="Login"
@@ -270,7 +279,7 @@ function LoginPage() {
           </AuthSocialButton>
           <AuthSocialButton
             label="Continue with Apple"
-            onClick={() => startSocialLogin('apple')}
+            onClick={startAppleSignIn}
             disabled={!!oauthLoading}
             active={oauthLoading === 'apple'}
           >

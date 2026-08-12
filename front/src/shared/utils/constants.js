@@ -52,6 +52,24 @@ export const SITE_URL =
 export const assetUrl = (path) =>
   `${String(SITE_URL).replace(/\/+$/, '')}/${String(path || '').replace(/^\/+/, '')}`
 
+// Sign in with Apple (web) — the Services ID, which is the API's APPLE_CLIENT_ID.
+// It is the `aud` of the identity token the popup returns, and the API's accepted
+// audiences already include it next to the mobile bundle IDs, so web and mobile
+// verify through the same code. Public by design (it travels in the auth URL);
+// the private .p8 signing key stays on the server.
+export const APPLE_CLIENT_ID = String(import.meta.env.VITE_APPLE_CLIENT_ID || '').trim()
+
+// Return URL registered for this domain under that Services ID. Apple validates it
+// even in popup mode (and only accepts https on a verified domain), so it must be
+// set per environment rather than derived from window.location — no default here
+// means "Apple sign in is off for this build", which is the correct state for
+// localhost, where Apple refuses to register a domain at all.
+export const APPLE_REDIRECT_URI = String(import.meta.env.VITE_APPLE_REDIRECT_URI || '').trim()
+
+// Apple releases name + email only on the first authorization; requesting them
+// again on later logins is harmless and returns nothing.
+export const APPLE_SCOPE = 'name email'
+
 // Product Conditions
 export const PRODUCT_CONDITIONS = [
   'New',

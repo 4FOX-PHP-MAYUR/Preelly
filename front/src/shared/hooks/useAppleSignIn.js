@@ -2,7 +2,7 @@ import { useCallback, useEffect } from 'react'
 import { useDispatch } from 'react-redux'
 import toast from 'react-hot-toast'
 
-import { appleLogin } from '../store/slices/authSlice'
+import { appleWebLogin } from '../store/slices/authSlice'
 import { preloadAppleSdk, signInWithApple } from '../services/appleSignIn'
 
 /**
@@ -11,8 +11,8 @@ import { preloadAppleSdk, signInWithApple } from '../services/appleSignIn'
  *
  * Two failure sources are handled separately: the Apple popup itself (SDK
  * unreachable, Services ID/Return URL not registered, state mismatch) is toasted
- * here, while a rejected POST /auth/apple lands in `auth.error` and is toasted by
- * the page's existing error effect — the same route every other auth call takes,
+ * here, while a rejected POST /auth/apple/web lands in `auth.error` and is toasted
+ * by the page's existing error effect — the same route every other auth call takes,
  * so a deactivated account or an email/Apple conflict shows the server's own
  * message. A closed popup is not an error and must not read like one.
  *
@@ -50,7 +50,7 @@ export function useAppleSignIn({ onStart, onFinish } = {}) {
       }
 
       const payload = await dispatch(
-        appleLogin({
+        appleWebLogin({
           identityToken: result.identityToken,
           authorizationCode: result.authorizationCode,
           user: result.user,

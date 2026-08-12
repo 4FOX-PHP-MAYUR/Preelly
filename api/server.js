@@ -169,6 +169,10 @@ const { legacyDeprecationHeaders } = require('./api/legacy/compat')
 app.use('/api', legacyDeprecationHeaders)
 
 app.use('/api/auth/oauth',    require('./routes/oauth'))
+// Web-only Sign in with Apple. Mounted ahead of /api/auth so the browser flow stays
+// on its own route (and its own APPLE_WEB_* config) instead of sharing the app's
+// POST /api/auth/apple.
+app.use('/api/auth/apple/web', require('./routes/appleWeb'))
 app.use('/api/auth',          require('./routes/auth'))
 app.use('/api',               require('./routes/profile'))
 app.use('/api/categories',    require('./routes/categories'))

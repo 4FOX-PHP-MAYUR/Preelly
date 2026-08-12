@@ -1,24 +1,21 @@
-import { APPLE_CLIENT_ID, APPLE_REDIRECT_URI, APPLE_SCOPE } from '../utils/constants'
+import { APPLE_WEB_CLIENT_ID, APPLE_WEB_REDIRECT_URI, APPLE_WEB_SCOPE } from '../utils/constants'
 
 /**
- * Web "Sign in with Apple" — the browser half of the SAME flow the mobile app uses.
+ * Web "Sign in with Apple" — the browser flow, entirely separate from the mobile
+ * app's.
  *
  * Apple's JS SDK runs in a popup (`usePopup: true`), so Apple hands the identity
- * token straight back to this page instead of form-POSTing it to a server
- * callback. The token then goes to POST /api/auth/apple — the endpoint the mobile
- * app already calls — which verifies it against Apple's JWKS (signature, issuer,
- * audience, expiry) and resolves the account through the shared
- * `resolveAppleUser` service. One verification path, one account-resolution rule,
- * both platforms: an Apple user who signs up on iOS lands on the same Preelly
- * account when they sign in here, because `sub` (appleProviderId) identifies them
- * in both cases.
+ * token straight back to this page instead of form-POSTing it to a server callback.
+ * The token then goes to POST /api/auth/apple/web — the web-only endpoint, with its
+ * own APPLE_WEB_* credentials on the server. The mobile app keeps its own endpoint
+ * and its own configuration; the two never cross.
  *
  * Nothing this module sends is trusted as identity by the server: the name is
- * display-only (Apple releases it on first authorization only, via the client),
- * and the email always comes from the verified token, never from here.
+ * display-only (Apple releases it on first authorization only, via the client), and
+ * the email always comes from the verified token, never from here.
  *
- * The token's `aud` is the Services ID, which the API's accepted-audience list
- * already covers next to the mobile bundle IDs — so no backend change is needed.
+ * The token's `aud` is the web Services ID, which is the only audience that
+ * endpoint accepts.
  */
 
 const APPLE_SDK_URL =
@@ -44,7 +41,7 @@ export class AppleSignInError extends Error {
  * hidden rather than shown-and-broken when this deployment has no Services ID.
  */
 export function isAppleSignInConfigured() {
-  return Boolean(APPLE_CLIENT_ID && APPLE_REDIRECT_URI)
+  return Boolean(APPLE_WEB_CLIENT_ID && APPLE_WEB_REDIRECT_URI)
 }
 
 /**
@@ -148,13 +145,13 @@ export async function signInWithApple() {
   const state = randomState()
 
   AppleID.auth.init({
-    clientId: APPLE_CLIENT_ID,
+    clientId: APPLE_WEB_CLIENT_ID,
     // Registered Return URL for this domain. In popup mode Apple validates it but
     // never navigates to it, so the page the user is on is preserved.
-    redirectURI: APPLE_REDIRECT_URI,
+    redirectURI: APPLE_WEB_REDIRECT_URI,
     // Name + email are released on first authorization only; a repeat login
     // returns neither, and the server handles that (it matches on `sub`).
-    scope: APPLE_SCOPE,
+    scope: APPLE_WEB_SCOPE,
     state,
     usePopup: true,
   })

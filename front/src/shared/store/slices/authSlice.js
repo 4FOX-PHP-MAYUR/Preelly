@@ -134,16 +134,16 @@ const persistAuthPayload = (data) => {
 }
 
 /**
- * Sign in with Apple (web popup) — posts the Apple identity token to the same
- * /auth/apple endpoint the mobile app uses, so an Apple user gets the same
- * Preelly account on either platform. The response is the standard
- * { message, token, user } auth payload, hence the shared persist helper.
+ * Sign in with Apple (web popup) — posts the Apple identity token to the web-only
+ * /auth/apple/web endpoint. The mobile app has its own separate endpoint and
+ * credentials. The response is the standard { message, token, user } auth payload,
+ * hence the shared persist helper.
  */
-export const appleLogin = createAsyncThunk(
-  'auth/appleLogin',
+export const appleWebLogin = createAsyncThunk(
+  'auth/appleWebLogin',
   async ({ identityToken, authorizationCode, user }, { rejectWithValue }) => {
     try {
-      const response = await authService.appleLogin({ identityToken, authorizationCode, user })
+      const response = await authService.appleWebLogin({ identityToken, authorizationCode, user })
       persistAuthPayload(response.data)
       return response.data
     } catch (error) {
@@ -467,18 +467,18 @@ const authSlice = createSlice({
         state.loading = false
         state.error = action.payload
       })
-      .addCase(appleLogin.pending, (state) => {
+      .addCase(appleWebLogin.pending, (state) => {
         state.loading = true
         state.error = null
       })
-      .addCase(appleLogin.fulfilled, (state, action) => {
+      .addCase(appleWebLogin.fulfilled, (state, action) => {
         state.loading = false
         state.user = action.payload.user
         state.token = action.payload.token
         state.isAuthenticated = !!action.payload.token
         state.permissions = action.payload.user?.permissions || null
       })
-      .addCase(appleLogin.rejected, (state, action) => {
+      .addCase(appleWebLogin.rejected, (state, action) => {
         state.loading = false
         state.error = action.payload
       })

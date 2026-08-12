@@ -159,11 +159,12 @@ export const authService = {
   verifyPhoneOtp: ({ phone, otp }) => api.post('/auth/verify-phone-otp', { phone, otp }),
   // Email-tab entry: decides login (existing) vs. new U-XXXXXXXX signup.
   emailStart: ({ email }) => api.post('/auth/email/start', { email }),
-  // Sign in with Apple — the same endpoint the mobile app posts to, so both
-  // platforms share one token verification + account-resolution path. `user`
-  // carries display-only name hints Apple sends on first authorization only.
-  appleLogin: ({ identityToken, authorizationCode, user }) =>
-    api.post('/auth/apple', { identityToken, authorizationCode, user }),
+  // Sign in with Apple — WEB endpoint. Separate from the mobile app's
+  // POST /auth/apple: its own route, its own APPLE_WEB_* config on the server, and
+  // it only accepts a token minted for the web Services ID. `user` carries the
+  // display-only name hints Apple sends on a first authorization.
+  appleWebLogin: ({ identityToken, authorizationCode, user }) =>
+    api.post('/auth/apple/web', { identityToken, authorizationCode, user }),
   // Completion-flow OTP verifiers (require BOTH email + mobile before login).
   completeVerifyEmail: ({ email, otp }) => api.post('/auth/complete/verify-email', { email, otp }),
   completeVerifyPhone: ({ phone, otp, phoneCountryCode, phoneCountryIso }) =>

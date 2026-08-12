@@ -147,10 +147,21 @@ export const appleWebLogin = createAsyncThunk(
       persistAuthPayload(response.data)
       return response.data
     } catch (error) {
+      // Fall back with the status attached: a missing route (404, backend not
+      // deployed) or an unreachable API otherwise shows up as the same "try again"
+      // toast the server sends for a genuinely bad token, which hides the real fault.
+      const status = error.response?.status || null
+      const serverMessage = error.response?.data?.message
+      const fallback = !error.response
+        ? 'Could not reach the server. Check your connection and try again.'
+        : status === 404
+          ? 'Apple sign in is not available on this server yet.'
+          : `Apple sign in failed (HTTP ${status}). Please try again.`
+
       return rejectWithValue({
-        message: error.response?.data?.message || 'Apple sign in failed. Please try again.',
+        message: serverMessage || fallback,
         code: error.response?.data?.code || null,
-        status: error.response?.status || null,
+        status,
       })
     }
   }

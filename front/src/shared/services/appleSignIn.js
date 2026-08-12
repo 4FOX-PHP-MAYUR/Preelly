@@ -110,7 +110,11 @@ function messageForCode(code) {
       // Services ID / Return URL not registered for this domain in Apple Developer.
       return 'Apple sign in is not available on this site yet.'
     default:
-      return 'Apple sign in failed. Please try again.'
+      // Apple's own code is kept in the message: without it this is indistinguishable
+      // from a server-side rejection, which sends people looking in the wrong place.
+      return code
+        ? `Apple sign in failed (${code}). Please try again.`
+        : 'Apple sign in failed. Please try again.'
   }
 }
 

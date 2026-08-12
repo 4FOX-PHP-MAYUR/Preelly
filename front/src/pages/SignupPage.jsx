@@ -118,7 +118,7 @@ function SignupPage() {
     window.location.href = url
   }
 
-  // Apple has no separate signup call: /auth/apple creates the account on a first
+  // Apple has no separate signup call: /auth/apple/web creates the account on a first
   // authorization and signs the user in on every later one, so the button is the
   // same here as on the login page.
   const { startAppleSignIn } = useAppleSignIn({

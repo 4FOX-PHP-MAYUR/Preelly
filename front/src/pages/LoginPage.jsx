@@ -161,9 +161,9 @@ function LoginPage() {
     window.location.href = url
   }
 
-  // Apple runs in a popup and posts the identity token to /auth/apple (the same
-  // endpoint the mobile app uses) instead of leaving the page like Google's
-  // redirect flow; the isAuthenticated effect above handles the navigation.
+  // Apple runs in a popup and posts the identity token to the web-only
+  // /auth/apple/web endpoint instead of leaving the page like Google's redirect
+  // flow; the isAuthenticated effect above handles the navigation.
   const { startAppleSignIn } = useAppleSignIn({
     onStart: () => setOauthLoading('apple'),
     onFinish: () => setOauthLoading(null),

@@ -4,6 +4,7 @@
 const {
   pickVehicleListingFields,
 } = require('../../utils/productVehicleFields')
+const { resolveListingPrice } = require('../../utils/listingPrice')
 
 function buildBreadcrumbs(product) {
   if (!product.category) return []
@@ -16,7 +17,10 @@ function listItem(product) {
     _id: product._id,
     title: product.title,
     slug: product.slug || null,
-    price: product.price,
+    // Real amount, not the legacy placeholder — matches the price sort and what the
+    // site's own listing cards resolve. Key and type unchanged.
+    price: resolveListingPrice(product) ?? product.price,
+    productPrice: product.productPrice ?? null,
     currency: product.currency || 'AED',
     description: product.description
       ? product.description.slice(0, 200) + (product.description.length > 200 ? '…' : '')

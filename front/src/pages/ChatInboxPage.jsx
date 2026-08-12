@@ -27,13 +27,15 @@ import toast from 'react-hot-toast'
 // ─────────────────────────────────────────────────────────────────────────────
 const TABS = ['All', 'Cart', 'Buying', 'Selling', 'Unread']
 
+// Order matters: "Make an offer" leads because it is the action, not a canned
+// message — it opens the offer modal rather than sending text (see onQuickReply).
 const QUICK_REPLIES = [
+  'Make an offer',
   'Hello',
   'Is it available',
   'when can i call you?',
   'what is your location',
   'what is the final price?',
-  'Make an offer',
 ]
 
 // ── helpers ───────────────────────────────────────────────────────────────────

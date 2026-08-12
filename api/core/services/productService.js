@@ -63,9 +63,14 @@ async function listProducts(query = {}, options = {}) {
     filter.$or = [{ category: scopeExpr }, { subcategory: scopeExpr }]
   }
 
+  // Price sorts key on `productPrice`, the field the post-ad flow writes. `price` is
+  // the legacy required column, left at its placeholder (1) on those listings, so
+  // sorting by it returned an unchanged order. createdAt breaks ties, matching
+  // GET /api/products. Applies to both v1 clients (web and mobile) — the request
+  // shape and response are unchanged, only the resulting order.
   let sortOption = { createdAt: -1 }
-  if (query.sort === 'price_asc') sortOption = { price: 1 }
-  if (query.sort === 'price_desc') sortOption = { price: -1 }
+  if (query.sort === 'price_asc') sortOption = { productPrice: 1, createdAt: -1 }
+  if (query.sort === 'price_desc') sortOption = { productPrice: -1, createdAt: -1 }
 
   const [items, total, savedProductIds] = await Promise.all([
     Product.find(filter)

@@ -4,6 +4,7 @@
 const {
   pickVehicleListingFields,
 } = require('../../utils/productVehicleFields')
+const { resolveListingPrice } = require('../../utils/listingPrice')
 
 function pickThumbnail(product) {
   if (product.videoThumbnail) return product.videoThumbnail
@@ -16,7 +17,9 @@ function listItem(product) {
   return {
     id: product._id,
     title: product.title,
-    price: product.price,
+    // Same key and always a number, as before — but the real amount rather than the
+    // legacy placeholder, so it agrees with the price sort the list is ordered by.
+    price: resolveListingPrice(product) ?? product.price,
     currency: product.currency || 'AED',
     thumbnail: pickThumbnail(product),
     location: product.location || product.city || null,

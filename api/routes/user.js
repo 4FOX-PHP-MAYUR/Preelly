@@ -305,10 +305,13 @@ router.get('/listings', authMiddleware, async (req, res) => {
       }
     }
 
+    // Price sorts key on `productPrice`, the field the post-ad flow writes; `price`
+    // is the legacy required column and stays at its placeholder (1) on those
+    // listings, which made this sort a no-op. Same rule as GET /api/products.
     let sort = { createdAt: -1 }
     if (sortKey === 'oldest') sort = { createdAt: 1 }
-    else if (sortKey === 'price_asc') sort = { price: 1, createdAt: -1 }
-    else if (sortKey === 'price_desc') sort = { price: -1, createdAt: -1 }
+    else if (sortKey === 'price_asc') sort = { productPrice: 1, createdAt: -1 }
+    else if (sortKey === 'price_desc') sort = { productPrice: -1, createdAt: -1 }
     else if (sortKey === 'archived_newest') sort = { archivedAt: -1, updatedAt: -1, createdAt: -1 }
     else if (sortKey === 'archived_oldest') sort = { archivedAt: 1, updatedAt: 1, createdAt: 1 }
     else if (sortKey === 'updated') sort = { updatedAt: -1 }
@@ -316,7 +319,9 @@ router.get('/listings', authMiddleware, async (req, res) => {
     const [items, total] = await Promise.all([
       Product.find(query)
         .select(
-          'title price currency status moderationStatus images video location category isArchived archivedAt createdAt updatedAt views',
+          // productPrice ships alongside price so the card can show the real amount
+          // (the front prefers productPrice and ignores the legacy placeholder).
+          'title price productPrice currency status moderationStatus images video location category isArchived archivedAt createdAt updatedAt views',
         )
         .populate('category', 'name')
         .sort(sort)

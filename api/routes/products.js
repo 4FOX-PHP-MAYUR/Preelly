@@ -947,9 +947,14 @@ router.get('/', async (req, res) => {
 
     const skip = (Number(page) - 1) * Number(limit)
 
+    // Price sorts key on `productPrice` — the field the post-ad flow actually writes.
+    // `price` is the legacy required column and is left at its placeholder (1) on
+    // listings created through that flow, so sorting on it produced identical keys
+    // and no visible ordering. Listings with no productPrice (giveaways) sort as the
+    // cheapest, which is where they belong at either end.
     let sort = { createdAt: -1 }
-    if (sortBy === 'price_asc') sort = { price: 1, createdAt: -1 }
-    else if (sortBy === 'price_desc') sort = { price: -1, createdAt: -1 }
+    if (sortBy === 'price_asc') sort = { productPrice: 1, createdAt: -1 }
+    else if (sortBy === 'price_desc') sort = { productPrice: -1, createdAt: -1 }
 
     // Debug: log the full query when filters are applied
     if (make || model || trim || req.query.brandId || req.query.modelId || req.query.trimId) {

@@ -203,6 +203,15 @@ function SearchBar({
     handleSearch(suggestion)
   }
 
+  // Opens the full search page with no keyword, so the user lands on the filters
+  // rather than a result set. Router-relative on purpose: the host comes from
+  // wherever the app is served, so this works on localhost, beta and production
+  // without a per-environment value to keep in sync.
+  const handleAdvanceSearch = () => {
+    setShowSuggestions(false)
+    navigate('/search')
+  }
+
   const clearRecentSearches = async () => {
     try {
       await globalSearchService.clearRecent()
@@ -313,13 +322,22 @@ function SearchBar({
                   <Clock className="h-3.5 w-3.5" />
                   Recent Searches
                 </div>
-                <button
-                  type="button"
-                  onClick={clearRecentSearches}
-                  className="text-xs text-primary-600 hover:text-primary-700 font-medium"
-                >
-                  Clear
-                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleAdvanceSearch}
+                    className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    Advance Search
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearRecentSearches}
+                    className="text-xs text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    Clear
+                  </button>
+                </div>
               </div>
               {recentSearches.map((search, index) => (
                 <button

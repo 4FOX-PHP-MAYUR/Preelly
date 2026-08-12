@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { adminService } from '@/services/api'
+import { adminService, categoryService } from '@/services/api'
 import PageHeader from '../../components/AdminUI/PageHeader'
 import AdminPage from '../../components/AdminUI/AdminPage'
 import DataTable from '../../components/AdminUI/DataTable'
@@ -13,6 +13,12 @@ import { usePermission } from '../../hooks/usePermission'
 
 const LIMIT = 100
 const LIST_PATH = '/categories'
+// Import anchor is picked with this many cascading dropdowns (root + 3 deeper
+// levels). The deepest one picked becomes the parent the sheet imports under.
+const IMPORT_DEPTH = 4
+const EMPTY_IMPORT_SELECTION = Array.from({ length: IMPORT_DEPTH }, () => '')
+const EMPTY_IMPORT_OPTIONS = Array.from({ length: IMPORT_DEPTH }, () => [])
+const DEFAULT_IMPORT_LEVEL_LABELS = ['Category', 'Sub Category', 'Level 3', 'Level 4']
 
 function CategoriesListPage() {
   const navigate = useNavigate()
@@ -30,27 +36,50 @@ function CategoriesListPage() {
   const [total, setTotal] = useState(0)
 
   const [importing, setImporting] = useState(false)
-  const [importRootCategoryId, setImportRootCategoryId] = useState('')
-  const [importRootCategoryOptions, setImportRootCategoryOptions] = useState([])
-  const [importSubCategoryId, setImportSubCategoryId] = useState('')
-  const [importSubCategoryOptions, setImportSubCategoryOptions] = useState([])
-  const [loadingImportSubCategories, setLoadingImportSubCategories] = useState(false)
+  // One entry per dropdown: selected category id at that depth ('' = not picked).
+  const [importSelection, setImportSelection] = useState(EMPTY_IMPORT_SELECTION)
+  const [importOptions, setImportOptions] = useState(EMPTY_IMPORT_OPTIONS)
+  const [importLoadingDepth, setImportLoadingDepth] = useState(-1)
+  const [importLevelLabels, setImportLevelLabels] = useState(DEFAULT_IMPORT_LEVEL_LABELS)
+  // Bumped when the tree changes (import/delete) to re-run the cascade so the
+  // open dropdowns pick up newly created levels.
+  const [importTreeVersion, setImportTreeVersion] = useState(0)
   const fileInputRef = useRef(null)
+  // parentId -> children, so re-picking a shallow level doesn't refetch the
+  // whole chain every time.
+  const importChildrenCacheRef = useRef(new Map())
+
+  const importRootCategoryOptions = importOptions[0]
+  const importRootCategoryId = importSelection[0]
 
   const fetchParentRoots = useCallback(async () => {
     try {
       const res = await adminService.getAdminCategoryChildren({})
       const roots = Array.isArray(res.data) ? res.data : []
-      setImportRootCategoryOptions(roots)
-      setImportRootCategoryId((prev) => {
-        if (prev) return prev
+      // A refetch (after import/delete) must not serve stale children.
+      importChildrenCacheRef.current.clear()
+      setImportTreeVersion((v) => v + 1)
+      setImportOptions((prev) => [roots, ...prev.slice(1)])
+      setImportSelection((prev) => {
+        if (prev[0]) return prev
         const motors = roots.find((c) => String(c?.name || '').toLowerCase() === 'motors')
-        return (motors?._id || roots?.[0]?._id || '')?.toString()
+        const rootId = (motors?._id || roots?.[0]?._id || '').toString()
+        return [rootId, ...EMPTY_IMPORT_SELECTION.slice(1)]
       })
     } catch {
-      setImportRootCategoryOptions([])
-      setImportRootCategoryId('')
+      setImportOptions(EMPTY_IMPORT_OPTIONS)
+      setImportSelection(EMPTY_IMPORT_SELECTION)
     }
+  }, [])
+
+  const fetchImportChildren = useCallback(async (parentId) => {
+    const key = String(parentId)
+    const cache = importChildrenCacheRef.current
+    if (cache.has(key)) return cache.get(key)
+    const res = await adminService.getAdminCategoryChildren({ parentId })
+    const options = Array.isArray(res.data) ? res.data : []
+    cache.set(key, options)
+    return options
   }, [])
 
   /**
@@ -134,41 +163,87 @@ function CategoriesListPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search])
 
+  /**
+   * Walks the selected chain and loads the option list for each depth below it.
+   * Stops at the first depth whose parent is unset, so the dropdowns past the
+   * current selection stay empty (and therefore hidden).
+   */
   useEffect(() => {
     let cancelled = false
-    const loadSubCategories = async () => {
-      if (!importRootCategoryId) {
-        setImportSubCategoryOptions([])
-        setImportSubCategoryId('')
-        return
+    const loadCascade = async () => {
+      const loaded = [null, [], [], []]
+      let autoSelect = null
+
+      for (let depth = 1; depth < IMPORT_DEPTH; depth++) {
+        const parentId = importSelection[depth - 1]
+        if (!parentId) break
+        setImportLoadingDepth(depth)
+        try {
+          const options = await fetchImportChildren(parentId)
+          if (cancelled) return
+          loaded[depth] = options
+          // Preserves the long-standing default of importing under Motors ›
+          // New Cars when nothing deeper has been chosen.
+          if (depth === 1 && !importSelection[1]) {
+            const preferred = options.find((c) => String(c?.name || '').toLowerCase() === 'new cars')
+            if (preferred?._id) autoSelect = { depth: 1, id: String(preferred._id) }
+          }
+        } catch {
+          if (cancelled) return
+          loaded[depth] = []
+        }
+        if (!importSelection[depth]) break
       }
 
-      setLoadingImportSubCategories(true)
-      try {
-        const res = await adminService.getAdminCategoryChildren({ parentId: importRootCategoryId })
-        const options = Array.isArray(res.data) ? res.data : []
-        if (cancelled) return
-
-        setImportSubCategoryOptions(options)
-
-        setImportSubCategoryId((prev) => {
-          if (prev && options.some((c) => String(c._id) === String(prev))) return prev
-          const preferred = options.find((c) => String(c?.name || '').toLowerCase() === 'new cars')
-          return (preferred?._id || '').toString()
-        })
-      } catch {
-        if (cancelled) return
-        setImportSubCategoryOptions([])
-        setImportSubCategoryId('')
-      } finally {
-        if (!cancelled) setLoadingImportSubCategories(false)
+      if (cancelled) return
+      setImportLoadingDepth(-1)
+      setImportOptions((prev) => [prev[0], loaded[1], loaded[2], loaded[3]])
+      if (autoSelect) {
+        setImportSelection((prev) =>
+          prev.map((v, i) => (i === autoSelect.depth ? autoSelect.id : i < autoSelect.depth ? v : ''))
+        )
       }
     }
-    loadSubCategories()
+    loadCascade()
     return () => {
       cancelled = true
     }
-  }, [importRootCategoryId])
+  }, [importSelection, importTreeVersion, fetchImportChildren])
+
+  // Dropdown captions follow the selected root ("Vehicle Type", "Brand", …).
+  useEffect(() => {
+    let cancelled = false
+    const rootName = importRootCategoryOptions.find(
+      (c) => String(c._id) === String(importRootCategoryId)
+    )?.name
+    if (!rootName) {
+      setImportLevelLabels(DEFAULT_IMPORT_LEVEL_LABELS)
+      return undefined
+    }
+    categoryService
+      .getLevelLabels(rootName)
+      .then((res) => {
+        if (cancelled) return
+        const labels = res.data?.labels
+        setImportLevelLabels(
+          Array.isArray(labels) && labels.length
+            ? DEFAULT_IMPORT_LEVEL_LABELS.map((fallback, i) => labels[i] || fallback)
+            : DEFAULT_IMPORT_LEVEL_LABELS
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setImportLevelLabels(DEFAULT_IMPORT_LEVEL_LABELS)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [importRootCategoryId, importRootCategoryOptions])
+
+  const handleImportLevelChange = (depth, value) => {
+    // Picking a level invalidates everything below it.
+    setImportSelection((prev) => prev.map((v, i) => (i < depth ? v : i === depth ? value : '')))
+    setImportOptions((prev) => prev.map((opts, i) => (i <= depth ? opts : [])))
+  }
 
   const handleSearch = (e) => {
     e.preventDefault()
@@ -255,10 +330,13 @@ function CategoriesListPage() {
 
     const formData = new FormData()
     formData.append('file', file)
-    if (importSubCategoryId) {
-      formData.append('targetCategoryId', importSubCategoryId)
-    } else if (importRootCategoryId) {
-      formData.append('rootCategoryId', importRootCategoryId)
+    // The deepest picked level is the anchor. With only the root picked we keep
+    // the legacy behavior of anchoring under a child named after the sheet.
+    const deepestDepth = importSelection.reduce((acc, id, i) => (id ? i : acc), -1)
+    if (deepestDepth > 0) {
+      formData.append('targetCategoryId', importSelection[deepestDepth])
+    } else if (deepestDepth === 0) {
+      formData.append('rootCategoryId', importSelection[0])
     }
 
     try {
@@ -312,10 +390,10 @@ function CategoriesListPage() {
           <div className="flex items-center gap-2 flex-wrap">
             <select
               value={importRootCategoryId}
-              onChange={(e) => setImportRootCategoryId(e.target.value)}
+              onChange={(e) => handleImportLevelChange(0, e.target.value)}
               disabled={!importRootCategoryOptions.length || importing}
               className="admin-input w-auto min-w-[160px]"
-              aria-label="Import root category"
+              aria-label={`Import ${importLevelLabels[0]}`}
             >
               {importRootCategoryOptions.length ? (
                 importRootCategoryOptions.map((c) => (
@@ -327,26 +405,44 @@ function CategoriesListPage() {
                 <option value="">Loading roots…</option>
               )}
             </select>
-            <select
-              value={importSubCategoryId}
-              onChange={(e) => setImportSubCategoryId(e.target.value)}
-              disabled={!importRootCategoryId || loadingImportSubCategories || importing}
-              className="admin-input w-auto min-w-[160px]"
-              aria-label="Import sub category"
-            >
-              {importRootCategoryId ? (
-                <>
-                  <option value="">Use Excel sheet name</option>
-                  {importSubCategoryOptions.map((c) => (
-                    <option key={c._id} value={c._id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </>
-              ) : (
-                <option value="">Select root first</option>
-              )}
-            </select>
+            {/* Deeper levels appear one at a time as the chain is picked, and
+                stop when the selected category has no children left. */}
+            {Array.from({ length: IMPORT_DEPTH - 1 }, (_, i) => i + 1).map((depth) => {
+              if (!importSelection[depth - 1]) return null
+              const options = importOptions[depth] || []
+              const isLoading = importLoadingDepth === depth
+              if (!options.length && !isLoading) return null
+              const label = importLevelLabels[depth] || `Level ${depth + 1}`
+              const parentName =
+                (importOptions[depth - 1] || []).find(
+                  (c) => String(c._id) === String(importSelection[depth - 1])
+                )?.name || 'selected category'
+              return (
+                <select
+                  key={depth}
+                  value={importSelection[depth]}
+                  onChange={(e) => handleImportLevelChange(depth, e.target.value)}
+                  disabled={isLoading || importing}
+                  className="admin-input w-auto min-w-[160px]"
+                  aria-label={`Import ${label}`}
+                >
+                  {isLoading ? (
+                    <option value="">Loading…</option>
+                  ) : (
+                    <>
+                      <option value="">
+                        {depth === 1 ? 'Use Excel sheet name' : `Import under ${parentName}`}
+                      </option>
+                      {options.map((c) => (
+                        <option key={c._id} value={c._id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
+              )
+            })}
             <input
               type="file"
               accept=".xlsx,.xls,.csv"

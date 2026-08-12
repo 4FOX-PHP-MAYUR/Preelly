@@ -23,14 +23,19 @@ import {
   selectIsGuest,
   selectUser,
 } from '@shared/store/slices/authSlice'
+import { useRequireAuth } from '@shared/hooks/useRequireAuth'
 import { getMediaUrl, isUserVerified } from '@shared/utils/helpers'
 import { userService } from '@shared/services/api'
 import { NOTIFICATION_UNREAD_EVENT } from '@shared/utils/notificationBadge'
 
-function TopBarIcon({ to, label, Icon, badge }) {
+// `onClick` may cancel the navigation (e.g. the guest login prompt); keeping this a
+// Link rather than a button preserves middle-click and keyboard behaviour for the
+// signed-in case.
+function TopBarIcon({ to, label, Icon, badge, onClick }) {
   return (
     <Link
       to={to}
+      onClick={onClick}
       className="flex flex-col items-center gap-1 rounded-xl px-2.5 py-1.5 text-slate-500 transition hover:bg-slate-50 hover:text-brand"
     >
       <span className="relative">
@@ -60,6 +65,16 @@ function MarketplaceTopBar({ className = '', onToggleMobileMenu, topBarColSpan =
   const isAuthenticated = useSelector(selectIsAuthenticated)
   const isGuest = useSelector(selectIsGuest)
   const user = useSelector(selectUser)
+  const requireAuth = useRequireAuth()
+
+  // My Search holds the signed-in user's own saved searches, so a guest gets the
+  // shared "Login Required" prompt (same as sharing from the home feed) instead of
+  // being bounced straight to /login like the other top-bar icons.
+  const handleMySearchClick = (event) => {
+    if (!requireAuth('Please login to view your saved searches')) {
+      event.preventDefault()
+    }
+  }
   const unreadChatCount = useSelector((state) => (isAuthenticated ? state.feed?.unreadCount || 0 : 0))
   const [unreadNotifCount, setUnreadNotifCount] = useState(0)
 
@@ -161,7 +176,12 @@ function MarketplaceTopBar({ className = '', onToggleMobileMenu, topBarColSpan =
 
         <div className="mt-3 flex items-center gap-1 sm:gap-2">
           <TopBarIcon to={isAuthenticated ? '/chat' : '/login'} label="Chat" Icon={ChatIcon} badge={unreadChatCount} />
-          <TopBarIcon to="/search" label="My Search" Icon={MySearchIcon} />
+          <TopBarIcon
+            to="/dashboard/my-search"
+            label="My Search"
+            Icon={MySearchIcon}
+            onClick={handleMySearchClick}
+          />
           <TopBarIcon to={isAuthenticated ? '/my-profile' : '/login'} label="My Ads" Icon={MyAdsIcon} />
           <TopBarIcon to={isAuthenticated ? '/dashboard/notifications' : '/login'} label="Notification" Icon={NotificationIcon} badge={unreadNotifCount} />
         </div>
@@ -177,7 +197,12 @@ function MarketplaceTopBar({ className = '', onToggleMobileMenu, topBarColSpan =
 
         <div className="flex items-end gap-1 sm:gap-2">
           <TopBarIcon to={isAuthenticated ? '/chat' : '/login'} label="Chat" Icon={ChatIcon} badge={unreadChatCount} />
-          <TopBarIcon to="/search" label="My Search" Icon={MySearchIcon} />
+          <TopBarIcon
+            to="/dashboard/my-search"
+            label="My Search"
+            Icon={MySearchIcon}
+            onClick={handleMySearchClick}
+          />
           <TopBarIcon to={isAuthenticated ? '/my-profile' : '/login'} label="My Ads" Icon={MyAdsIcon} />
           <TopBarIcon to={isAuthenticated ? '/dashboard/notifications' : '/login'} label="Notification" Icon={NotificationIcon} badge={unreadNotifCount} />
 

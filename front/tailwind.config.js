@@ -8,6 +8,9 @@ export default {
   darkMode: 'class',
   theme: {
     extend: {
+      fontFamily: {
+        sans: ['"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'],
+      },
       colors: {
         brand: {
           DEFAULT: '#0000FF',

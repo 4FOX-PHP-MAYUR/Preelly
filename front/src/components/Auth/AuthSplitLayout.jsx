@@ -263,7 +263,7 @@ export function AuthSidePanel({ quote, quoteAuthor, quoteRole }) {
   }
 
   return (
-    <aside className="relative hidden w-full max-w-[677px] min-h-[760px] justify-self-start overflow-hidden rounded-[40px] bg-[#3520d8] p-6 text-white shadow-[0_32px_100px_rgba(49,40,255,0.28)] lg:flex lg:flex-col xl:min-h-[973px]">
+    <aside className="relative hidden w-full max-w-[677px] min-h-[760px] justify-self-start overflow-hidden rounded-[40px] bg-[#3520d8] p-6 text-white shadow-[0_32px_100px_rgba(49,40,255,0.28)] lg:flex lg:flex-col">
       <div
         className="absolute inset-0 bg-cover bg-center"
         style={{
@@ -280,8 +280,9 @@ export function AuthSidePanel({ quote, quoteAuthor, quoteRole }) {
         <div className="absolute right-[-8%] top-[54%] h-24 w-[78%] rotate-[-24deg] rounded-full bg-[#f095ff]/12 blur-[8px]" />
         <div className="absolute bottom-0 left-0 right-0 h-52 bg-gradient-to-t from-black/12 to-transparent" />
       </div>
+      <video className='w-full h-full absolute inset-0 object-cover z-40' src="/videos/login_bg.mp4" autoPlay loop muted playsInline></video>
 
-      <div className="relative z-10 flex h-full flex-1 flex-col">
+      <div className="relative z-50 flex h-full flex-1 flex-col">
         <div className="mx-auto mt-6 flex w-full max-w-[519px] flex-col items-center text-center xl:mt-8">
           <BrandLogo variant="dark" className="h-16 w-auto xl:h-[78px]" />
           <p className="mt-3 text-[15px] font-medium tracking-[0.01em] text-white/95 xl:text-base">
@@ -303,7 +304,7 @@ export function AuthSidePanel({ quote, quoteAuthor, quoteRole }) {
       </div>
 
       {/* Bottom-right nav buttons, seated in a white notch carved from the panel corner. */}
-      <div className="absolute bottom-0 right-0 z-20 flex items-center gap-[14px] rounded-tl-[32px] rounded-br-[40px] bg-white pb-5 pl-7 pr-5 pt-6">
+      <div className="absolute bottom-0 right-0 z-50 flex items-center gap-[14px] rounded-tl-[32px] rounded-br-[40px] bg-white pb-5 pl-7 pr-5 pt-6">
         <button
           type="button"
           onClick={goToPrevious}
@@ -342,9 +343,9 @@ function AuthSplitLayout({
   quoteRole,
 }) {
   return (
-    <div className="min-h-screen bg-white px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
-      <div className="mx-auto grid max-w-6xl gap-6 sm:gap-8 lg:grid-cols-[minmax(0,440px)_minmax(0,1fr)] lg:items-center">
-        <section className="mx-auto w-full max-w-[440px] px-5 py-7 sm:px-8 lg:mx-0 lg:px-10 lg:py-10">
+    <div className="min-h-screen flex flex-col justify-center items-center bg-white px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
+      <div className="mx-auto grid max-w-fit gap-6 sm:gap-8 lg:grid-cols-[minmax(0,552px)_minmax(0,1fr)]">
+        <section className="mx-auto w-full max-w-[552px] px-5 py-7 sm:px-8 lg:mx-0 lg:px-10 lg:py-10">
           {modeLabel ? (
             <p className="mb-4 sm:mb-6 text-xs sm:text-sm font-semibold uppercase tracking-[0.3em] text-[#3128ff]">
               {modeLabel}

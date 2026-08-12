@@ -185,14 +185,14 @@ function LoginPage() {
       quoteAuthor="Aarav Mehta"
       quoteRole="Car Buyer"
     >
-      <div className="mb-6 grid grid-cols-2 gap-2 rounded-2xl border border-[#e7e9f2] bg-[#f4f5fb] p-1.5">
+      <div className="mb-6 grid grid-cols-2 rounded-xl border border-[#e7e9f2] bg-[#f4f5fb]">
         <button
           type="button"
           onClick={() => setChannel('whatsapp')}
-          className={`rounded-xl px-4 py-3.5 text-sm font-semibold transition ${
+          className={`rounded-s-xl px-4 py-3.5 text-sm font-semibold transition ${
             channel === 'whatsapp'
               ? 'bg-[#1400ff] text-white shadow-[0_8px_20px_rgba(20,0,255,0.25)]'
-              : 'text-[#1400ff] hover:bg-white/70'
+              : 'text-[#232388] hover:bg-white/70'
           }`}
         >
           Phone
@@ -200,10 +200,10 @@ function LoginPage() {
         <button
           type="button"
           onClick={() => setChannel('email')}
-          className={`rounded-xl px-4 py-3.5 text-sm font-semibold transition ${
+          className={`rounded-e-xl px-4 py-3.5 text-sm font-semibold transition ${
             channel === 'email'
               ? 'bg-[#1400ff] text-white shadow-[0_8px_20px_rgba(20,0,255,0.25)]'
-              : 'text-[#1400ff] hover:bg-white/70'
+              : 'text-[#232388] hover:bg-white/70'
           }`}
         >
           Email

@@ -5,7 +5,7 @@ import { Home, Loader2, Search } from 'lucide-react'
 import toast from 'react-hot-toast'
 import useCategoryDrilldown, { MAX_CATEGORY_PATH_LENGTH } from '@shared/hooks/useCategoryDrilldown'
 import useCategoryFilterFields from '@shared/hooks/useCategoryFilterFields'
-import CategoryFilterFields from '@shared/components/CategoryFilterFields'
+import CategoryFilterFields, { optionIdsOf } from '@shared/components/CategoryFilterFields'
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
 import { buildListingUrl } from '@shared/utils/categorySearchParams'
 import { getLevelLabels } from '@shared/utils/categoryFields'
@@ -219,8 +219,9 @@ function CategorySearchPage() {
       fields.find((field) => {
         if (!field.required) return false
         if (field.options.length) {
+          // optionIdsOf covers merged options, which own one id per subcategory copy.
           return !field.options.some((opt) =>
-            selectedFilterIds.includes(String(opt.filterId || opt.value)),
+            optionIdsOf(opt).some((id) => selectedFilterIds.includes(id)),
           )
         }
         return !filterValues[field.id]

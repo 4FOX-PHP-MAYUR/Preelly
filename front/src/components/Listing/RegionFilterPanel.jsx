@@ -1,7 +1,7 @@
 import { memo, useMemo } from 'react'
 import { Loader2 } from 'lucide-react'
 import useCategoryFilterFields from '@shared/hooks/useCategoryFilterFields'
-import CategoryFilterFields from '@shared/components/CategoryFilterFields'
+import CategoryFilterFields, { optionIdsOf } from '@shared/components/CategoryFilterFields'
 import FilterPanelShell from './FilterPanelShell'
 
 /** The admin-configured filter that holds GCC / American / European / … */
@@ -32,13 +32,11 @@ function RegionFilterPanel({
     [fields],
   )
 
-  // Reset clears only this panel's own options, never the other filters'.
-  // `filterId || value` is the same id CategoryFilterFields toggles on.
+  // Reset clears only this panel's own options, never the other filters'. Uses the
+  // same id list CategoryFilterFields toggles on, which is every id a merged option
+  // stands for — one chip can own the ids of several subcategories' copies.
   const regionOptionIds = useMemo(
-    () =>
-      new Set(
-        regionFields.flatMap((f) => (f.options || []).map((o) => String(o.filterId || o.value))),
-      ),
+    () => new Set(regionFields.flatMap((f) => (f.options || []).flatMap(optionIdsOf))),
     [regionFields],
   )
 

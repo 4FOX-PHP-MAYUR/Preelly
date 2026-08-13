@@ -66,11 +66,74 @@ function isFilterRequired(filter) {
   return Boolean(filter?.isRequired ?? filter?.required)
 }
 
+/** Case/space-insensitive key used to spot the same filter configured twice. */
+function fieldMergeKey(field) {
+  return String(field?.name || '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+function optionMergeKey(option) {
+  return String(option?.label ?? option?.value ?? '').trim().toLowerCase().replace(/\s+/g, ' ')
+}
+
+/**
+ * Collapse filters that are the same thing configured more than once.
+ *
+ * Admins assign filters per subcategory, so a category-level page (no subcategory
+ * chosen) gets one document per subcategory — e.g. Automotive returns three
+ * "Regional Specs" and five "Year" filters, which rendered as three and five
+ * identically-titled chip groups. They are indistinguishable to the user, so they
+ * are merged by name here, with options unioned by label.
+ *
+ * Each merged option keeps every underlying filter id in `filterIds`, because a
+ * product is tagged with the id belonging to ITS subcategory's copy. Selecting
+ * "GCC" therefore has to send all three GCC ids; the API matches them with
+ * `selectedFilters: { $in: … }`, so any one of them qualifies. Dropping the
+ * others would silently hide listings from the other subcategories.
+ */
+function mergeDuplicateFields(fields) {
+  const merged = new Map()
+
+  for (const field of fields) {
+    const key = fieldMergeKey(field)
+    if (!key) continue
+
+    const existing = merged.get(key)
+    if (!existing) {
+      merged.set(key, {
+        ...field,
+        options: (field.options || []).map((opt) => ({
+          ...opt,
+          filterIds: [String(opt.filterId || opt.value)],
+        })),
+      })
+      continue
+    }
+
+    // Union this copy's options into the group kept for that name.
+    const byOption = new Map(existing.options.map((opt) => [optionMergeKey(opt), opt]))
+    for (const opt of field.options || []) {
+      const optKey = optionMergeKey(opt)
+      const id = String(opt.filterId || opt.value)
+      const seen = byOption.get(optKey)
+      if (seen) {
+        if (!seen.filterIds.includes(id)) seen.filterIds.push(id)
+      } else {
+        const added = { ...opt, filterIds: [id] }
+        byOption.set(optKey, added)
+        existing.options.push(added)
+      }
+    }
+  }
+
+  return [...merged.values()]
+}
+
 /**
  * Turn the flat filter list from the API into renderable fields:
- * `{ id, name, kind, required, options: [{ value, label, filterId }] }`.
+ * `{ id, name, kind, required, options: [{ value, label, filterId, filterIds }] }`.
  * Grouping (parent filter -> child filters / explicit options) is reused from
  * buildCategoryFilterGroups so the search page and the sidebar stay in sync.
+ * Filters configured once per subcategory are merged — see mergeDuplicateFields.
  */
 export function buildCategoryFilterFields(filters) {
   const list = Array.isArray(filters) ? filters : []
@@ -100,7 +163,7 @@ export function buildCategoryFilterFields(filters) {
     }))
     .filter((field) => FREE_FORM_FIELD_KINDS.has(field.kind))
 
-  return [...fromGroups, ...fromTypedRoots]
+  return mergeDuplicateFields([...fromGroups, ...fromTypedRoots])
 }
 
 /**

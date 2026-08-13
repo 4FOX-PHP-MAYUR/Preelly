@@ -76,20 +76,32 @@ function FieldShell({ field, children }) {
   )
 }
 
+/** Every filter id an option stands for — several when duplicate groups were merged. */
+export function optionIdsOf(option) {
+  const ids = Array.isArray(option?.filterIds) ? option.filterIds.map(String).filter(Boolean) : []
+  if (ids.length) return ids
+  return [String(option?.filterId || option?.value)]
+}
+
 function FilterField({
   field,
   selectedIds,
   values,
-  onToggleId,
+  onToggleIds,
   onSetIds,
   onValueChange,
   enableShowMore,
 }) {
-  const optionIds = useMemo(
-    () => field.options.map((opt) => String(opt.filterId || opt.value)),
-    [field.options],
-  )
-  const selectedOptionId = optionIds.find((id) => selectedIds.has(id)) || ''
+  // A merged option (the same filter configured under several subcategories) owns
+  // more than one filter id; they are selected and cleared together so the query
+  // matches listings from every subcategory. Options that were not merged still
+  // carry exactly one id, so behaviour there is unchanged.
+  const optionIdGroups = useMemo(() => field.options.map(optionIdsOf), [field.options])
+  const optionIds = useMemo(() => optionIdGroups.flat(), [optionIdGroups])
+  const primaryOf = (opt) => optionIdsOf(opt)[0]
+  const isOptionSelected = (opt) => optionIdsOf(opt).some((id) => selectedIds.has(id))
+  const selectedOptionId =
+    field.options.map(primaryOf).find((_, i) => optionIdGroups[i].some((id) => selectedIds.has(id))) || ''
 
   if (FREE_FORM_FIELD_KINDS.has(field.kind)) {
     const inputType =
@@ -117,14 +129,14 @@ function FilterField({
         <select
           value={selectedOptionId}
           onChange={(e) => {
-            const next = e.target.value
-            onSetIds(optionIds, next ? [next] : [])
+            const chosen = field.options.find((opt) => primaryOf(opt) === e.target.value)
+            onSetIds(optionIds, chosen ? optionIdsOf(chosen) : [])
           }}
           className={INPUT_CLASS}
         >
           <option value="">{`Any ${field.name}`}</option>
           {field.options.map((opt) => (
-            <option key={String(opt.value)} value={String(opt.filterId || opt.value)}>
+            <option key={String(opt.value)} value={primaryOf(opt)}>
               {opt.label}
             </option>
           ))}
@@ -139,14 +151,14 @@ function FilterField({
         {(visibleOptions) => (
           <div className="space-y-2">
             {visibleOptions.map((opt) => {
-              const id = String(opt.filterId || opt.value)
+              const ids = optionIdsOf(opt)
               return (
-                <label key={id} className="flex cursor-pointer items-center gap-2 text-sm text-[#475569]">
+                <label key={ids[0]} className="flex cursor-pointer items-center gap-2 text-sm text-[#475569]">
                   <input
                     type="radio"
                     name={`filter-${field.id}`}
-                    checked={selectedIds.has(id)}
-                    onChange={() => onSetIds(optionIds, [id])}
+                    checked={isOptionSelected(opt)}
+                    onChange={() => onSetIds(optionIds, ids)}
                     className="h-4 w-4 accent-brand"
                   />
                   {opt.label}
@@ -165,13 +177,13 @@ function FilterField({
         {(visibleOptions) => (
           <div className="space-y-2">
             {visibleOptions.map((opt) => {
-              const id = String(opt.filterId || opt.value)
+              const ids = optionIdsOf(opt)
               return (
-                <label key={id} className="flex cursor-pointer items-center gap-2 text-sm text-[#475569]">
+                <label key={ids[0]} className="flex cursor-pointer items-center gap-2 text-sm text-[#475569]">
                   <input
                     type="checkbox"
-                    checked={selectedIds.has(id)}
-                    onChange={() => onToggleId(id)}
+                    checked={isOptionSelected(opt)}
+                    onChange={() => onToggleIds(ids)}
                     className="h-4 w-4 rounded accent-brand"
                   />
                   {opt.label}
@@ -189,17 +201,14 @@ function FilterField({
     <FieldShellWithShowMore field={field} options={field.options} enableShowMore={enableShowMore}>
       {(visibleOptions) => (
         <div className="flex flex-wrap gap-2">
-          {visibleOptions.map((opt) => {
-            const id = String(opt.filterId || opt.value)
-            return (
-              <OptionChip
-                key={`${field.id}-${opt.value}`}
-                label={opt.label}
-                active={selectedIds.has(id)}
-                onClick={() => onToggleId(id)}
-              />
-            )
-          })}
+          {visibleOptions.map((opt) => (
+            <OptionChip
+              key={`${field.id}-${opt.value}`}
+              label={opt.label}
+              active={isOptionSelected(opt)}
+              onClick={() => onToggleIds(optionIdsOf(opt))}
+            />
+          ))}
         </div>
       )}
     </FieldShellWithShowMore>
@@ -233,12 +242,17 @@ function CategoryFilterFields({
     [selectedFilterIds],
   )
 
-  const toggleId = (filterId) => {
-    if (!filterId || !onFilterIdsChange) return
+  /**
+   * Toggles every id an option stands for as one unit. A merged option (same filter
+   * configured under several subcategories) counts as selected when any of its ids
+   * is, and turning it off clears all of them.
+   */
+  const toggleIds = (filterIds) => {
+    const ids = (Array.isArray(filterIds) ? filterIds : [filterIds]).map(String).filter(Boolean)
+    if (!ids.length || !onFilterIdsChange) return
     const next = new Set(selectedIds)
-    const id = String(filterId)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
+    const active = ids.some((id) => next.has(id))
+    ids.forEach((id) => (active ? next.delete(id) : next.add(id)))
     onFilterIdsChange([...next])
   }
 
@@ -268,7 +282,7 @@ function CategoryFilterFields({
           field={field}
           selectedIds={selectedIds}
           values={filterValues || {}}
-          onToggleId={toggleId}
+          onToggleIds={toggleIds}
           onSetIds={setIdsForField}
           onValueChange={setValue}
           enableShowMore={enableShowMore}

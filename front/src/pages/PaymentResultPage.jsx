@@ -160,7 +160,7 @@ function PaymentResultPage({ variant }) {
                 type="button"
                 onClick={handleDownloadInvoice}
                 disabled={downloading}
-                className="flex flex-1 items-center justify-center gap-2 rounded-full bg-[#1414e6] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#1010c4] disabled:opacity-70"
+                className="flex flex-1 items-center justify-center gap-2 rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:opacity-70"
               >
                 <Download className="h-4 w-4" />
                 {downloading ? 'Preparing…' : 'Download Invoice'}
@@ -192,7 +192,7 @@ function PaymentResultPage({ variant }) {
                     : '/dashboard'
                 )
               }
-              className="flex-1 rounded-full bg-[#1414e6] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#1010c4]"
+              className="flex-1 rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-700"
             >
               Retry Payment
             </button>

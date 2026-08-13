@@ -120,7 +120,7 @@ function LearnMore({ svc }) {
     <button
       type="button"
       onClick={() => (url ? window.open(url, '_blank', 'noopener') : toast('Details coming soon'))}
-      className="text-xs font-bold uppercase tracking-wide text-[#2563eb] hover:underline"
+      className="text-xs font-bold uppercase tracking-wide text-brand hover:underline"
     >
       {label}
     </button>
@@ -298,7 +298,7 @@ function PickDropModal({ open, initial, fixCost = PICK_DROP_FEE, onClose, onConf
                 value={date}
                 min={tomorrowIso}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#2563eb]/25"
+                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-brand/25"
               />
               <Calendar className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-500" />
             </div>
@@ -330,7 +330,7 @@ function PickDropModal({ open, initial, fixCost = PICK_DROP_FEE, onClose, onConf
                 value={addr1}
                 onChange={(e) => setAddr1(e.target.value)}
                 placeholder="Building or Street name"
-                className="mt-1.5 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2563eb]/25"
+                className="mt-1.5 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand/25"
               />
             </div>
             <div>
@@ -340,7 +340,7 @@ function PickDropModal({ open, initial, fixCost = PICK_DROP_FEE, onClose, onConf
                 value={addr2}
                 onChange={(e) => setAddr2(e.target.value)}
                 placeholder="Building or Street name"
-                className="mt-1.5 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2563eb]/25"
+                className="mt-1.5 w-full rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand/25"
               />
             </div>
           </div>
@@ -367,7 +367,7 @@ function PickDropModal({ open, initial, fixCost = PICK_DROP_FEE, onClose, onConf
           <button
             type="button"
             onClick={handleConfirm}
-            className="w-full rounded-full bg-[#1414e6] px-6 py-4 text-base font-bold text-white transition hover:bg-[#1010c4]"
+            className="w-full rounded-full bg-brand px-6 py-4 text-base font-bold text-white transition hover:bg-brand-700"
           >
             Confirm
           </button>
@@ -680,7 +680,7 @@ function CartCheckoutPage() {
           checked={checked}
           disabled={disabled}
           onChange={(e) => { if (!disabled) onToggle(e.target.checked) }}
-          className={`h-5 w-5 rounded border-2 border-[#2563eb] text-[#2563eb] focus:ring-[#2563eb] ${disabled ? 'cursor-not-allowed' : ''}`}
+          className={`h-5 w-5 rounded border-2 border-brand text-brand focus:ring-brand ${disabled ? 'cursor-not-allowed' : ''}`}
         />
         <span className="text-lg font-bold text-slate-900">{svc.serviceName}</span>
       </span>
@@ -724,7 +724,7 @@ function CartCheckoutPage() {
             <button
               type="button"
               onClick={() => setPreellyModalOpen(true)}
-              className="text-xs font-bold uppercase tracking-wide text-[#2563eb] hover:underline"
+              className="text-xs font-bold uppercase tracking-wide text-brand hover:underline"
             >
               {/* Edit */}
             </button>
@@ -769,7 +769,7 @@ function CartCheckoutPage() {
             <button
               type="button"
               onClick={() => setPickDropModalOpen(true)}
-              className="text-xs font-bold uppercase tracking-wide text-[#2563eb] hover:underline"
+              className="text-xs font-bold uppercase tracking-wide text-brand hover:underline"
             >
               Edit
             </button>
@@ -822,7 +822,7 @@ function CartCheckoutPage() {
           <button
             type="button"
             onClick={() => navigate('/')}
-            className="mt-4 rounded-full bg-[#1414e6] px-6 py-3 text-sm font-bold text-white hover:bg-[#1010c4]"
+            className="mt-4 rounded-full bg-brand px-6 py-3 text-sm font-bold text-white hover:bg-brand-700"
           >
             Continue shopping
           </button>
@@ -934,7 +934,7 @@ function CartCheckoutPage() {
               <button
                 type="button"
                 onClick={() => setShowDiscount(true)}
-                className="text-sm font-semibold text-[#2563eb] hover:underline"
+                className="text-sm font-semibold text-brand hover:underline"
               >
                 Apply Discount Code
               </button>
@@ -953,7 +953,7 @@ function CartCheckoutPage() {
                     }}
                     placeholder="Discount code"
                     className={`min-w-0 flex-1 rounded-xl bg-[#eef0f6] px-4 py-3 text-sm uppercase text-slate-900 placeholder:normal-case placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
-                      couponError ? 'ring-2 ring-red-400' : 'focus:ring-[#2563eb]/25'
+                      couponError ? 'ring-2 ring-red-400' : 'focus:ring-brand/25'
                     }`}
                   />
                   <button
@@ -985,7 +985,7 @@ function CartCheckoutPage() {
             type="button"
             onClick={handleCheckout}
             disabled={paying}
-            className="mt-8 w-full rounded-full bg-[#1414e6] px-6 py-4 text-base font-bold text-white transition hover:bg-[#1010c4] disabled:cursor-not-allowed disabled:opacity-70"
+            className="mt-8 w-full rounded-full bg-brand px-6 py-4 text-base font-bold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {paying ? 'Redirecting to payment…' : `Pay ${CURRENCY} ${money(totals.total)}`}
           </button>

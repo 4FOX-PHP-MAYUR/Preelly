@@ -148,7 +148,7 @@ export function AddressSuggestField({ field, value, error, required, onChange, o
                   onClick={() => handleSelect(suggestion)}
                   onMouseEnter={() => setActiveIndex(index)}
                   className={`flex w-full items-start gap-2 px-4 py-2.5 text-left text-sm ${
-                    index === activeIndex ? 'bg-blue-50 text-[#2563eb]' : 'text-gray-700'
+                    index === activeIndex ? 'bg-blue-50 text-brand' : 'text-gray-700'
                   }`}
                 >
                   <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-gray-400" />

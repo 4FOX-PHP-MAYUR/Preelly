@@ -1,181 +1,224 @@
-import { useState, useEffect } from 'react'
-import { useDispatch, useSelector } from 'react-redux'
-import { useNavigate, useLocation } from 'react-router-dom'
-import { useForm } from 'react-hook-form'
-import { sendOtp, emailStart, clearError, enterGuestMode } from '@shared/store/slices/authSlice'
-import toast from 'react-hot-toast'
-import { Mail } from 'lucide-react'
+import { useState, useEffect } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { useNavigate, useLocation } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import {
+  sendOtp,
+  emailStart,
+  clearError,
+  enterGuestMode,
+} from "@shared/store/slices/authSlice";
+import toast from "react-hot-toast";
+import { Mail } from "lucide-react";
 import AuthSplitLayout, {
   AuthField,
   AuthPhoneField,
   AuthSocialButton,
-} from '../components/Auth/AuthSplitLayout'
-import { DEFAULT_COUNTRY_ISO, getCountryByIso } from '@shared/data/countryCodes'
-import { apiUrl } from '@shared/utils/constants'
-import { useAppleSignIn } from '@shared/hooks/useAppleSignIn'
+} from "../components/Auth/AuthSplitLayout";
+import {
+  DEFAULT_COUNTRY_ISO,
+  getCountryByIso,
+} from "@shared/data/countryCodes";
+import { apiUrl } from "@shared/utils/constants";
+import { useAppleSignIn } from "@shared/hooks/useAppleSignIn";
 
 function GoogleIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden="true">
+    <svg
+      className="h-7 w-7"
+      aria-hidden="true"
+      viewBox="0 0 28 28"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect width="28" height="28" rx="4" fill="white" />
       <path
-        fill="#EA4335"
-        d="M12 10.2v3.9h5.42c-.24 1.26-.96 2.32-2.04 3.03l3.3 2.56c1.92-1.77 3.02-4.38 3.02-7.48 0-.71-.06-1.39-.19-2.02H12Z"
+        d="M23.68 14.2285C23.68 13.5135 23.6158 12.826 23.4967 12.166H14V16.071H19.4267C19.1883 17.3268 18.4733 18.3902 17.4008 19.1052V21.6443H20.6733C22.58 19.8843 23.68 17.2993 23.68 14.2285Z"
+        fill="#4285F4"
       />
       <path
+        d="M14 24.0841C16.7225 24.0841 19.005 23.1858 20.6733 21.6458L17.4008 19.1066C16.5025 19.7116 15.3566 20.0783 14 20.0783C11.3783 20.0783 9.15079 18.3091 8.35329 15.9258H4.99829V18.5291C6.65746 21.8199 10.0583 24.0841 14 24.0841Z"
         fill="#34A853"
-        d="M12 22c2.73 0 5.02-.9 6.68-2.43l-3.3-2.56c-.91.61-2.08.97-3.38.97-2.6 0-4.8-1.76-5.59-4.12H3.01v2.64A10.08 10.08 0 0 0 12 22Z"
       />
       <path
-        fill="#4A90E2"
-        d="M6.41 13.86a6.08 6.08 0 0 1 0-3.72V7.5H3.01a10.01 10.01 0 0 0 0 9l3.4-2.64Z"
-      />
-      <path
+        d="M8.35329 15.9155C8.15163 15.3105 8.03246 14.6688 8.03246 13.9996C8.03246 13.3305 8.15163 12.6888 8.35329 12.0838V9.48047H4.99829C4.31079 10.8371 3.91663 12.368 3.91663 13.9996C3.91663 15.6313 4.31079 17.1621 4.99829 18.5188L7.61079 16.4838L8.35329 15.9155Z"
         fill="#FBBC05"
-        d="M12 6.02c1.49 0 2.82.51 3.86 1.51l2.89-2.89C17.01 2.98 14.72 2 12 2 8.09 2 4.72 4.24 3.01 7.5l3.4 2.64C7.2 7.78 9.4 6.02 12 6.02Z"
+      />
+      <path
+        d="M14 7.93102C15.485 7.93102 16.805 8.44435 17.8591 9.43435L20.7466 6.54685C18.9958 4.91518 16.7225 3.91602 14 3.91602C10.0583 3.91602 6.65746 6.18018 4.99829 9.48018L8.35329 12.0835C9.15079 9.70018 11.3783 7.93102 14 7.93102Z"
+        fill="#EA4335"
       />
     </svg>
-  )
+  );
 }
 
 function AppleIcon() {
   return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current text-slate-900" aria-hidden="true">
-      <path d="M16.37 12.64c.02 2.34 2.05 3.11 2.07 3.12-.02.05-.32 1.12-1.06 2.22-.64.95-1.31 1.9-2.36 1.92-1.03.02-1.37-.61-2.56-.61-1.19 0-1.56.59-2.54.63-1.02.04-1.79-1.02-2.44-1.96-1.33-1.92-2.34-5.42-.98-7.78.68-1.17 1.89-1.92 3.2-1.94 1-.02 1.94.68 2.56.68.62 0 1.79-.84 3.02-.72.51.02 1.95.21 2.87 1.56-.07.04-1.72 1-1.7 2.88Zm-2.01-5.57c.54-.66.91-1.58.81-2.49-.78.03-1.72.52-2.28 1.18-.5.58-.94 1.51-.82 2.4.87.07 1.75-.44 2.29-1.09Z" />
+    <svg
+      className="h-6 w-6 fill-current text-slate-900"
+      aria-hidden="true"
+      viewBox="0 0 26 26"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <rect width="26" height="26" rx="4" fill="white" />
+      <path
+        d="M21.5821 9.50071C21.4515 9.59971 19.1452 10.8691 19.1452 13.6917C19.1452 16.9564 22.0799 18.1114 22.1677 18.14C22.1542 18.2104 21.7015 19.7218 20.6204 21.2618C19.6565 22.617 18.6497 23.97 17.1182 23.97C15.5867 23.97 15.1925 23.101 13.4245 23.101C11.7016 23.101 11.089 23.9986 9.68808 23.9986C8.28719 23.9986 7.30972 22.7446 6.18586 21.2046C4.88407 19.3962 3.83228 16.5868 3.83228 13.9205C3.83228 9.64371 6.6791 7.37553 9.48087 7.37553C10.9696 7.37553 12.2106 8.33032 13.1453 8.33032C14.0349 8.33032 15.4223 7.31833 17.1159 7.31833C17.7578 7.31833 20.0641 7.37553 21.5821 9.50071ZM16.3119 5.50774C17.0123 4.69595 17.5078 3.56956 17.5078 2.44317C17.5078 2.28697 17.4943 2.12858 17.465 2.00098C16.3254 2.04278 14.9696 2.74237 14.152 3.66856C13.5101 4.38136 12.911 5.50774 12.911 6.64953C12.911 6.82113 12.9403 6.99273 12.9538 7.04773C13.0259 7.06093 13.143 7.07633 13.2601 7.07633C14.2826 7.07633 15.5687 6.40754 16.3119 5.50774Z"
+        fill="black"
+      />
     </svg>
-  )
+  );
 }
 
 function LoginPage() {
-  const dispatch = useDispatch()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const { loading, error, isAuthenticated } = useSelector((state) => state.auth)
-  const params = new URLSearchParams(location.search)
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { loading, error, isAuthenticated } = useSelector(
+    (state) => state.auth,
+  );
+  const params = new URLSearchParams(location.search);
 
   // Returning from the OTP screen via "Change" — prefill whichever value the
   // user already submitted so they aren't retyping it from scratch.
-  const queryEmail = params.get('email') || ''
-  const queryCountryIso = params.get('countryIso') || DEFAULT_COUNTRY_ISO
+  const queryEmail = params.get("email") || "";
+  const queryCountryIso = params.get("countryIso") || DEFAULT_COUNTRY_ISO;
   const queryPhoneDigits = (() => {
-    const raw = params.get('phone') || ''
-    if (!raw) return ''
-    const dialCode = getCountryByIso(queryCountryIso).code.replace(/\D/g, '')
+    const raw = params.get("phone") || "";
+    if (!raw) return "";
+    const dialCode = getCountryByIso(queryCountryIso).code.replace(/\D/g, "");
     // `phone` arrives as dialCode + local number concatenated (no separator) —
     // strip the dial code so the input only shows the local digits.
-    return raw.startsWith(dialCode) ? raw.slice(dialCode.length) : raw
-  })()
+    return raw.startsWith(dialCode) ? raw.slice(dialCode.length) : raw;
+  })();
 
-  const { register, handleSubmit, formState: { errors } } = useForm({
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+  } = useForm({
     defaultValues: { email: queryEmail, phone: queryPhoneDigits },
-  })
-  const [oauthLoading, setOauthLoading] = useState(null)
+  });
+  const [oauthLoading, setOauthLoading] = useState(null);
   // Phone tab is the default per the new login design, unless the caller
   // asks for the email tab (e.g. returning from the email OTP screen).
   const [channel, setChannel] = useState(() =>
-    new URLSearchParams(location.search).get('tab') === 'email' ? 'email' : 'whatsapp'
-  )
-  const [countryIso, setCountryIso] = useState(queryCountryIso)
+    new URLSearchParams(location.search).get("tab") === "email"
+      ? "email"
+      : "whatsapp",
+  );
+  const [countryIso, setCountryIso] = useState(queryCountryIso);
 
-  const target = params.get('target') === 'seller' ? 'seller' : 'buyer'
+  const target = params.get("target") === "seller" ? "seller" : "buyer";
   // Set by the shared "Login Required" modal so guests land back on the page
   // (and protected action) they were on before being asked to log in. Persisted
   // to localStorage (like authTarget) so it survives the multi-step OTP/OAuth
   // hops that follow this page.
-  const redirectParam = params.get('redirect')
-  const redirectTo = redirectParam && redirectParam.startsWith('/') ? redirectParam : null
+  const redirectParam = params.get("redirect");
+  const redirectTo =
+    redirectParam && redirectParam.startsWith("/") ? redirectParam : null;
 
   useEffect(() => {
-    localStorage.setItem('authTarget', target)
-    localStorage.setItem('authRedirectTo', redirectTo || '')
+    localStorage.setItem("authTarget", target);
+    localStorage.setItem("authRedirectTo", redirectTo || "");
     if (isAuthenticated) {
-      navigate(redirectTo || (target === 'seller' ? '/post-ad' : '/dashboard/settings'))
+      navigate(
+        redirectTo ||
+          (target === "seller" ? "/post-ad" : "/dashboard/settings"),
+      );
     }
-  }, [isAuthenticated, navigate, target, redirectTo])
+  }, [isAuthenticated, navigate, target, redirectTo]);
 
   useEffect(() => {
     if (error) {
-      const message = typeof error === 'string' ? error : error?.message
-      if (message) toast.error(message)
-      dispatch(clearError())
+      const message = typeof error === "string" ? error : error?.message;
+      if (message) toast.error(message);
+      dispatch(clearError());
     }
-  }, [error, dispatch])
+  }, [error, dispatch]);
 
   useEffect(() => {
-    const oauthError = new URLSearchParams(location.search).get('oauthError')
+    const oauthError = new URLSearchParams(location.search).get("oauthError");
     if (oauthError) {
-      setOauthLoading(null)
-      toast.error(decodeURIComponent(oauthError))
+      setOauthLoading(null);
+      toast.error(decodeURIComponent(oauthError));
     }
-  }, [location.search])
+  }, [location.search]);
 
   const onSubmit = async (data) => {
     try {
-      if (channel === 'whatsapp') {
-        const phoneDigits = String(data.phone || '').replace(/\D/g, '')
-        const dialCode = getCountryByIso(countryIso).code
-        const fullPhone = phoneDigits ? `${dialCode}${phoneDigits}` : ''
+      if (channel === "whatsapp") {
+        const phoneDigits = String(data.phone || "").replace(/\D/g, "");
+        const dialCode = getCountryByIso(countryIso).code;
+        const fullPhone = phoneDigits ? `${dialCode}${phoneDigits}` : "";
 
         if (!phoneDigits) {
-          toast.error('Mobile number is required')
-          return
+          toast.error("Mobile number is required");
+          return;
         }
 
         await dispatch(
           sendOtp({
-            phone: fullPhone.replace(/\D/g, ''),
+            phone: fullPhone.replace(/\D/g, ""),
             phoneCountryCode: dialCode,
             phoneCountryIso: countryIso,
-            mode: 'login',
-            channel: 'whatsapp',
-          })
-        ).unwrap()
-        toast.success('Sign-in code sent to your WhatsApp')
+            mode: "login",
+            channel: "whatsapp",
+          }),
+        ).unwrap();
+        toast.success("Sign-in code sent to your WhatsApp");
 
         const query = new URLSearchParams({
-          phone: fullPhone.replace(/\D/g, ''),
+          phone: fullPhone.replace(/\D/g, ""),
           countryIso,
-          mode: 'login',
-          channel: 'whatsapp',
-        })
-        navigate(`/verify-phone-otp?${query.toString()}`)
-        return
+          mode: "login",
+          channel: "whatsapp",
+        });
+        navigate(`/verify-phone-otp?${query.toString()}`);
+        return;
       }
 
-      const email = data.email.trim()
-      const result = await dispatch(emailStart({ email })).unwrap()
-      toast.success(result?.message || 'Verification code sent to your email')
-      if (result?.mode === 'signup') {
+      const email = data.email.trim();
+      const result = await dispatch(emailStart({ email })).unwrap();
+      toast.success(result?.message || "Verification code sent to your email");
+      if (result?.mode === "signup") {
         // New user — created as U-XXXXXXXX. Run the email→mobile completion chain.
-        navigate(`/verify-email-otp?email=${encodeURIComponent(email)}&flow=email-complete`)
+        navigate(
+          `/verify-email-otp?email=${encodeURIComponent(email)}&flow=email-complete`,
+        );
       } else {
-        navigate(`/verify-email-otp?email=${encodeURIComponent(email)}&mode=login&channel=email`)
+        navigate(
+          `/verify-email-otp?email=${encodeURIComponent(email)}&mode=login&channel=email`,
+        );
       }
     } catch {
       // Error handled by useEffect
     }
-  }
+  };
 
   const startSocialLogin = (provider) => {
-    setOauthLoading(provider)
-    const url = apiUrl(`/auth/oauth/${provider}?target=${encodeURIComponent(target)}`)
-    window.location.href = url
-  }
+    setOauthLoading(provider);
+    const url = apiUrl(
+      `/auth/oauth/${provider}?target=${encodeURIComponent(target)}`,
+    );
+    window.location.href = url;
+  };
 
   // Apple runs in a popup and posts the identity token to the web-only
   // /auth/apple/web endpoint instead of leaving the page like Google's redirect
   // flow; the isAuthenticated effect above handles the navigation.
   const { startAppleSignIn } = useAppleSignIn({
-    onStart: () => setOauthLoading('apple'),
+    onStart: () => setOauthLoading("apple"),
     onFinish: () => setOauthLoading(null),
-  })
+  });
 
   return (
     <AuthSplitLayout
       title="Login"
       subtitle={
-        target === 'seller'
-          ? 'Access your seller dashboard, manage listings, and reply to buyers without missing a step.'
-          : 'Explore cars your way scroll effortlessly, discover the best deals, and drive home your perfect match.'
+        target === "seller"
+          ? "Access your seller dashboard, manage listings, and reply to buyers without missing a step."
+          : "Explore cars your way scroll effortlessly, discover the best deals, and drive home your perfect match."
       }
       switchLabel="Continue as Guest"
       switchTo="/"
@@ -188,22 +231,22 @@ function LoginPage() {
       <div className="mb-6 grid grid-cols-2 rounded-xl border border-[#e7e9f2] bg-[#f4f5fb]">
         <button
           type="button"
-          onClick={() => setChannel('whatsapp')}
-          className={`rounded-s-xl px-4 py-3.5 text-sm font-semibold transition ${
-            channel === 'whatsapp'
-              ? 'bg-[#1400ff] text-white shadow-[0_8px_20px_rgba(20,0,255,0.25)]'
-              : 'text-[#232388] hover:bg-white/70'
+          onClick={() => setChannel("whatsapp")}
+          className={`rounded-s-xl px-4 py-3.5 text-lg  font-helvetica transition ${
+            channel === "whatsapp"
+              ? "bg-brand text-white shadow-[0_8px_20px_rgba(0,0,255,0.25)]"
+              : "text-[#232388] hover:bg-white/70"
           }`}
         >
           Phone
         </button>
         <button
           type="button"
-          onClick={() => setChannel('email')}
-          className={`rounded-e-xl px-4 py-3.5 text-sm font-semibold transition ${
-            channel === 'email'
-              ? 'bg-[#1400ff] text-white shadow-[0_8px_20px_rgba(20,0,255,0.25)]'
-              : 'text-[#232388] hover:bg-white/70'
+          onClick={() => setChannel("email")}
+          className={`rounded-e-xl px-4 py-3.5 text-lg  font-helvetica transition ${
+            channel === "email"
+              ? "bg-brand text-white shadow-[0_8px_20px_rgba(0,0,255,0.25)]"
+              : "text-[#232388] hover:bg-white/70"
           }`}
         >
           Email
@@ -211,18 +254,18 @@ function LoginPage() {
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-5">
-        {channel === 'email' ? (
+        {channel === "email" ? (
           <AuthField
             label="Email"
             type="email"
             icon={Mail}
             placeholder="Enter your email"
             error={errors.email?.message}
-            {...register('email', {
-              required: channel === 'email' ? 'Email is required' : false,
+            {...register("email", {
+              required: channel === "email" ? "Email is required" : false,
               pattern: {
                 value: /^[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}$/i,
-                message: 'Invalid email address',
+                message: "Invalid email address",
               },
             })}
           />
@@ -233,12 +276,15 @@ function LoginPage() {
             onCountryIsoChange={setCountryIso}
             placeholder="Phone number"
             error={errors.phone?.message}
-            {...register('phone', {
-              required: channel === 'whatsapp' ? 'Mobile number is required' : false,
+            {...register("phone", {
+              required:
+                channel === "whatsapp" ? "Mobile number is required" : false,
               validate: (value) => {
-                if (channel !== 'whatsapp') return true
-                const digits = String(value || '').replace(/\D/g, '')
-                return digits.length >= 6 || 'Please enter a valid mobile number'
+                if (channel !== "whatsapp") return true;
+                const digits = String(value || "").replace(/\D/g, "");
+                return (
+                  digits.length >= 6 || "Please enter a valid mobile number"
+                );
               },
             })}
           />
@@ -247,14 +293,14 @@ function LoginPage() {
         <button
           type="submit"
           disabled={loading}
-          className="flex h-14 w-full items-center justify-center rounded-full bg-[#1400ff] px-6 text-base font-medium text-white shadow-[0_18px_40px_rgba(20,0,255,0.25)] transition hover:bg-[#1000d6] disabled:cursor-not-allowed disabled:opacity-70"
+          className="flex h-14 w-full items-center justify-center rounded-full bg-brand px-6 text-base font-medium text-white shadow-[0_18px_40px_rgba(0,0,255,0.25)] transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {loading ? (
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-          ) : channel === 'whatsapp' ? (
-            'Continue with WhatsApp'
+          ) : channel === "whatsapp" ? (
+            "Continue with WhatsApp"
           ) : (
-            'Continue with Email'
+            "Continue with Email"
           )}
         </button>
       </form>
@@ -271,9 +317,9 @@ function LoginPage() {
         <div className="mt-6 grid grid-cols-2 gap-4">
           <AuthSocialButton
             label="Continue with Google"
-            onClick={() => startSocialLogin('google')}
+            onClick={() => startSocialLogin("google")}
             disabled={!!oauthLoading}
-            active={oauthLoading === 'google'}
+            active={oauthLoading === "google"}
           >
             <GoogleIcon />
           </AuthSocialButton>
@@ -281,14 +327,14 @@ function LoginPage() {
             label="Continue with Apple"
             onClick={startAppleSignIn}
             disabled={!!oauthLoading}
-            active={oauthLoading === 'apple'}
+            active={oauthLoading === "apple"}
           >
             <AppleIcon />
           </AuthSocialButton>
         </div>
       </div>
     </AuthSplitLayout>
-  )
+  );
 }
 
-export default LoginPage
+export default LoginPage;

@@ -10,6 +10,7 @@ import { CallProvider } from '@shared/components/Call/CallContext'
 import { LoginPromptProvider } from '@shared/components/LoginPrompt/LoginPromptContext'
 import { store } from '@shared/store/store'
 import './index.css'
+import 'flag-icons/css/flag-icons.min.css'
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

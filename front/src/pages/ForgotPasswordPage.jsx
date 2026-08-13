@@ -278,7 +278,7 @@ function ForgotPasswordPage() {
           <section className="mx-auto w-full max-w-[420px] px-2 py-8 sm:px-4 lg:mx-0 lg:px-0">
             <Link
               to={loginPath}
-              className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#2c24ff] transition hover:text-[#1800ff]"
+              className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand transition hover:text-brand-700"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to log in
@@ -313,7 +313,7 @@ function ForgotPasswordPage() {
                 <input
                   type="text"
                   placeholder="Enter your email ID"
-                  className="h-14 w-full rounded-2xl border border-[#d8dbea] bg-white pl-12 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-[#3128ff] focus:ring-4 focus:ring-[#3128ff]/10"
+                  className="h-14 w-full rounded-2xl border border-[#d8dbea] bg-white pl-12 pr-4 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-brand focus:ring-4 focus:ring-brand/10"
                   {...emailForm.register('identifier', {
                     required: 'Email is required',
                     pattern: {
@@ -332,7 +332,7 @@ function ForgotPasswordPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-7 flex h-[54px] w-full items-center justify-center rounded-full bg-[#1a43ff] px-6 text-base font-medium text-white shadow-[0_18px_36px_rgba(26,67,255,0.28)] transition hover:bg-[#1438df] disabled:cursor-not-allowed disabled:opacity-70"
+                className="mt-7 flex h-[54px] w-full items-center justify-center rounded-full bg-brand px-6 text-base font-medium text-white shadow-[0_18px_36px_rgba(0,0,255,0.28)] transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {loading ? (
                   <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
@@ -346,7 +346,7 @@ function ForgotPasswordPage() {
               <p>Don&apos;t remember your email?</p>
               <p className="mt-1">
                 Contact us at{' '}
-                <a href="mailto:hello@preelly.com" className="font-semibold text-[#2c24ff]">
+                <a href="mailto:hello@preelly.com" className="font-semibold text-brand">
                   hello@preelly.com
                 </a>
               </p>
@@ -370,7 +370,7 @@ function ForgotPasswordPage() {
           <section className="mx-auto w-full max-w-[420px] px-2 py-8 sm:px-4 lg:mx-0 lg:px-0">
             <Link
               to={loginPath}
-              className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#2c24ff] transition hover:text-[#1800ff]"
+              className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand transition hover:text-brand-700"
             >
               <ArrowLeft className="h-4 w-4" />
               Back to log in
@@ -383,7 +383,7 @@ function ForgotPasswordPage() {
               <p className="mt-4 max-w-sm text-sm leading-6 text-slate-500">
                 Enter the code we have sent you to your{' '}
                 {contactChannel === 'phone' ? 'mobile number' : 'email id'}{' '}
-                <span className="font-semibold text-[#2c24ff]">
+                <span className="font-semibold text-brand">
                   {contactChannel === 'phone' ? phone : email}
                 </span>
               </p>
@@ -421,7 +421,7 @@ function ForgotPasswordPage() {
                     onKeyDown={(event) => handleKeyDown(index, event)}
                     onPaste={handlePaste}
                     aria-label={`OTP digit ${index + 1}`}
-                    className="h-12 w-10 rounded-[14px] border border-[#cad3e6] bg-white text-center text-lg font-semibold text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#2c24ff] focus:ring-4 focus:ring-[#2c24ff]/10 sm:h-14 sm:w-12 sm:text-xl lg:h-16 lg:w-14"
+                    className="h-12 w-10 rounded-[14px] border border-[#cad3e6] bg-white text-center text-lg font-semibold text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-brand focus:ring-4 focus:ring-brand/10 sm:h-14 sm:w-12 sm:text-xl lg:h-16 lg:w-14"
                   />
                 ))}
               </div>
@@ -434,14 +434,14 @@ function ForgotPasswordPage() {
                 {resendCountdown > 0 ? (
                   <span>
                     Resend otp in{' '}
-                    <span className="font-semibold text-[#2c24ff]">{resendCountdown}s</span>
+                    <span className="font-semibold text-brand">{resendCountdown}s</span>
                   </span>
                 ) : (
                   <button
                     type="button"
                     onClick={onResendOtp}
                     disabled={loading}
-                    className="font-semibold text-[#2c24ff] transition hover:text-[#1800ff] disabled:opacity-60"
+                    className="font-semibold text-brand transition hover:text-brand-700 disabled:opacity-60"
                   >
                     Resend code
                   </button>
@@ -451,7 +451,7 @@ function ForgotPasswordPage() {
               <button
                 type="submit"
                 disabled={loading}
-                className="mt-6 flex h-[54px] w-full items-center justify-center rounded-full bg-[#1a43ff] px-6 text-base font-medium text-white shadow-[0_18px_36px_rgba(26,67,255,0.28)] transition hover:bg-[#1438df] disabled:cursor-not-allowed disabled:opacity-70"
+                className="mt-6 flex h-[54px] w-full items-center justify-center rounded-full bg-brand px-6 text-base font-medium text-white shadow-[0_18px_36px_rgba(0,0,255,0.28)] transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
               >
                 {loading ? (
                   <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
@@ -465,7 +465,7 @@ function ForgotPasswordPage() {
               <p>Don&apos;t remember your email ?</p>
               <p className="mt-1">
                 Contact us at{' '}
-                <a href="mailto:hello@preelly.com" className="font-semibold text-[#2c24ff]">
+                <a href="mailto:hello@preelly.com" className="font-semibold text-brand">
                   hello@preelly.com
                 </a>
               </p>
@@ -522,7 +522,7 @@ function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={loading}
-            className="flex h-[50px] w-full items-center justify-center rounded-full bg-[#1400ff] px-6 text-[1.05rem] font-medium text-white shadow-[0_16px_36px_rgba(20,0,255,0.3)] transition hover:bg-[#1000d6] disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex h-[50px] w-full items-center justify-center rounded-full bg-brand px-6 text-[1.05rem] font-medium text-white shadow-[0_16px_36px_rgba(0,0,255,0.3)] transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {loading ? (
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
@@ -566,7 +566,7 @@ function ForgotPasswordPage() {
           <button
             type="submit"
             disabled={loading || !resetToken}
-            className="flex h-[50px] w-full items-center justify-center rounded-full bg-[#1400ff] px-6 text-[1.05rem] font-medium text-white shadow-[0_16px_36px_rgba(20,0,255,0.3)] transition hover:bg-[#1000d6] disabled:cursor-not-allowed disabled:opacity-70"
+            className="flex h-[50px] w-full items-center justify-center rounded-full bg-brand px-6 text-[1.05rem] font-medium text-white shadow-[0_16px_36px_rgba(0,0,255,0.3)] transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {loading ? (
               <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />

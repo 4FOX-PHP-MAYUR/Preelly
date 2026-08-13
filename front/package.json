@@ -12,6 +12,7 @@
     "@react-google-maps/api": "^2.20.8",
     "@reduxjs/toolkit": "^2.0.1",
     "axios": "^1.6.2",
+    "flag-icons": "^7.5.0",
     "hls.js": "^1.6.16",
     "lucide-react": "^0.294.0",
     "react": "^18.2.0",

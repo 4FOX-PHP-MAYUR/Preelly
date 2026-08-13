@@ -248,7 +248,7 @@ function VerifyEmailOtpPage() {
         <section className="mx-auto w-full max-w-[420px] px-2 py-8 sm:px-4 lg:mx-0 lg:px-0">
           <Link
             to={backPath}
-            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#2c24ff] transition hover:text-[#1800ff]"
+            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand transition hover:text-brand-700"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to {authMode === 'signup' ? 'sign up' : 'log in'}
@@ -260,7 +260,7 @@ function VerifyEmailOtpPage() {
             </h1>
             <p className="mt-4 max-w-sm text-sm leading-6 text-slate-500">
               Enter the code we have sent you to your email id{' '}
-              <span className="font-semibold text-[#2c24ff]">{email}</span>
+              <span className="font-semibold text-brand">{email}</span>
             </p>
           </div>
 
@@ -272,7 +272,7 @@ function VerifyEmailOtpPage() {
             {alreadyRegistered ? (
               <div className="mb-6 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
                 An account with this email already exists. Please{' '}
-                <Link to={loginPath} className="font-semibold text-[#2c24ff] hover:text-[#1800ff]">
+                <Link to={loginPath} className="font-semibold text-brand hover:text-brand-700">
                   go to login
                 </Link>
                 .
@@ -295,7 +295,7 @@ function VerifyEmailOtpPage() {
                   onKeyDown={(event) => handleKeyDown(index, event)}
                   onPaste={handlePaste}
                   aria-label={`OTP digit ${index + 1}`}
-                  className="h-12 w-10 rounded-[14px] border border-[#cad3e6] bg-white text-center text-lg font-semibold text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-[#2c24ff] focus:ring-4 focus:ring-[#2c24ff]/10 sm:h-14 sm:w-12 sm:text-xl lg:h-16 lg:w-14"
+                  className="h-12 w-10 rounded-[14px] border border-[#cad3e6] bg-white text-center text-lg font-semibold text-slate-900 outline-none transition placeholder:text-slate-300 focus:border-brand focus:ring-4 focus:ring-brand/10 sm:h-14 sm:w-12 sm:text-xl lg:h-16 lg:w-14"
                 />
               ))}
             </div>
@@ -308,14 +308,14 @@ function VerifyEmailOtpPage() {
               {resendCountdown > 0 ? (
                 <span>
                   Resend code in{' '}
-                  <span className="font-semibold text-[#2c24ff]">{resendCountdown}s</span>
+                  <span className="font-semibold text-brand">{resendCountdown}s</span>
                 </span>
               ) : (
                 <button
                   type="button"
                   onClick={onResend}
                   disabled={loading || submitting}
-                  className="font-semibold text-[#2c24ff] transition hover:text-[#1800ff] disabled:opacity-60"
+                  className="font-semibold text-brand transition hover:text-brand-700 disabled:opacity-60"
                 >
                   Resend code
                 </button>
@@ -325,7 +325,7 @@ function VerifyEmailOtpPage() {
             <button
               type="submit"
               disabled={loading || submitting}
-              className="mt-6 flex h-[54px] w-full items-center justify-center rounded-full bg-[#1a43ff] px-6 text-base font-medium text-white shadow-[0_18px_36px_rgba(26,67,255,0.28)] transition hover:bg-[#1438df] disabled:cursor-not-allowed disabled:opacity-70"
+              className="mt-6 flex h-[54px] w-full items-center justify-center rounded-full bg-brand px-6 text-base font-medium text-white shadow-[0_18px_36px_rgba(0,0,255,0.28)] transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {loading || submitting ? (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
@@ -342,7 +342,7 @@ function VerifyEmailOtpPage() {
                 <Mail className="h-4 w-4 text-slate-400" />
                 <span>{email}</span>
               </div>
-              <Link to={backPath} className="font-semibold text-[#2c24ff] hover:text-[#1800ff]">
+              <Link to={backPath} className="font-semibold text-brand hover:text-brand-700">
                 Change
               </Link>
             </div>

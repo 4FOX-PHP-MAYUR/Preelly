@@ -291,14 +291,14 @@ function Step2Subcategory({
   )
 }
 
-const POST_AD_BLUE = '#2563eb'
+const POST_AD_BLUE = '#0000FF'
 
 // Listings require at least this much video; the upload middleware rejects shorter
 // clips, so both the upload check and the trim editor hold to the same floor.
 const MIN_VIDEO_SECONDS = 15
 const POST_AD_NAVY = '#1e3a5f'
 const POST_AD_INPUT =
-  'w-full rounded-xl border-0 bg-[#eef0f6] px-4 py-3.5 text-[15px] text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-[#2563eb]/25 focus:outline-none'
+  'w-full rounded-xl border-0 bg-[#eef0f6] px-4 py-3.5 text-[15px] text-gray-900 placeholder:text-gray-400 focus:ring-2 focus:ring-brand/25 focus:outline-none'
 
 const VIDEO_TIPS = [
   'Show the item from multiple angles',
@@ -1282,7 +1282,7 @@ function Step3VideoUpload({
             <div className="w-full">
               <label className="post-ad-video-dropzone group cursor-pointer">
                 <UploadCloud
-                  className="h-12 w-12 text-[#2563eb] transition-transform group-hover:scale-105 sm:h-14 sm:w-14"
+                  className="h-12 w-12 text-brand transition-transform group-hover:scale-105 sm:h-14 sm:w-14"
                   strokeWidth={1.5}
                 />
                 <span className="mt-6 text-lg font-semibold text-gray-900 sm:text-xl">Upload Video</span>
@@ -1301,7 +1301,7 @@ function Step3VideoUpload({
                   type="button"
                   onClick={() => captureVideoInputRef.current?.click()}
                   disabled={isProcessing}
-                  className="inline-flex items-center gap-2 text-sm font-medium text-[#2563eb] transition hover:text-[#1d4ed8] disabled:opacity-50"
+                  className="inline-flex items-center gap-2 text-sm font-medium text-brand transition hover:text-brand-700 disabled:opacity-50"
                 >
                   <Camera className="h-4 w-4" strokeWidth={1.75} />
                   Or capture with your camera
@@ -1317,7 +1317,7 @@ function Step3VideoUpload({
               </div>
             </div>
           ) : (
-            <div className="relative overflow-hidden rounded-2xl border border-[#2563eb] bg-black">
+            <div className="relative overflow-hidden rounded-2xl border border-brand bg-black">
               <video
                 ref={videoRef}
                 src={videoPreviewSrc}
@@ -1338,7 +1338,7 @@ function Step3VideoUpload({
           <div className="pt-2 text-center">
             <p className="text-sm font-semibold text-[#1e3a5f]">Tips for a great video</p>
             <div className="mt-4 flex items-center justify-center gap-3">
-              <TipIcon className="h-6 w-6 shrink-0 text-[#2563eb]" strokeWidth={1.75} />
+              <TipIcon className="h-6 w-6 shrink-0 text-brand" strokeWidth={1.75} />
               <p className="text-[15px] leading-snug text-[#334155]">{currentTipText}</p>
             </div>
             <div className="mt-5 flex justify-center gap-2">
@@ -1350,7 +1350,7 @@ function Step3VideoUpload({
                   aria-current={i === tipIndex ? 'true' : undefined}
                   onClick={() => setTipIndex(i)}
                   className={`h-1.5 w-1.5 rounded-full transition-all ${
-                    i === tipIndex ? 'bg-[#2563eb]' : 'bg-gray-300 hover:bg-gray-400'
+                    i === tipIndex ? 'bg-brand' : 'bg-gray-300 hover:bg-gray-400'
                   }`}
                 />
               ))}
@@ -1380,7 +1380,7 @@ function Step3VideoUpload({
               className="inline-flex w-full items-center justify-center gap-1.5 rounded-full px-8 py-3.5 text-[15px] font-semibold text-white transition disabled:opacity-50 sm:w-auto sm:min-w-[320px]"
               style={{ backgroundColor: POST_AD_BLUE }}
               onMouseEnter={(e) => {
-                if (!isProcessing) e.currentTarget.style.backgroundColor = '#1d4ed8'
+                if (!isProcessing) e.currentTarget.style.backgroundColor = '#0000DD'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = POST_AD_BLUE
@@ -2157,7 +2157,7 @@ function Step4TitlePhotosReview({ register, errors, imageFiles, setImageFiles, v
               className="inline-flex w-full items-center justify-center gap-1 rounded-xl px-8 py-3.5 text-[15px] font-semibold text-white transition sm:w-auto sm:px-10"
               style={{ backgroundColor: POST_AD_BLUE }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#1d4ed8'
+                e.currentTarget.style.backgroundColor = '#0000DD'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = POST_AD_BLUE
@@ -2897,7 +2897,7 @@ data=${JSON.stringify(requestPreview.data, null, 2)}`}
               className="inline-flex w-full items-center justify-center gap-1 rounded-xl px-8 py-3.5 text-[15px] font-semibold text-white transition disabled:opacity-50 sm:w-auto sm:px-10"
               style={{ backgroundColor: POST_AD_BLUE }}
               onMouseEnter={(e) => {
-                if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = '#1d4ed8'
+                if (!e.currentTarget.disabled) e.currentTarget.style.backgroundColor = '#0000DD'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = POST_AD_BLUE

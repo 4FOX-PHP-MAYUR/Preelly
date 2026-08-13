@@ -22,7 +22,7 @@ function LoginRequiredModal({ open, message, onLogin, onClose }) {
         <button
           type="button"
           onClick={onLogin}
-          className="flex-1 rounded-full bg-[#1400ff] px-6 py-3 text-base font-semibold text-white shadow-[0_18px_40px_rgba(20,0,255,0.25)] transition hover:bg-[#1000d6]"
+          className="flex-1 rounded-full bg-brand px-6 py-3 text-base font-semibold text-white shadow-[0_18px_40px_rgba(0,0,255,0.25)] transition hover:bg-brand-700"
         >
           Login
         </button>

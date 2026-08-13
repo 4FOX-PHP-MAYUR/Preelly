@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 
 /** Reference design colors */
-export const VERIFY_BLUE = '#0044FF'
+export const VERIFY_BLUE = '#0000FF'
 export const VERIFY_BLUE_LIGHT = '#EEF4FF'
 export const VERIFY_PURPLE = '#6236FF'
 

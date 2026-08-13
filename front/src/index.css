@@ -1,10 +1,6 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 @font-face {
   font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue/HelveticaNeueUltraLight.otf') format('opentype');
+  src: url('/fonts/helvetica-neue/HelveticaNeue%20Thin/HelveticaNeue%20Thin.ttf') format('truetype');
   font-weight: 100;
   font-style: normal;
   font-display: swap;
@@ -12,7 +8,7 @@
 
 @font-face {
   font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue/HelveticaNeueThin.otf') format('opentype');
+  src: url('/fonts/helvetica-neue/HelveticaNeue%20Thin/HelveticaNeue%20Thin.ttf') format('truetype');
   font-weight: 200;
   font-style: normal;
   font-display: swap;
@@ -20,7 +16,7 @@
 
 @font-face {
   font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue/HelveticaNeueLight.otf') format('opentype');
+  src: url('/fonts/helvetica-neue/HelveticaNeue%20Light/HelveticaNeue%20Light.ttf') format('truetype');
   font-weight: 300;
   font-style: normal;
   font-display: swap;
@@ -28,7 +24,7 @@
 
 @font-face {
   font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue/HelveticaNeueMedium.otf') format('opentype');
+  src: url('/fonts/helvetica-neue/HelveticaNeue%20Regular/HelveticaNeue%20Regular.ttf') format('truetype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -36,7 +32,15 @@
 
 @font-face {
   font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue/HelveticaNeueMedium.otf') format('opentype');
+  src: url('/fonts/helvetica-neue/HelveticaNeue%20Italic/HelveticaNeue%20Italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Helvetica Neue';
+  src: url('/fonts/helvetica-neue/HelveticaNeue%20Medium/HelveticaNeue%20Medium.ttf') format('truetype');
   font-weight: 500;
   font-style: normal;
   font-display: swap;
@@ -44,7 +48,7 @@
 
 @font-face {
   font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue/HelveticaNeueBold.otf') format('opentype');
+  src: url('/fonts/helvetica-neue/HelveticaNeue%20Bold/HelveticaNeue%20Bold.ttf') format('truetype');
   font-weight: 600;
   font-style: normal;
   font-display: swap;
@@ -52,7 +56,7 @@
 
 @font-face {
   font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue/HelveticaNeueBold.otf') format('opentype');
+  src: url('/fonts/helvetica-neue/HelveticaNeue%20Bold/HelveticaNeue%20Bold.ttf') format('truetype');
   font-weight: 700;
   font-style: normal;
   font-display: swap;
@@ -60,7 +64,7 @@
 
 @font-face {
   font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue/HelveticaNeueHeavy.otf') format('opentype');
+  src: url('/fonts/helvetica-neue/HelveticaNeue%20Heavy/HelveticaNeue%20Heavy.ttf') format('truetype');
   font-weight: 800;
   font-style: normal;
   font-display: swap;
@@ -68,23 +72,37 @@
 
 @font-face {
   font-family: 'Helvetica Neue';
-  src: url('/fonts/helvetica-neue/HelveticaNeueBlack.otf') format('opentype');
+  src: url('/fonts/helvetica-neue/HelveticaNeue%20Heavy/HelveticaNeue%20Heavy.ttf') format('truetype');
   font-weight: 900;
   font-style: normal;
   font-display: swap;
 }
 
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 @layer base {
   * {
     @apply box-border;
   }
-  
-  body {
-    @apply bg-gray-50 text-gray-900 antialiased font-sans;
-  }
-  
+
   html {
-    @apply scroll-smooth;
+    @apply scroll-smooth font-helvetica;
+  }
+
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased font-helvetica;
+  }
+}
+
+@layer utilities {
+  .font-helvetica {
+    font-family: Helvetica, Arial, sans-serif;
+  }
+
+  .font-helvetica-neue {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   }
 }
 
@@ -149,7 +167,7 @@
   /* Single large upload target — 4:3 like the design, capped so it never
      pushes the tips and footer off short viewports. */
   .post-ad-video-dropzone {
-    @apply flex w-full flex-col items-center justify-center rounded-2xl border-[1.5px] border-[#2563eb] bg-white px-4 py-10
+    @apply flex w-full flex-col items-center justify-center rounded-2xl border-[1.5px] border-brand bg-white px-4 py-10
            transition hover:bg-blue-50/40
            min-h-[280px] sm:aspect-[4/3] sm:min-h-0 sm:max-h-[56vh] sm:py-0;
   }
@@ -286,7 +304,7 @@ video {
 .range-input::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  background: #2563eb;
+  background: #0000FF;
   height: 20px;
   width: 20px;
   border-radius: 50%;
@@ -317,7 +335,7 @@ video {
 }
 
 .range-input::-moz-range-thumb {
-  background: #2563eb;
+  background: #0000FF;
   height: 20px;
   width: 20px;
   border-radius: 50%;

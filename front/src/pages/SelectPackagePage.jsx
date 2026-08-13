@@ -20,7 +20,7 @@ function PackageCard({ pkg, selected, onSelect }) {
       aria-pressed={selected}
       className={`relative flex w-full flex-col overflow-hidden rounded-2xl border bg-white p-6 text-left transition-all ${
         selected
-          ? 'border-[#2563eb] ring-2 ring-[#2563eb]/25'
+          ? 'border-brand ring-2 ring-brand/25'
           : 'border-slate-200 hover:border-slate-300'
       }`}
     >
@@ -34,10 +34,10 @@ function PackageCard({ pkg, selected, onSelect }) {
         <div className="flex items-center gap-3">
           <span
             className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${
-              selected ? 'border-[#2563eb]' : 'border-slate-300'
+              selected ? 'border-brand' : 'border-slate-300'
             }`}
           >
-            {selected && <span className="h-2.5 w-2.5 rounded-full bg-[#2563eb]" />}
+            {selected && <span className="h-2.5 w-2.5 rounded-full bg-brand" />}
           </span>
           <span className="text-xl font-bold text-slate-900">{pkg.packageName}</span>
         </div>
@@ -169,7 +169,7 @@ function SelectPackagePage() {
               type="button"
               onClick={handleContinue}
               disabled={saving || !selectedId}
-              className="inline-flex items-center justify-center rounded-xl bg-[#2563eb] px-8 py-3 text-sm font-semibold text-white transition hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center rounded-xl bg-brand px-8 py-3 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {saving ? 'Saving…' : 'Continue to Payment'}
             </button>

@@ -307,7 +307,7 @@ function StorageCheckoutPage() {
                   type="checkbox"
                   checked={withStorage}
                   onChange={(e) => handleToggleStorage(e.target.checked)}
-                  className="h-5 w-5 rounded border-2 border-[#2563eb] text-[#2563eb] focus:ring-[#2563eb]"
+                  className="h-5 w-5 rounded border-2 border-brand text-brand focus:ring-brand"
                 />
                 <span className="text-lg font-bold text-slate-900">Storage Facility</span>
               </span>
@@ -330,7 +330,7 @@ function StorageCheckoutPage() {
                   <button
                     type="button"
                     onClick={() => toast('Storage Facility details coming soon')}
-                    className="text-xs font-bold uppercase tracking-wide text-[#2563eb] hover:underline"
+                    className="text-xs font-bold uppercase tracking-wide text-brand hover:underline"
                   >
                     Learn More
                   </button>
@@ -358,7 +358,7 @@ function StorageCheckoutPage() {
                             aria-pressed={active}
                             className={`rounded-xl border px-3 py-3 text-center transition ${
                               active
-                                ? 'border-[#1414e6] bg-[#1414e6] text-white'
+                                ? 'border-brand bg-brand text-white'
                                 : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
                             }`}
                           >
@@ -486,7 +486,7 @@ function StorageCheckoutPage() {
                   }}
                   placeholder="Apply discount code"
                   className={`min-w-0 flex-1 rounded-xl bg-[#eef0f6] px-4 py-3 text-sm uppercase text-slate-900 placeholder:normal-case placeholder:text-slate-400 focus:outline-none focus:ring-2 ${
-                    couponError ? 'ring-2 ring-red-400' : 'focus:ring-[#2563eb]/25'
+                    couponError ? 'ring-2 ring-red-400' : 'focus:ring-brand/25'
                   }`}
                 />
                 <button
@@ -519,7 +519,7 @@ function StorageCheckoutPage() {
             type="button"
             onClick={handlePay}
             disabled={paying}
-            className="mt-8 w-full rounded-full bg-[#1414e6] px-6 py-4 text-base font-bold text-white transition hover:bg-[#1010c4] disabled:cursor-not-allowed disabled:opacity-70"
+            className="mt-8 w-full rounded-full bg-brand px-6 py-4 text-base font-bold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
             {paying ? 'Redirecting to payment…' : `Pay ${totals.currency} ${money(totals.total)}`}
           </button>

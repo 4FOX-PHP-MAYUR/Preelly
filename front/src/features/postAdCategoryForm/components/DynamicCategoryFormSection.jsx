@@ -6,7 +6,7 @@ import { LocationMapPicker } from './LocationMapPicker'
 import { FIELD_KIND, getFieldKind } from '../../../shared/utils/dynamicFormFieldKind'
 import { buildAiSignalMap } from '../../../shared/utils/dynamicFormAiPrefill'
 
-const POST_AD_BLUE = '#2563eb'
+const POST_AD_BLUE = '#0000FF'
 const POST_AD_NAVY = '#1e3a5f'
 
 // Fields wide enough to need the full row (checkboxes/text areas); everything else
@@ -161,7 +161,7 @@ export function DynamicCategoryFormSection({ categoryId, onAdvancePastForm, setV
               className="inline-flex w-full items-center justify-center gap-1 rounded-xl px-8 py-3.5 text-[15px] font-semibold text-white transition sm:w-auto sm:px-10"
               style={{ backgroundColor: POST_AD_BLUE }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#1d4ed8'
+                e.currentTarget.style.backgroundColor = '#0000DD'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.backgroundColor = POST_AD_BLUE

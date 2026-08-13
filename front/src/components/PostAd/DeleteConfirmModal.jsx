@@ -49,14 +49,14 @@ function DeleteConfirmModal({
           <button
             type="button"
             onClick={onConfirm}
-            className="flex-1 rounded-full border border-[#2563eb] px-6 py-3 text-base font-semibold text-[#2563eb] transition hover:bg-blue-50"
+            className="flex-1 rounded-full border border-brand px-6 py-3 text-base font-semibold text-brand transition hover:bg-blue-50"
           >
             Yes
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="flex-1 rounded-full bg-[#1414e6] px-6 py-3 text-base font-semibold text-white transition hover:bg-[#1010c4]"
+            className="flex-1 rounded-full bg-brand px-6 py-3 text-base font-semibold text-white transition hover:bg-brand-700"
           >
             No
           </button>

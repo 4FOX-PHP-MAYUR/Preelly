@@ -132,7 +132,7 @@ function SignupPage() {
         <section className="mx-auto w-full max-w-[420px] px-2 py-8 sm:px-4 lg:mx-0 lg:px-0">
           <Link
             to={loginPath}
-            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#2c24ff] transition hover:text-[#1800ff]"
+            className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-brand transition hover:text-brand-700"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to log in
@@ -151,7 +151,7 @@ function SignupPage() {
             {alreadyRegistered ? (
               <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
                 An account with this email already exists. Please{' '}
-                <Link to={loginPath} className="font-semibold text-[#2c24ff] hover:text-[#1800ff]">
+                <Link to={loginPath} className="font-semibold text-brand hover:text-brand-700">
                   go to login
                 </Link>
                 .
@@ -190,7 +190,7 @@ function SignupPage() {
             <button
               type="submit"
               disabled={loading}
-              className="flex h-[54px] w-full items-center justify-center rounded-full bg-[#1a43ff] px-6 text-base font-medium text-white shadow-[0_18px_36px_rgba(26,67,255,0.28)] transition hover:bg-[#1438df] disabled:cursor-not-allowed disabled:opacity-70"
+              className="flex h-[54px] w-full items-center justify-center rounded-full bg-brand px-6 text-base font-medium text-white shadow-[0_18px_36px_rgba(0,0,255,0.28)] transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {loading ? (
                 <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />

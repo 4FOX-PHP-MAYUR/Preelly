@@ -444,7 +444,7 @@ function QuickViewModal({ product, onClose, onOpenChat }) {
             <button
               onClick={handleCall}
               className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl font-semibold text-sm text-white transition-transform active:scale-95"
-              style={{ background: 'linear-gradient(135deg,#3b82f6 0%,#2563eb 100%)' }}
+              style={{ background: 'linear-gradient(135deg,#0000FF 0%,#0000DD 100%)' }}
             >
               <Phone className="h-4 w-4" />
               <span>Call</span>

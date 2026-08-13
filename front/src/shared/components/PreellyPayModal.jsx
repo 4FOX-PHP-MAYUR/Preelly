@@ -193,14 +193,14 @@ export function PreellyPayModal({
             placeholder="Add more condition"
             rows={5}
             maxLength={60}
-            className="mt-6 w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#2563eb]/25"
+            className="mt-6 w-full resize-none rounded-xl border border-slate-200 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-brand/25"
           />
 
           <div className="mt-3 flex justify-end">
             <button
               type="button"
               onClick={handleAddMore}
-              className="inline-flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-[#1414e6] hover:underline"
+              className="inline-flex items-center gap-1.5 text-sm font-bold uppercase tracking-wide text-brand hover:underline"
             >
               <Plus className="h-4 w-4" strokeWidth={3} /> Add More
             </button>
@@ -222,7 +222,7 @@ export function PreellyPayModal({
             <button
               type="button"
               onClick={() => onConfirm(selected, comment)}
-              className="flex-1 rounded-full bg-[#1414e6] px-6 py-4 text-base font-bold text-white transition hover:bg-[#1010c4]"
+              className="flex-1 rounded-full bg-brand px-6 py-4 text-base font-bold text-white transition hover:bg-brand-700"
             >
               Confirm
             </button>

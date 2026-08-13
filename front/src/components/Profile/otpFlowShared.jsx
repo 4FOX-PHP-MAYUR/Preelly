@@ -9,7 +9,7 @@ import { X } from 'lucide-react'
 export const TITLE_NAVY = '#2E2E7E'
 export const MUTED = '#8B95B3'
 export const INPUT_BG = '#F5F7FA'
-export const PRIMARY = '#001AFF'
+export const PRIMARY = '#0000FF'
 export const OTP_LENGTH = 6
 export const RESEND_SECONDS = 59
 

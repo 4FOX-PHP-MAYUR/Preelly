@@ -1,4 +1,18 @@
 /** @type {import('tailwindcss').Config} */
+const brandScale = {
+  DEFAULT: '#0000FF',
+  50: '#E6E6FF',
+  100: '#CCCCFF',
+  200: '#9999FF',
+  300: '#6666FF',
+  400: '#3333FF',
+  500: '#0000FF',
+  600: '#0000FF',
+  700: '#0000DD',
+  800: '#0000BB',
+  900: '#000099',
+}
+
 export default {
   content: [
     "./index.html",
@@ -6,36 +20,22 @@ export default {
     "./src/shared/**/*.{js,ts,jsx,tsx}",
   ],
   darkMode: 'class',
+  safelist: ['font-helvetica', 'font-helvetica-neue'],
   theme: {
     extend: {
       fontFamily: {
-        sans: ['"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'],
+        sans: ['Helvetica', 'Arial', 'sans-serif'],
+        helvetica: ['Helvetica', 'Arial', 'sans-serif'],
+        'helvetica-neue': ['"Helvetica Neue"', 'Helvetica', 'Arial', 'sans-serif'],
       },
       colors: {
-        brand: {
-          DEFAULT: '#0000FF',
-          50: '#E6E6FF',
-          100: '#CCCCFF',
-          200: '#9999FF',
-          300: '#6666FF',
-          400: '#3333FF',
-          500: '#0000FF',
-          600: '#0000FF',
-          700: '#0000DD',
-          800: '#0000BB',
-          900: '#000099',
+        brand: brandScale,
+        primary: brandScale,
+        variant: {
+          DEFAULT: '#21357C',
         },
-        primary: {
-          50: '#f0f9ff',
-          100: '#e0f2fe',
-          200: '#bae6fd',
-          300: '#7dd3fc',
-          400: '#38bdf8',
-          500: '#0ea5e9',
-          600: '#0284c7',
-          700: '#0369a1',
-          800: '#075985',
-          900: '#0c4a6e',
+        ink: {
+          DEFAULT: '#364153',
         },
         admin: {
           sidebar: '#020617',

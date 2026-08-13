@@ -147,7 +147,7 @@ function FilterField({
                     name={`filter-${field.id}`}
                     checked={selectedIds.has(id)}
                     onChange={() => onSetIds(optionIds, [id])}
-                    className="h-4 w-4 accent-[#2563eb]"
+                    className="h-4 w-4 accent-brand"
                   />
                   {opt.label}
                 </label>
@@ -172,7 +172,7 @@ function FilterField({
                     type="checkbox"
                     checked={selectedIds.has(id)}
                     onChange={() => onToggleId(id)}
-                    className="h-4 w-4 rounded accent-[#2563eb]"
+                    className="h-4 w-4 rounded accent-brand"
                   />
                   {opt.label}
                 </label>

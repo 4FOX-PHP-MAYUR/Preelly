@@ -250,7 +250,7 @@ function PreellyRequestBubble({ conditions, comment, isSelf, status, onApprove, 
               <button
                 type="button"
                 onClick={onProceed}
-                className="mt-2.5 w-full rounded-lg bg-[#1414e6] py-2 text-sm font-semibold text-white hover:bg-[#1010c4]"
+                className="mt-2.5 w-full rounded-lg bg-brand py-2 text-sm font-semibold text-white hover:bg-brand-700"
               >
                 Proceed to cart
               </button>
@@ -262,14 +262,14 @@ function PreellyRequestBubble({ conditions, comment, isSelf, status, onApprove, 
                 <button
                   type="button"
                   onClick={onNewCondition}
-                  className="flex-1 rounded-lg border border-[#1414e6] py-2 text-sm font-semibold text-[#1414e6] hover:bg-indigo-50"
+                  className="flex-1 rounded-lg border border-brand py-2 text-sm font-semibold text-brand hover:bg-indigo-50"
                 >
                   New Condition
                 </button>
                 <button
                   type="button"
                   onClick={onProceedPlain}
-                  className="flex-1 rounded-lg bg-[#1414e6] py-2 text-sm font-semibold text-white hover:bg-[#1010c4]"
+                  className="flex-1 rounded-lg bg-brand py-2 text-sm font-semibold text-white hover:bg-brand-700"
                 >
                   Proceed to cart
                 </button>
@@ -1462,7 +1462,7 @@ export default function ChatInboxPage() {
                                         <button
                                           type="button"
                                           onClick={handleProceedClick}
-                                          className="mt-2.5 w-full rounded-lg bg-[#1414e6] py-2 text-sm font-semibold text-white hover:bg-[#1010c4]"
+                                          className="mt-2.5 w-full rounded-lg bg-brand py-2 text-sm font-semibold text-white hover:bg-brand-700"
                                         >
                                           Proceed to cart
                                         </button>
@@ -1563,7 +1563,7 @@ export default function ChatInboxPage() {
                     </div>
 
                     <label className="mt-6 block text-sm font-medium text-gray-700">Your offer amount</label>
-                    <div className="mt-2 flex items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 focus-within:border-[#1414e6]">
+                    <div className="mt-2 flex items-center gap-2 rounded-2xl border border-gray-200 bg-gray-50 px-4 py-3 focus-within:border-brand">
                       <span className="text-sm font-semibold text-gray-500">AED</span>
                       <input
                         type="number"
@@ -1588,7 +1588,7 @@ export default function ChatInboxPage() {
                       <button
                         type="button"
                         onClick={sendOffer}
-                        className="flex-1 rounded-full bg-[#1414e6] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#1010c4]"
+                        className="flex-1 rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-700"
                       >
                         Send
                       </button>
@@ -1617,7 +1617,7 @@ export default function ChatInboxPage() {
                     <button
                       type="button"
                       onClick={() => setSoldModalOpen(false)}
-                      className="mt-6 w-full rounded-full bg-[#1414e6] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#1010c4]"
+                      className="mt-6 w-full rounded-full bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-700"
                     >
                       Okay
                     </button>

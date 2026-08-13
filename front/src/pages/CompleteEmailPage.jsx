@@ -75,7 +75,7 @@ function CompleteEmailPage() {
         <button
           type="submit"
           disabled={submitting}
-          className="flex h-14 w-full items-center justify-center rounded-full bg-[#1400ff] px-6 text-base font-medium text-white shadow-[0_18px_40px_rgba(20,0,255,0.25)] transition hover:bg-[#1000d6] disabled:cursor-not-allowed disabled:opacity-70"
+          className="flex h-14 w-full items-center justify-center rounded-full bg-brand px-6 text-base font-medium text-white shadow-[0_18px_40px_rgba(0,0,255,0.25)] transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {submitting ? (
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />

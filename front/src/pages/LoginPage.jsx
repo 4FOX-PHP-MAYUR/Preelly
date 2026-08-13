@@ -215,6 +215,8 @@ function LoginPage() {
   return (
     <AuthSplitLayout
       title="Login"
+      mobileTitle="Welcome!"
+      mobileSubtitle="Secure login with your phone number"
       subtitle={
         target === "seller"
           ? "Access your seller dashboard, manage listings, and reply to buyers without missing a step."
@@ -297,10 +299,15 @@ function LoginPage() {
         >
           {loading ? (
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-          ) : channel === "whatsapp" ? (
-            "Continue with WhatsApp"
           ) : (
-            "Continue with Email"
+            <>
+              <span className="min-[1025px]:hidden">Login</span>
+              <span className="hidden min-[1025px]:inline">
+                {channel === "whatsapp"
+                  ? "Continue with WhatsApp"
+                  : "Continue with Email"}
+              </span>
+            </>
           )}
         </button>
       </form>
@@ -308,18 +315,20 @@ function LoginPage() {
       <div className="mt-8">
         <div className="flex items-center gap-4">
           <div className="h-px flex-1 bg-[#e7e9f2]" />
-          <span className="text-sm font-medium uppercase tracking-[0.24em] text-slate-400">
-            Or
+          <span className="text-center text-xs font-medium text-slate-400 min-[1025px]:text-sm min-[1025px]:uppercase min-[1025px]:tracking-[0.24em]">
+            <span className="min-[1025px]:hidden">Or sign in using below accounts</span>
+            <span className="hidden min-[1025px]:inline">Or</span>
           </span>
           <div className="h-px flex-1 bg-[#e7e9f2]" />
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-4">
+        <div className="mt-6 flex justify-center gap-4 min-[1025px]:grid min-[1025px]:grid-cols-2">
           <AuthSocialButton
             label="Continue with Google"
             onClick={() => startSocialLogin("google")}
             disabled={!!oauthLoading}
             active={oauthLoading === "google"}
+            className="h-14 w-14 shrink-0 min-[1025px]:h-14 min-[1025px]:w-full"
           >
             <GoogleIcon />
           </AuthSocialButton>
@@ -328,6 +337,7 @@ function LoginPage() {
             onClick={startAppleSignIn}
             disabled={!!oauthLoading}
             active={oauthLoading === "apple"}
+            className="h-14 w-14 shrink-0 min-[1025px]:h-14 min-[1025px]:w-full"
           >
             <AppleIcon />
           </AuthSocialButton>

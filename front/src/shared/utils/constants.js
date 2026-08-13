@@ -52,6 +52,12 @@ export const SITE_URL =
 export const assetUrl = (path) =>
   `${String(SITE_URL).replace(/\/+$/, '')}/${String(path || '').replace(/^\/+/, '')}`
 
+// Mileage slider scale for the Kilometres filter, on both the listing page and
+// advance search. Fixed rather than derived from the listing facets so the scale
+// does not shift as inventory changes: 0 – 7 lakh km. A range left untouched is
+// treated as "no filter", so listings above the top of the scale are not hidden.
+export const KMS_FILTER_RANGE = { min: 0, max: 700000 }
+
 // Sign in with Apple — WEB only. This is the web Services ID, matching the API's
 // APPLE_WEB_CLIENT_ID (not the mobile app's Apple identifiers, which the browser
 // must never use: Apple mints a browser token for the Services ID and the web route

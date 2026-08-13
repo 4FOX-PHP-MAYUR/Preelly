@@ -9,6 +9,7 @@ import CategoryFilterFields, { optionIdsOf } from '@shared/components/CategoryFi
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
 import { buildListingUrl } from '@shared/utils/categorySearchParams'
 import { getLevelLabels } from '@shared/utils/categoryFields'
+import { KMS_FILTER_RANGE } from '@shared/utils/constants'
 import { PanelSection, ChipRow } from '@shared/components/FilterPanelSection'
 import { CityFilterSection, VehiclePropertyFilterSections } from '../components/Listing/CategoryFilterSections'
 import CategoryIconGrid from '../components/Listing/CategoryIconGrid'
@@ -74,7 +75,6 @@ function CategorySearchPage() {
   const [kms, setKms] = useState('')
   const [priceRange, setPriceRange] = useState({ min: 0, max: 100000 })
   const [facetCities, setFacetCities] = useState([])
-  const [facetMileageRange, setFacetMileageRange] = useState({ min: 0, max: 0 })
 
   const { emirates, loading: citiesLoading, error: citiesError } = useEmirateCities()
   const cities = useMemo(() => buildCityFilterOptions(emirates, facetCities), [emirates, facetCities])
@@ -98,10 +98,8 @@ function CategorySearchPage() {
     return { min: priceRange.min, max: priceRange.max }
   }, [priceRangeSelect, priceRange])
 
-  const kmsBounds = useMemo(() => {
-    const max = Number(facetMileageRange?.max)
-    return { min: 0, max: Number.isFinite(max) && max > 0 ? max : 500000 }
-  }, [facetMileageRange])
+  // Same fixed 0 – 7 lakh km scale the listing page uses.
+  const kmsBounds = KMS_FILTER_RANGE
 
   const kmsSel = useMemo(() => {
     if (!kms) return null
@@ -140,13 +138,11 @@ function CategorySearchPage() {
         if (cancelled) return
         const data = res?.data || {}
         setFacetCities(Array.isArray(data.cities) ? data.cities : [])
-        setFacetMileageRange(data.mileageRange || { min: 0, max: 0 })
       })
       .catch((e) => {
         if (cancelled) return
         console.error('Error fetching facets:', e)
         setFacetCities([])
-        setFacetMileageRange({ min: 0, max: 0 })
       })
     return () => {
       cancelled = true

@@ -1,4 +1,5 @@
 import { Search } from 'lucide-react'
+import { KMS_FILTER_RANGE } from '@shared/utils/constants'
 import DualRangeSlider from './DualRangeSlider'
 import { PanelSection, ChipRow } from '@shared/components/FilterPanelSection'
 
@@ -158,8 +159,8 @@ export function VehiclePropertyFilterSections({
       {showVehicleExtras && kmsRange ? (
         <PanelSection title="Kilometres">
           <DualRangeSlider
-            min={kmsRange?.min ?? 0}
-            max={kmsRange?.max ?? 500000}
+            min={kmsRange?.min ?? KMS_FILTER_RANGE.min}
+            max={kmsRange?.max ?? KMS_FILTER_RANGE.max}
             valueMin={kmsMin}
             valueMax={kmsMax}
             onChange={onKmsRangeChange}

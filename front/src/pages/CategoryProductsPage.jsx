@@ -7,6 +7,7 @@ import { fetchFeedShell } from '@shared/store/slices/feedSlice'
 import { selectIsAuthenticated } from '@shared/store/slices/authSlice'
 import { productService } from '@shared/services/api'
 import { categoryService } from '@shared/services/api'
+import { KMS_FILTER_RANGE } from '@shared/utils/constants'
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
 import {
   matchesListingChip,
@@ -87,7 +88,6 @@ function CategoryProductsPage() {
   const didFetchRootsRef = useRef(false)
   const [priceRange, setPriceRange] = useState(normalizePriceRange())
   const [facetCities, setFacetCities] = useState([])
-  const [facetMileageRange, setFacetMileageRange] = useState({ min: 0, max: 0 })
 
   // Location filter (emirates / cities table id)
   const [cityId, setCityId] = useState('')
@@ -197,10 +197,9 @@ function CategoryProductsPage() {
     return { min: priceRange.min, max: priceRange.max }
   }, [priceRangeSelect, priceRange])
 
-  const kmsBounds = useMemo(() => {
-    const max = Number(facetMileageRange?.max)
-    return { min: 0, max: Number.isFinite(max) && max > 0 ? max : 500000 }
-  }, [facetMileageRange])
+  // Fixed 0 – 7 lakh km scale (shared with advance search) instead of the facet
+  // maximum, so the slider does not rescale as inventory changes.
+  const kmsBounds = KMS_FILTER_RANGE
 
   const kmsSel = useMemo(() => {
     if (!kms) return null
@@ -521,12 +520,10 @@ function CategoryProductsPage() {
         if (cancelled) return
         const data = res?.data || {}
         setFacetCities(Array.isArray(data.cities) ? data.cities : [])
-        setFacetMileageRange(data.mileageRange || { min: 0, max: 0 })
       } catch (e) {
         if (cancelled) return
         console.error('Error fetching facets:', e)
         setFacetCities([])
-        setFacetMileageRange({ min: 0, max: 0 })
       }
     }
 

@@ -24,6 +24,8 @@ const { getPermissionMapForRole } = require('../services/adminPermissionService'
 const validateObjectId = require('../middleware/validateObjectId')
 const optionalAuth = require('../middleware/optionalAuth')
 const { getBlockedUserIds, isBlockedBetween } = require('../core/services/blockService')
+const DeviceToken = require('../models/DeviceToken')
+const { maskToken, sendPushToUser } = require('../services/firebaseAdmin')
 
 const CHANGE_EMAIL_PURPOSE = 'change_email'
 const CHANGE_PHONE_PURPOSE = 'change_phone'
@@ -2065,6 +2067,102 @@ router.delete('/saved-searches/:id', authMiddleware, validateObjectId('id'), asy
     res.status(500).json({ message: 'Error deleting saved search' })
   }
 })
+
+router.post(
+  '/device-tokens',
+  authMiddleware,
+  [
+    body('token').isString().trim().notEmpty().withMessage('token is required'),
+    body('platform').isIn(['android', 'ios']).withMessage('platform must be android or ios'),
+    body('deviceId').isString().trim().notEmpty().withMessage('deviceId is required'),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req)
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg })
+      }
+
+      const { token, platform, deviceId } = req.body
+
+      await DeviceToken.findOneAndUpdate(
+        { token },
+        {
+          $set: {
+            userId: req.user._id,
+            platform,
+            deviceId,
+            lastSeenAt: new Date(),
+          },
+        },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      )
+
+      console.log(`[device-tokens] Registered token ${maskToken(token)} for user ${req.user._id}`)
+      res.json({ message: 'Device token registered' })
+    } catch (error) {
+      console.error('Error registering device token:', error)
+      res.status(500).json({ message: 'Error registering device token' })
+    }
+  }
+)
+
+router.delete('/device-tokens/:token', authMiddleware, async (req, res) => {
+  try {
+    await DeviceToken.deleteOne({ token: req.params.token, userId: req.user._id })
+    res.json({ message: 'Device token unregistered' })
+  } catch (error) {
+    console.error('Error unregistering device token:', error)
+    res.status(500).json({ message: 'Error unregistering device token' })
+  }
+})
+
+// @route   POST /api/user/device-tokens/test
+// @desc    Send a test push notification to every device the requesting user
+//          has registered — for verifying end-to-end FCM delivery without
+//          waiting on a real domain event (like/comment/message/etc).
+// @access  Private
+router.post(
+  '/device-tokens/test',
+  authMiddleware,
+  [
+    body('title').optional().isString().trim().isLength({ max: 120 }),
+    body('body').optional().isString().trim().isLength({ max: 500 }),
+  ],
+  async (req, res) => {
+    try {
+      const errors = validationResult(req)
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ message: errors.array()[0].msg })
+      }
+
+      const registeredCount = await DeviceToken.countDocuments({ userId: req.user._id })
+
+      const title = req.body.title || 'Test notification'
+      const body = req.body.body || 'This is a test push from Preelly'
+
+      const result = await sendPushToUser(req.user._id, {
+        notification: { title, body },
+        data: {
+          type: 'system',
+          notificationId: `test-${Date.now()}`,
+        },
+      })
+
+      if (!result.configured) {
+        return res.status(503).json({ message: 'Firebase Admin is not configured on this server', result })
+      }
+      if (registeredCount === 0) {
+        return res.json({ message: 'No device tokens registered for this user', result })
+      }
+
+      res.json({ message: 'Test notification sent', result })
+    } catch (error) {
+      console.error('Error sending test notification:', error)
+      res.status(500).json({ message: 'Error sending test notification' })
+    }
+  }
+)
 
 module.exports = router
 

@@ -18,6 +18,8 @@ const AdminRole = require('../models/AdminRole')
 const AdminUser = require('../models/AdminUser')
 const AdminRoleAssignment = require('../models/AdminRoleAssignment')
 const adminRoleAssignmentService = require('../services/adminRoleAssignmentService')
+const Notification = require('../models/Notification')
+const { sendPushToUser } = require('../services/firebaseAdmin')
 const FieldType = require('../models/FieldType')
 const FormField = require('../models/FormField')
 const {
@@ -276,6 +278,28 @@ router.put('/products/:id/approve', adminMiddleware, async (req, res) => {
       }
     }
 
+    if (product.seller?._id) {
+      try {
+        const title = 'Listing approved'
+        const body = `Your listing "${product.title || 'your ad'}" is now live`
+        const notif = await Notification.create({
+          user: product.seller._id,
+          relatedProduct: product._id,
+          type: 'listing',
+          tab: 'selling',
+          title,
+          body,
+          data: { productId: String(product._id), event: 'approved' },
+        })
+        sendPushToUser(product.seller._id, {
+          notification: { title, body },
+          data: { type: 'listing', notificationId: notif._id, productId: product._id },
+        })
+      } catch (notificationError) {
+        console.error('Error creating listing-approved notification:', notificationError)
+      }
+    }
+
     // Match newly active ads against My Search bookmarks (non-blocking).
     try {
       const { matchProductAgainstSavedSearches } = require('../core/services/savedSearchMatchService')
@@ -417,6 +441,28 @@ router.put('/products/:id/reject', adminMiddleware, async (req, res) => {
         })
       } catch (mailError) {
         console.error('Product rejected but failed to send rejection email:', mailError.message)
+      }
+    }
+
+    if (product.seller?._id) {
+      try {
+        const title = 'Listing rejected'
+        const body = `Your listing "${product.title || 'your ad'}" was not approved`
+        const notif = await Notification.create({
+          user: product.seller._id,
+          relatedProduct: product._id,
+          type: 'listing',
+          tab: 'selling',
+          title,
+          body,
+          data: { productId: String(product._id), event: 'rejected' },
+        })
+        sendPushToUser(product.seller._id, {
+          notification: { title, body },
+          data: { type: 'listing', notificationId: notif._id, productId: product._id },
+        })
+      } catch (notificationError) {
+        console.error('Error creating listing-rejected notification:', notificationError)
       }
     }
 

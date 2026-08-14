@@ -8,6 +8,7 @@ const Notification = require('../models/Notification')
 const Report = require('../models/Report')
 const authMiddleware = require('../middleware/auth')
 const { chatUpload } = require('../middleware/upload')
+const { sendPushToUser } = require('../services/firebaseAdmin')
 const path = require('path')
 const fs = require('fs')
 
@@ -309,13 +310,18 @@ router.post('/group', authMiddleware, async (req, res) => {
         const pid = p.toString()
         if (pid === creatorId.toString()) continue
         try {
-          await Notification.create({
+          const title = `New message in ${chat.name}`
+          const notif = await Notification.create({
             user: pid,
             type: 'message',
-            title: `New message in ${chat.name}`,
+            title,
             body: preview,
             actor: creatorId,
             data: { chatId: String(chat._id), senderId: String(creatorId) },
+          })
+          sendPushToUser(pid, {
+            notification: { title, body: preview },
+            data: { type: 'message', notificationId: notif._id, chatId: chat._id, actorId: creatorId },
           })
         } catch (e) {
           console.error('Error creating group notification:', e)
@@ -638,7 +644,7 @@ router.post('/:id/messages', authMiddleware, (req, res, next) => {
       const title = chat.type === 'group' ? `New message in ${chat.name || 'group'}` : 'New message'
       for (const rid of notifyRecipients) {
         try {
-          await Notification.create({
+          const notif = await Notification.create({
             user: rid,
             type: 'message',
             title,
@@ -649,6 +655,16 @@ router.post('/:id/messages', authMiddleware, (req, res, next) => {
               chatId: String(chatId),
               productId: chat.product ? String(chat.product) : null,
               senderId: String(userId),
+            },
+          })
+          sendPushToUser(rid, {
+            notification: { title, body: preview },
+            data: {
+              type: 'message',
+              notificationId: notif._id,
+              chatId,
+              productId: chat.product || undefined,
+              actorId: userId,
             },
           })
         } catch (notificationError) {

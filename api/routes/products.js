@@ -37,6 +37,7 @@ const Chat = require('../models/Chat')
 const SoldRating = require('../models/SoldRating')
 const Notification = require('../models/Notification')
 const { markSoldRules } = require('../core/validators/sold.validator')
+const { sendPushToUser } = require('../services/firebaseAdmin')
 
 /**
  * Hide listings owned by accounts blocked in either direction.
@@ -3008,15 +3009,21 @@ router.post(
       }
 
       if (notifyBuyerId) {
-        await Notification.create({
+        const title = 'You were marked as the buyer'
+        const body = `${req.user.name || 'The seller'} marked "${product.title}" as sold to you`
+        const notif = await Notification.create({
           user: notifyBuyerId,
           actor: req.user._id,
           relatedProduct: product._id,
           type: 'listing',
           tab: 'buying',
-          title: 'You were marked as the buyer',
-          body: `${req.user.name || 'The seller'} marked "${product.title}" as sold to you`,
+          title,
+          body,
           data: { productId: product._id.toString(), event: 'marked_sold_buyer' },
+        })
+        sendPushToUser(notifyBuyerId, {
+          notification: { title, body },
+          data: { type: 'listing', notificationId: notif._id, productId: product._id, actorId: req.user._id },
         })
       }
 
@@ -3054,6 +3061,8 @@ router.post('/:id/mark-unsold', authMiddleware, validateObjectId('id'), async (r
       return res.status(400).json({ message: 'Product is not marked as sold' })
     }
 
+    const previousBuyerId = product.buyer
+
     product.status = 'active'
     product.isSold = false
     product.buyer = null
@@ -3063,6 +3072,29 @@ router.post('/:id/mark-unsold', authMiddleware, validateObjectId('id'), async (r
     product.soldComment = ''
     product.preellyFeedback = { stars: null, reasons: [], comment: '' }
     await product.save()
+
+    if (previousBuyerId) {
+      try {
+        const title = 'Listing no longer marked as sold to you'
+        const body = `"${product.title}" was reverted to active by the seller`
+        const notif = await Notification.create({
+          user: previousBuyerId,
+          actor: req.user._id,
+          relatedProduct: product._id,
+          type: 'listing',
+          tab: 'buying',
+          title,
+          body,
+          data: { productId: product._id.toString(), event: 'marked_unsold' },
+        })
+        sendPushToUser(previousBuyerId, {
+          notification: { title, body },
+          data: { type: 'listing', notificationId: notif._id, productId: product._id, actorId: req.user._id },
+        })
+      } catch (notificationError) {
+        console.error('Error creating mark-unsold notification:', notificationError)
+      }
+    }
 
     await product.populate('category', 'name icon emoji')
     await product.populate('seller', 'name avatar rating memberSince')

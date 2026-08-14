@@ -11,6 +11,7 @@ const ProductView = require('../models/ProductView')
 const authMiddleware = require('../middleware/auth')
 const optionalAuth = require('../middleware/optionalAuth')
 const validateObjectId = require('../middleware/validateObjectId')
+const { sendPushToUser } = require('../services/firebaseAdmin')
 const {
   getBlockedUserIds,
   getBlockState,
@@ -88,8 +89,32 @@ router.post('/products/:id/like', authMiddleware, validateObjectId('id'), async 
 
     await product.save()
 
+    const nowLiked = !isLiked
+    if (nowLiked && product.seller && String(product.seller) !== String(userId)) {
+      try {
+        const title = 'New like'
+        const body = `${req.user.name || 'Someone'} liked your listing`
+        const notif = await Notification.create({
+          user: product.seller,
+          actor: userId,
+          relatedProduct: product._id,
+          type: 'like',
+          tab: 'selling',
+          title,
+          body,
+          data: { productId: String(product._id) },
+        })
+        sendPushToUser(product.seller, {
+          notification: { title, body },
+          data: { type: 'like', notificationId: notif._id, productId: product._id, actorId: userId },
+        })
+      } catch (notificationError) {
+        console.error('Error creating like notification:', notificationError)
+      }
+    }
+
     res.json({
-      liked: !isLiked,
+      liked: nowLiked,
       likeCount: product.likes.length,
     })
   } catch (error) {
@@ -399,14 +424,20 @@ router.post('/user/:id/follow', authMiddleware, validateObjectId('id'), async (r
 
     // notify the target user about the new follower
     const requester = await User.findById(followerId).select('name').lean()
-    await Notification.create({
+    const followTitle = 'New follower'
+    const followBody = `${requester.name} started following you`
+    const followNotif = await Notification.create({
       user: followingId,
       actor: followerId,
       type: 'follow',
       tab: 'general',
-      title: 'New follower',
-      body: `${requester.name} started following you`,
+      title: followTitle,
+      body: followBody,
       data: { followerId: followerId.toString() },
+    })
+    sendPushToUser(followingId, {
+      notification: { title: followTitle, body: followBody },
+      data: { type: 'follow', notificationId: followNotif._id, actorId: followerId },
     })
 
     const followerCount = await Follow.countDocuments({ following: followingId, status: 'active' })
@@ -446,13 +477,19 @@ router.post('/user/:id/follow/accept', authMiddleware, validateObjectId('id'), a
 
     // notify the requester that their request was accepted
     const accepter = await User.findById(followingId).select('name').lean()
-    await Notification.create({
+    const acceptTitle = 'Follow request accepted'
+    const acceptBody = `${accepter.name} accepted your follow request`
+    const acceptNotif = await Notification.create({
       user: followerId,
       actor: followingId,
       type: 'follow',
       tab: 'general',
-      title: 'Follow request accepted',
-      body: `${accepter.name} accepted your follow request`,
+      title: acceptTitle,
+      body: acceptBody,
+    })
+    sendPushToUser(followerId, {
+      notification: { title: acceptTitle, body: acceptBody },
+      data: { type: 'follow', notificationId: acceptNotif._id, actorId: followingId },
     })
 
     const followerCount = await Follow.countDocuments({ following: followingId, status: 'active' })
@@ -869,6 +906,41 @@ router.post('/products/:id/comments', authMiddleware, validateObjectId('id'), as
       .select('product user text status likes parentID parentComment createdAt updatedAt')
       .lean()
     const payload = serializeComment(saved || comment.toObject?.() || comment)
+
+    const commenterId = req.user._id
+    const recipients = new Set()
+    if (product.seller && String(product.seller) !== String(commenterId)) {
+      recipients.add(String(product.seller))
+    }
+    if (parentId) {
+      const parent = await Comment.findById(parentId)
+      if (parent && String(parent.user) !== String(commenterId)) {
+        recipients.add(String(parent.user))
+      }
+    }
+    for (const recipientId of recipients) {
+      try {
+        const title = 'New comment'
+        const body = `${req.user.name || 'Someone'} commented on your listing`
+        const notif = await Notification.create({
+          user: recipientId,
+          actor: commenterId,
+          relatedProduct: product._id,
+          type: 'comment',
+          tab: 'selling',
+          title,
+          body,
+          data: { productId: String(product._id), commentId: String(comment._id) },
+        })
+        sendPushToUser(recipientId, {
+          notification: { title, body },
+          data: { type: 'comment', notificationId: notif._id, productId: product._id, actorId: commenterId },
+        })
+      } catch (notificationError) {
+        console.error('Error creating comment notification:', notificationError)
+      }
+    }
+
     res.status(201).json(payload)
   } catch (error) {
     console.error('Error creating comment:', error)
@@ -986,8 +1058,32 @@ router.post('/comments/:id/like', authMiddleware, async (req, res) => {
 
     await comment.save()
 
+    const nowLiked = !isLiked
+    if (nowLiked && comment.user && String(comment.user) !== String(userId)) {
+      try {
+        const title = 'New like'
+        const body = `${req.user.name || 'Someone'} liked your comment`
+        const notif = await Notification.create({
+          user: comment.user,
+          actor: userId,
+          relatedProduct: comment.product,
+          type: 'like',
+          tab: 'selling',
+          title,
+          body,
+          data: { productId: String(comment.product), commentId: String(comment._id) },
+        })
+        sendPushToUser(comment.user, {
+          notification: { title, body },
+          data: { type: 'like', notificationId: notif._id, productId: comment.product, actorId: userId },
+        })
+      } catch (notificationError) {
+        console.error('Error creating comment-like notification:', notificationError)
+      }
+    }
+
     res.json({
-      liked: !isLiked,
+      liked: nowLiked,
       likeCount: comment.likes.length,
     })
   } catch (error) {

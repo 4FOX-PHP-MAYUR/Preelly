@@ -15,9 +15,11 @@ const CheckoutService = require('../../models/CheckoutService')
 const invoiceService = require('./invoiceService')
 const paymentEmailService = require('./paymentEmailService')
 const PaymentLog = require('../../models/PaymentLog')
+const Notification = require('../../models/Notification')
 const ccavenueGateway = require('../gateways/ccavenueGateway')
 const logger = require('../../utils/paymentLogger')
 const { isBlockedBetween } = require('./blockService')
+const { sendPushToUser } = require('../../services/firebaseAdmin')
 const {
   platformToPaymentFrom,
   normalizePaymentMethod,
@@ -395,6 +397,57 @@ async function initiateCheckoutPayment({
 
 // ── Callback ─────────────────────────────────────────────────────────────────
 
+const ORDER_NOTIFICATION_COPY = {
+  SUCCESS: { buyer: { title: 'Order confirmed', body: 'Your payment was successful' }, seller: { title: 'Item sold', body: 'Your listing was purchased' } },
+  FAILED: { buyer: { title: 'Payment failed', body: 'Your payment could not be completed' } },
+  CANCELLED: { buyer: { title: 'Payment cancelled', body: 'Your payment was cancelled' } },
+}
+
+/** Best-effort in-app + push notification for a product-checkout order status change. Never throws. */
+async function notifyOrderStatus(txn, status) {
+  try {
+    const copy = ORDER_NOTIFICATION_COPY[status]
+    if (!copy) return
+
+    const buyerId = txn.buyerId || txn.userId
+    if (buyerId && copy.buyer) {
+      const { title, body } = copy.buyer
+      const notif = await Notification.create({
+        user: buyerId,
+        relatedProduct: txn.productId,
+        type: 'order',
+        tab: 'buying',
+        title,
+        body,
+        data: { productId: String(txn.productId), orderId: txn.orderId, status },
+      })
+      sendPushToUser(buyerId, {
+        notification: { title, body },
+        data: { type: 'order', notificationId: notif._id, productId: txn.productId },
+      })
+    }
+
+    if (status === 'SUCCESS' && txn.sellerId && copy.seller) {
+      const { title, body } = copy.seller
+      const notif = await Notification.create({
+        user: txn.sellerId,
+        relatedProduct: txn.productId,
+        type: 'order',
+        tab: 'selling',
+        title,
+        body,
+        data: { productId: String(txn.productId), orderId: txn.orderId, status },
+      })
+      sendPushToUser(txn.sellerId, {
+        notification: { title, body },
+        data: { type: 'order', notificationId: notif._id, productId: txn.productId },
+      })
+    }
+  } catch (error) {
+    logger.error('payment.notify_failed', { orderId: txn.orderId, message: error.message })
+  }
+}
+
 /**
  * Processes a decrypted gateway callback. Idempotent: a duplicate callback for an
  * already-finalized order is ignored. Only ever trusts the decrypted response.
@@ -476,6 +529,9 @@ async function processCallback({ gatewayName = DEFAULT_GATEWAY, encResponse, con
     // Log the attempt (failure / cancelled / pending). Product is NOT touched.
     const copy = LOG_COPY[finalStatus] || LOG_COPY.PENDING
     await writePaymentLog({ txn, context, activity: copy.activity, description: copy.description })
+    if (txn.paymentType === 2) {
+      await notifyOrderStatus(txn, finalStatus)
+    }
     return { txn, status: finalStatus, duplicate: false }
   }
 
@@ -553,6 +609,10 @@ async function processCallback({ gatewayName = DEFAULT_GATEWAY, encResponse, con
   }
 
   logger.info('payment.success', { orderId, trackingId: txn.trackingId, amount: txn.amount })
+
+  if (txn.paymentType === 2) {
+    await notifyOrderStatus(txn, 'SUCCESS')
+  }
 
   // Post-success side effects — best effort, never roll back the payment.
   const { invoiceGenerated, emailSent } = await runSuccessSideEffects(txn, context)

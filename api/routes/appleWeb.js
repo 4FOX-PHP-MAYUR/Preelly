@@ -67,6 +67,11 @@ function serializeUser (user) {
     isEmailVerified: emailVerified,
     isPhoneVerified: phoneVerified,
     isProfileComplete: user.isProfileComplete,
+    memberSince: user.memberSince || user.createdAt || null,
+    createdAt: user.createdAt || null,
+    updatedAt: user.updatedAt || null,
+    identityVerificationStatus: user.identityVerificationStatus || 'none',
+    identityVerificationRejectionReason: user.identityVerificationRejectionReason || null,
   }
 }
 

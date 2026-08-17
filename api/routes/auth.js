@@ -110,6 +110,15 @@ const serializeUser = (user) => {
     isEmailVerified: verification.emailVerified,
     isPhoneVerified: verification.phoneVerified,
     isProfileComplete: user.isProfileComplete,
+    // Profile header renders "Joined on"/"Last updated on" straight off the cached
+    // login user, so these must ship here too — not just from GET /user/profile.
+    memberSince: user.memberSince || user.createdAt || null,
+    createdAt: user.createdAt || null,
+    updatedAt: user.updatedAt || null,
+    // Drives the Emirates ID card's badge (IdentityVerificationCard). Without it the
+    // card reads undefined post-login and offers "Get Verified" to approved users.
+    identityVerificationStatus: user.identityVerificationStatus || 'none',
+    identityVerificationRejectionReason: user.identityVerificationRejectionReason || null,
   }
 }
 

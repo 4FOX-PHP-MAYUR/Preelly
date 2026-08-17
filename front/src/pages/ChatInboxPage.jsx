@@ -22,6 +22,7 @@ import { useChat } from '@shared/components/Chat/ChatContext'
 import { useCall } from '@shared/components/Call/CallContext'
 import ChatAttachments, { isVideoAttachment } from '@shared/components/Chat/ChatAttachments'
 import { getMediaUrl } from '@shared/utils/helpers'
+import usePresence from '@shared/hooks/usePresence'
 import toast from 'react-hot-toast'
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -939,6 +940,10 @@ export default function ChatInboxPage() {
   // Block/report target only exists for 1:1 product chats (not support/groups).
   const is1to1 = Boolean(activeThread && !activeThread.isGroup && activeThread.type !== 'support')
   const otherPartyId = is1to1 ? (otherParty?.id || null) : null
+  // Real presence for the person on the other side. Groups and support threads
+  // have no single counterpart, so they get no online indicator at all.
+  const presence = usePresence(otherPartyId ? [otherPartyId] : [])
+  const otherOnline = Boolean(otherPartyId && presence[otherPartyId])
   const isMuted = Boolean(activeThread?.muted)
   const [blocking, setBlocking] = useState(false)
   const [showBlockFlow, setShowBlockFlow] = useState(false)
@@ -1349,7 +1354,7 @@ export default function ChatInboxPage() {
                   <ArrowLeft className="h-5 w-5" />
                 </button>
 
-                <Ava src={otherParty?.avatar || otherParty?.image} name={otherParty?.name} size={46} online />
+                <Ava src={otherParty?.avatar || otherParty?.image} name={otherParty?.name} size={46} online={otherOnline} />
 
                 <div className="flex-1 min-w-0">
                   <p className="text-base font-bold text-gray-900 leading-tight truncate">
@@ -1359,12 +1364,12 @@ export default function ChatInboxPage() {
                     <p className="text-xs font-medium text-gray-500 mt-0.5 truncate">
                       {(activeThread?.participants || []).map(p => p.name).join(', ')}
                     </p>
-                  ) : (
-                    <p className="flex items-center gap-1.5 text-xs font-medium text-green-500 mt-0.5">
-                      <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />
-                      Active Now
+                  ) : is1to1 ? (
+                    <p className={`flex items-center gap-1.5 text-xs font-medium mt-0.5 ${otherOnline ? 'text-green-500' : 'text-gray-400'}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full inline-block ${otherOnline ? 'bg-green-500' : 'bg-gray-300'}`} />
+                      {otherOnline ? 'Active Now' : 'Offline'}
                     </p>
-                  )}
+                  ) : null}
                 </div>
 
                 <div className="flex items-center gap-3">

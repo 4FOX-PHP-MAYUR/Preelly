@@ -224,6 +224,57 @@ app.use((err, req, res, next) => {
 // ── Socket.IO auth + rooms ────────────────────────────────────────────────────
 const User = require('./models/User')
 
+// ── Presence ──────────────────────────────────────────────────────────────────
+// userId -> count of that user's live sockets (one person may have several tabs
+// or devices open, so a single disconnect must not mark them offline).
+//
+// Deliberately in-memory: pm2 runs the API as a single fork instance
+// (ecosystem.config.js, `instances: 1`). If this is ever scaled to more than one
+// instance, move the registry to Redis — ioredis is already a dependency —
+// otherwise each process only sees its own sockets and reports everyone else
+// as offline.
+const onlineCounts = new Map()
+
+const isUserOnline = (userId) => onlineCounts.has(String(userId))
+
+// Presence is pushed only to sockets that explicitly asked about a given user,
+// rather than broadcast, so nobody learns the online state of accounts they
+// aren't chatting with.
+const presenceRoom = (userId) => `presence-${userId}`
+
+const emitPresence = (userId, online) => {
+  io.to(presenceRoom(userId)).emit('presence:changed', { userId: String(userId), online })
+}
+
+const addPresence = (userId) => {
+  const key = String(userId)
+  const next = (onlineCounts.get(key) || 0) + 1
+  onlineCounts.set(key, next)
+  if (next === 1) emitPresence(key, true)
+}
+
+const dropPresence = (userId) => {
+  const key = String(userId)
+  const next = (onlineCounts.get(key) || 0) - 1
+  if (next > 0) {
+    onlineCounts.set(key, next)
+    return
+  }
+  onlineCounts.delete(key)
+  emitPresence(key, false)
+}
+
+// Idempotent per socket: the handshake and a later `join-user` can both name the
+// same user, and that must count once.
+const registerPresence = (socket, userId) => {
+  if (!userId) return
+  const key = String(userId)
+  if (socket.data.presenceId === key) return
+  if (socket.data.presenceId) dropPresence(socket.data.presenceId)
+  socket.data.presenceId = key
+  addPresence(key)
+}
+
 io.use((socket, next) => {
   const token = socket.handshake.auth?.token
   if (!token) return next()
@@ -244,6 +295,7 @@ io.on('connection', (socket) => {
 
   if (socket.userId) {
     socket.join(`user-${socket.userId}`)
+    registerPresence(socket, socket.userId)
     if (socket.role === 'admin') {
       socket.join('admin')
       console.log(`👤 Admin ${socket.userId} joined admin room`)
@@ -251,7 +303,31 @@ io.on('connection', (socket) => {
   }
 
   socket.on('join-user', (userId) => {
-    if (userId) { socket.join(`user-${userId}`); socket.userId = userId }
+    if (userId) { socket.join(`user-${userId}`); socket.userId = userId; registerPresence(socket, userId) }
+  })
+
+  // Subscribe to the online state of specific users and get the current snapshot
+  // back through the ack. Authenticated sockets only — presence is not public.
+  socket.on('presence:watch', (userIds, ack) => {
+    const respond = typeof ack === 'function' ? ack : () => {}
+    if (!socket.userId) return respond({})
+
+    const ids = (Array.isArray(userIds) ? userIds : [userIds])
+      .filter(Boolean)
+      .map(String)
+      .slice(0, 100) // guard against a client asking about the whole user table
+
+    const snapshot = {}
+    ids.forEach((id) => {
+      socket.join(presenceRoom(id))
+      snapshot[id] = isUserOnline(id)
+    })
+    respond(snapshot)
+  })
+
+  socket.on('presence:unwatch', (userIds) => {
+    const ids = (Array.isArray(userIds) ? userIds : [userIds]).filter(Boolean).map(String)
+    ids.forEach((id) => socket.leave(presenceRoom(id)))
   })
 
   socket.on('join-room',  (roomId) => { if (roomId) socket.join(roomId) })
@@ -298,6 +374,10 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     console.log('❌ Socket disconnected:', socket.id)
+    if (socket.data.presenceId) {
+      dropPresence(socket.data.presenceId)
+      socket.data.presenceId = null
+    }
   })
 })
 

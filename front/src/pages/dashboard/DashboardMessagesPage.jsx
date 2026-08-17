@@ -8,6 +8,7 @@ import {
 import { selectUser } from '@shared/store/slices/authSlice'
 import { chatService } from '@shared/services/api'
 import { getSocket } from '@shared/services/socket'
+import usePresence from '@shared/hooks/usePresence'
 import { getMediaUrl } from '@shared/utils/helpers'
 import { useCall } from '@shared/components/Call/CallContext'
 import toast from 'react-hot-toast'
@@ -510,6 +511,11 @@ export default function DashboardMessagesPage() {
     return { ...party, id: party._id || party.id }
   }, [activeChat, currentUser])
 
+  // Support threads have no real counterpart, so no presence is looked up for them.
+  const otherPartyId = activeChat?.type === 'support' ? null : (otherParty?.id || null)
+  const presence = usePresence(otherPartyId ? [otherPartyId] : [])
+  const otherOnline = Boolean(otherPartyId && presence[otherPartyId])
+
   const grouped = useMemo(() => groupByDate(messages), [messages])
 
   // ── Open thread ──────────────────────────────────────────────────────────────
@@ -636,14 +642,16 @@ export default function DashboardMessagesPage() {
                   <ArrowLeft className="h-5 w-5" />
                 </button>
 
-                <Avatar src={otherParty?.avatar} name={otherParty?.name} size={44} online />
+                <Avatar src={otherParty?.avatar} name={otherParty?.name} size={44} online={otherOnline} />
 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-gray-900 truncate">{otherParty?.name || 'User'}</p>
-                  <p className="text-xs text-green-500 font-medium flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-green-500 inline-block" />
-                    Active Now
-                  </p>
+                  {otherPartyId ? (
+                    <p className={`text-xs font-medium flex items-center gap-1 ${otherOnline ? 'text-green-500' : 'text-gray-400'}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full inline-block ${otherOnline ? 'bg-green-500' : 'bg-gray-300'}`} />
+                      {otherOnline ? 'Active Now' : 'Offline'}
+                    </p>
+                  ) : null}
                 </div>
 
                 <div className="flex items-center gap-3">

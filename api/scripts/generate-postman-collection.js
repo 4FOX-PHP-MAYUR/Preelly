@@ -124,6 +124,20 @@ const BODY_BY_ROUTE = {
     dob: '1990-01-15',
     address: { line1: 'Street 1', line2: '', postalCode: '00000', country: 'AE' },
   },
+  // Push notifications. deviceId identifies the handset, so a rotated FCM token
+  // replaces the old one for that device instead of piling up dead tokens.
+  // platform accepts 'ios' or 'android' — mobile only, the web client does not
+  // register FCM tokens.
+  'POST /api/user/device-tokens': {
+    token: '{{fcmDeviceToken}}',
+    platform: 'ios',
+    deviceId: '{{deviceId}}',
+  },
+  // Both fields optional — omit them to get the default test title/body.
+  'POST /api/user/device-tokens/test': {
+    title: 'Test notification',
+    body: 'This is a test push from Preelly',
+  },
   'POST /api/chats': { productId: '{{productId}}', sellerId: '{{sellerId}}' },
   'POST /api/chats/support': { type: 'support' },
   'POST /api/chats/:id/messages': { text: 'Hello, is this still available?' },
@@ -438,6 +452,7 @@ const PATH_PARAM_DEFAULTS = {
   messageId: '507f1f77bcf86cd799439017',
   commentId: '507f1f77bcf86cd799439018',
   filepath: 'images/example.jpg',
+  fcmDeviceToken: '{{fcmDeviceToken}}',
 }
 
 /** Postman v2.1 URL object — raw-only URLs often show blank in the Postman UI. */
@@ -717,6 +732,9 @@ const collection = {
     { key: 'messageId', value: '507f1f77bcf86cd799439017' },
     { key: 'commentId', value: '507f1f77bcf86cd799439018' },
     { key: 'deviceId', value: 'postman-device-001' },
+    // Paste the FCM registration token printed by the mobile app / web client.
+    // Distinct from `token` above, which is the JWT used for Authorization.
+    { key: 'fcmDeviceToken', value: '' },
     // Paste the Google ID token from Google Sign-In on the device here.
     { key: 'googleIdToken', value: '' },
     // Paste the Apple identity token / authorization code from the device here.

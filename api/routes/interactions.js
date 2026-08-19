@@ -11,7 +11,7 @@ const ProductView = require('../models/ProductView')
 const authMiddleware = require('../middleware/auth')
 const optionalAuth = require('../middleware/optionalAuth')
 const validateObjectId = require('../middleware/validateObjectId')
-const { sendPushToUser } = require('../services/firebaseAdmin')
+const { sendPushToUser, sendPreellyNotificationToUser } = require('../services/firebaseAdmin')
 const {
   getBlockedUserIds,
   getBlockState,
@@ -93,7 +93,16 @@ router.post('/products/:id/like', authMiddleware, validateObjectId('id'), async 
     if (nowLiked && product.seller && String(product.seller) !== String(userId)) {
       try {
         const title = 'New like'
-        const body = `${req.user.name || 'Someone'} liked your listing`
+        // Naming the listing makes the notification actionable for a seller with
+        // several active ads. Trimmed so the combined body stays inside the
+        // Notification schema's 500-char limit even with a very long ad title.
+        const actorName = req.user.name || 'Someone'
+        const listingTitle = String(product.title || '').trim()
+        const shortTitle = listingTitle.length > 60 ? `${listingTitle.slice(0, 57)}...` : listingTitle
+        const body = shortTitle
+          ? `${actorName} liked your listing "${shortTitle}"`
+          : `${actorName} liked your listing`
+
         const notif = await Notification.create({
           user: product.seller,
           actor: userId,
@@ -102,11 +111,15 @@ router.post('/products/:id/like', authMiddleware, validateObjectId('id'), async 
           tab: 'selling',
           title,
           body,
-          data: { productId: String(product._id) },
+          data: { productId: String(product._id), productTitle: listingTitle },
         })
-        sendPushToUser(product.seller, {
-          notification: { title, body },
-          data: { type: 'like', notificationId: notif._id, productId: product._id, actorId: userId },
+        // Fire-and-forget: the like is already saved, and a push failure must not
+        // turn a successful like into an error response.
+        sendPreellyNotificationToUser(product.seller, title, body, {
+          type: 'like',
+          notificationId: notif._id,
+          productId: product._id,
+          actorId: userId,
         })
       } catch (notificationError) {
         console.error('Error creating like notification:', notificationError)

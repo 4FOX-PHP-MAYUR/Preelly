@@ -3,7 +3,7 @@ import { Search, User, Users, X, Check, Link as LinkIcon, MessageCircle, Send } 
 import toast from 'react-hot-toast'
 import { chatService, userService } from '@shared/services/api'
 import { getMediaUrl } from '@shared/utils/helpers'
-import { buildReelShareText, buildReelShareUrl, shareReelToInstagram } from '@shared/utils/reelShare'
+import { buildReelShareText, buildProductShareUrl, shareReelToInstagram } from '@shared/utils/reelShare'
 
 function ReelShareModal({ isOpen, onClose, product, userId, asPanel = false }) {
   const [loading, setLoading] = useState(false)
@@ -132,7 +132,7 @@ function ReelShareModal({ isOpen, onClose, product, userId, asPanel = false }) {
   }, [searchQuery])
 
   const selectedCount = selectedUserIds.size
-  const reelUrl = buildReelShareUrl(product?._id)
+  const reelUrl = buildProductShareUrl(product?._id)
   const shareText = buildReelShareText(product, message)
   const filteredUsers = useMemo(() => {
     const query = searchQuery.trim().toLowerCase()
@@ -183,7 +183,7 @@ function ReelShareModal({ isOpen, onClose, product, userId, asPanel = false }) {
   const handleCopyLink = async () => {
     try {
       await navigator.clipboard.writeText(reelUrl)
-      toast.success('Reel link copied')
+      toast.success('Link copied')
     } catch (error) {
       toast.error('Unable to copy link')
     }

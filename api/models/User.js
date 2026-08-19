@@ -240,6 +240,16 @@ const userSchema = new mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // Latest FCM device token supplied by the mobile app at OTP login. Optional:
+    // web logins never send one, and an absent token must leave any stored value
+    // untouched. Indexed because login has to detach the token from whichever
+    // account previously held it (same handset, different account).
+    deviceToken: {
+      type: String,
+      default: null,
+      trim: true,
+      index: true,
+    },
     // Last watched reel index per feed (e.g. { main: 3, "categoryId_subId": 1 }) for resume on revisit
     reelsProgress: {
       type: Object,

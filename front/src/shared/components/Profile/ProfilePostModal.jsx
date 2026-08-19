@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useSelector } from 'react-redux'
 import toast from 'react-hot-toast'
+import { buildProductShareUrl } from '../../utils/reelShare'
 import {
   Bookmark,
   Heart,
@@ -165,7 +166,7 @@ export default function ProfilePostModal({
   }
 
   const handleShare = async () => {
-    const url = `${window.location.origin}/products/${product._id}`
+    const url = buildProductShareUrl(product._id)
     try {
       if (navigator.share) {
         await navigator.share({ title: product.title, url })

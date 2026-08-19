@@ -1,4 +1,5 @@
 import { getMediaUrl } from '@shared/utils/helpers'
+import { absoluteUrl } from '@shared/utils/constants'
 
 export function formatSavedDate(value) {
   if (!value) return '—'
@@ -52,11 +53,8 @@ export function getNotificationsEnabled(item) {
 }
 
 export function buildShareUrl(item) {
-  if (typeof window === 'undefined') return item?.searchUrl || '/search'
   const path = item?.searchUrl || `/search?q=${encodeURIComponent(item?.query || item?.keyword || '')}`
-  try {
-    return new URL(path, window.location.origin).toString()
-  } catch {
-    return `${window.location.origin}${path.startsWith('/') ? path : `/${path}`}`
-  }
+  // Routed through absoluteUrl so a shared search honours VITE_SITE_URL, like
+  // every other outbound link, instead of leaking the current browser origin.
+  return absoluteUrl(path)
 }

@@ -150,6 +150,34 @@ const sendAuthSuccess = (res, user, message) => {
   })
 }
 
+/**
+ * Stores the mobile app's FCM token on the user that just passed OTP verification.
+ *
+ * No-ops when the client sent nothing, so a web login never clears an existing
+ * token. The target user is always the one resolved from the verified OTP —
+ * never an id taken from the request body — so a caller cannot write to another
+ * account. Uses updateOne rather than user.save() to avoid re-running the
+ * verification pre-save hook on an object the caller is about to serialize.
+ *
+ * Never throws: a push-registration problem must not fail an otherwise valid login.
+ */
+const persistDeviceToken = async (user, rawToken) => {
+  const token = typeof rawToken === 'string' ? rawToken.trim() : ''
+  if (!user?._id || !token) return
+
+  try {
+    // The same handset signing into a second account must stop receiving the
+    // first account's notifications, so detach the token wherever else it sits.
+    await User.updateMany(
+      { _id: { $ne: user._id }, deviceToken: token },
+      { $set: { deviceToken: null } }
+    )
+    await User.updateOne({ _id: user._id }, { $set: { deviceToken: token } })
+  } catch (error) {
+    console.error('Failed to persist device token:', error.message)
+  }
+}
+
 const generatePasswordResetToken = (userId) => {
   return jwt.sign(
     { userId, purpose: OTP_PURPOSES.PASSWORD_RESET },
@@ -801,6 +829,14 @@ router.post(
     body('email').optional().trim(),
     body('mode').optional().isIn(['login', 'signup']).withMessage('Invalid mode'),
     body('channel').optional().isIn(['email', 'whatsapp']).withMessage('Invalid channel'),
+    // Mobile-only. checkFalsy so a missing/empty/null value is skipped entirely
+    // rather than rejected — web clients send nothing here.
+    body('deviceToken')
+      .optional({ nullable: true, checkFalsy: true })
+      .isString()
+      .withMessage('Invalid device token')
+      .isLength({ max: 4096 })
+      .withMessage('Invalid device token'),
   ],
   async (req, res) => {
     try {
@@ -875,6 +911,7 @@ router.post(
           })
         }
 
+        await persistDeviceToken(user, req.body.deviceToken)
         return sendAuthSuccessWithPermissions(res, user, 'Login successful')
       }
 
@@ -940,6 +977,7 @@ router.post(
       }
 
       const message = isNewUser ? 'Account created successfully' : 'Login successful'
+      await persistDeviceToken(user, req.body.deviceToken)
       return sendAuthSuccessWithPermissions(res, user, message)
     } catch (error) {
       console.error('Verify-otp error:', error)

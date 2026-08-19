@@ -1,8 +1,8 @@
 import { openInstagramDirectInbox } from './reelShare'
+import { absoluteUrl } from './constants'
 
 export function buildProfileShareUrl(userId) {
-  if (typeof window === 'undefined') return `/user/${userId}`
-  return `${window.location.origin}/user/${userId}`
+  return absoluteUrl(`user/${userId}`)
 }
 
 export function buildProfileShareText(displayName) {

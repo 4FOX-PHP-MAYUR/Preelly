@@ -83,6 +83,13 @@ const ROUTES = [
   ['post', '/api/user/profile', 'User', 'Update profile (multipart: profilePic)', true],
   ['put', '/api/user/profile', 'User', 'Update profile fields', true],
 
+  // Push notifications (FCM device tokens)
+  ['post', '/api/user/device-tokens', 'User', 'Register / refresh this device FCM token', true],
+  // Param is named fcmDeviceToken rather than token so docs/Postman never
+  // confuse this device token with the caller's JWT auth token.
+  ['delete', '/api/user/device-tokens/:fcmDeviceToken', 'User', 'Unregister a device FCM token', true],
+  ['post', '/api/user/device-tokens/test', 'User', 'Send a test push to all of my devices', true],
+
   // Interactions
   ['post', '/api/products/:id/like', 'Interactions', 'Like / unlike product', true],
   ['post', '/api/products/:id/view', 'Interactions', 'Record product view', false],

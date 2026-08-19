@@ -932,16 +932,31 @@ router.get('/', async (req, res) => {
     // 🚀 FIXED USER FILTER ISSUE
     // ONLY apply userId filter when explicitly requested
     // -----------------------------------------------------
+    // Explicit status filter, validated against the schema enum so a stray value
+    // cannot silently match nothing. It may only ever NARROW what a caller is
+    // already entitled to see: the public gate below still forces 'active' for
+    // non-admins, so ?status=pending can never widen access.
+    const PRODUCT_STATUSES = ['pending', 'active', 'rejected', 'sold', 'inactive', 'paused']
+    const rawStatus = String(req.query.status || '').trim().toLowerCase()
+    const requestedStatus = PRODUCT_STATUSES.includes(rawStatus) ? rawStatus : null
+
     if (userId && userId.trim() !== '') {
       // "My Listings" → show only this user's products
       query.seller = userId
 
       // Let users + admins see all statuses for their own listings
+      if (requestedStatus) query.status = requestedStatus
     } else {
       // PUBLIC FEED (REELS FEED)
       // ALWAYS show active products only
       if (!isAdmin) {
         query.status = 'active'
+      } else if (requestedStatus) {
+        // Admins are exempt from the gate above so they can moderate every
+        // status. A public-facing rail still has to look the same to them as it
+        // does to a visitor, so an explicit status is honoured here — this is
+        // what keeps Featured Listings active-only for admin accounts.
+        query.status = requestedStatus
       }
     }
     // -----------------------------------------------------

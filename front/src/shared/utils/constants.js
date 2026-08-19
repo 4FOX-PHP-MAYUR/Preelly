@@ -52,6 +52,30 @@ export const SITE_URL =
 export const assetUrl = (path) =>
   `${String(SITE_URL).replace(/\/+$/, '')}/${String(path || '').replace(/^\/+/, '')}`
 
+/**
+ * App path → fully-qualified URL, for links that leave the app (share sheets,
+ * WhatsApp, email, chat messages). Those must be absolute or the recipient gets
+ * a dead relative path.
+ *
+ * VITE_SITE_URL wins when it is a full origin, so a link shared from a staging
+ * box or from behind a proxy still points at the public site. Otherwise it falls
+ * back to the current origin combined with this app's base path — SITE_URL
+ * defaults to Vite's BASE_URL, which is '/' here and '/admin/' in the admin app,
+ * and is a relative path rather than something shareable on its own.
+ */
+export const absoluteUrl = (path) => {
+  const cleanPath = String(path || '').replace(/^\/+/, '')
+  const base = String(SITE_URL || '/')
+
+  if (/^https?:\/\//i.test(base)) {
+    return `${base.replace(/\/+$/, '')}/${cleanPath}`
+  }
+
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const basePath = base.replace(/\/+$/, '') // '' for the front app, '/admin' for admin
+  return `${origin}${basePath}/${cleanPath}`
+}
+
 // Mileage slider scale for the Kilometres filter, on both the listing page and
 // advance search. Fixed rather than derived from the listing facets so the scale
 // does not shift as inventory changes: 0 – 7 lakh km. A range left untouched is

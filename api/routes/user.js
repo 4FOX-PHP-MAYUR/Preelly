@@ -25,7 +25,7 @@ const validateObjectId = require('../middleware/validateObjectId')
 const optionalAuth = require('../middleware/optionalAuth')
 const { getBlockedUserIds, isBlockedBetween } = require('../core/services/blockService')
 const DeviceToken = require('../models/DeviceToken')
-const { maskToken, sendPushToUser } = require('../services/firebaseAdmin')
+const { maskToken, sendPreellyNotificationToUser } = require('../services/firebaseAdmin')
 
 const CHANGE_EMAIL_PURPOSE = 'change_email'
 const CHANGE_PHONE_PURPOSE = 'change_phone'
@@ -2098,6 +2098,22 @@ router.post(
         { upsert: true, new: true, setDefaultsOnInsert: true }
       )
 
+      // FCM rotates a handset's token periodically. Without this, the previous
+      // token for the same physical device lingers and every push is sent to a
+      // dead address until Firebase eventually reports it unregistered.
+      // Scoped to this user + this deviceId, so the user's OTHER devices — and
+      // other users sharing the handset — keep their own valid tokens.
+      const rotated = await DeviceToken.deleteMany({
+        userId: req.user._id,
+        deviceId,
+        token: { $ne: token },
+      })
+      if (rotated.deletedCount) {
+        console.log(
+          `[device-tokens] Cleared ${rotated.deletedCount} rotated token(s) for device ${deviceId} of user ${req.user._id}`
+        )
+      }
+
       console.log(`[device-tokens] Registered token ${maskToken(token)} for user ${req.user._id}`)
       res.json({ message: 'Device token registered' })
     } catch (error) {
@@ -2136,23 +2152,18 @@ router.post(
         return res.status(400).json({ message: errors.array()[0].msg })
       }
 
-      const registeredCount = await DeviceToken.countDocuments({ userId: req.user._id })
-
       const title = req.body.title || 'Test notification'
       const body = req.body.body || 'This is a test push from Preelly'
 
-      const result = await sendPushToUser(req.user._id, {
-        notification: { title, body },
-        data: {
-          type: 'system',
-          notificationId: `test-${Date.now()}`,
-        },
+      const result = await sendPreellyNotificationToUser(req.user._id, title, body, {
+        type: 'system',
+        notificationId: `test-${Date.now()}`,
       })
 
       if (!result.configured) {
         return res.status(503).json({ message: 'Firebase Admin is not configured on this server', result })
       }
-      if (registeredCount === 0) {
+      if (result.reason === 'no-device-tokens') {
         return res.json({ message: 'No device tokens registered for this user', result })
       }
 

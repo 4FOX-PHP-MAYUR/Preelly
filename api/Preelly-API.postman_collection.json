@@ -66,6 +66,10 @@
       "value": "postman-device-001"
     },
     {
+      "key": "fcmDeviceToken",
+      "value": ""
+    },
+    {
       "key": "googleIdToken",
       "value": ""
     },
@@ -1915,6 +1919,118 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"Jane Doe\",\n  \"email\": \"jane@example.com\",\n  \"phone\": \"+971500000000\",\n  \"avatar\": null,\n  \"displayName\": \"Jane\",\n  \"gender\": \"female\",\n  \"dob\": \"1990-01-15\",\n  \"address\": {\n    \"line1\": \"Street 1\",\n    \"line2\": \"\",\n    \"postalCode\": \"00000\",\n    \"country\": \"AE\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "POST /api/user/device-tokens",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/device-tokens",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "device-tokens"
+              ]
+            },
+            "description": "Register / refresh this device FCM token",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"{{fcmDeviceToken}}\",\n  \"platform\": \"ios\",\n  \"deviceId\": \"{{deviceId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "DELETE /api/user/device-tokens/:fcmDeviceToken",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/device-tokens/{{fcmDeviceToken}}",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "device-tokens",
+                ":fcmDeviceToken"
+              ],
+              "variable": [
+                {
+                  "key": "fcmDeviceToken",
+                  "value": "{{fcmDeviceToken}}"
+                }
+              ]
+            },
+            "description": "Unregister a device FCM token"
+          }
+        },
+        {
+          "name": "POST /api/user/device-tokens/test",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/user/device-tokens/test",
+              "protocol": "{{protocol}}",
+              "host": [
+                "{{host}}"
+              ],
+              "port": "{{port}}",
+              "path": [
+                "api",
+                "user",
+                "device-tokens",
+                "test"
+              ]
+            },
+            "description": "Send a test push to all of my devices",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Test notification\",\n  \"body\": \"This is a test push from Preelly\"\n}",
               "options": {
                 "raw": {
                   "language": "json"

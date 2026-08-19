@@ -1,9 +1,25 @@
 import { getMediaUrl } from './helpers'
+import { absoluteUrl } from './constants'
 
-export function buildReelShareUrl(productId, origin = typeof window !== 'undefined' ? window.location.origin : '') {
-  if (!productId) return origin
-  return `${origin}/reels?reel=${encodeURIComponent(String(productId))}`
+/**
+ * Canonical public link for a product — the product detail page.
+ *
+ * Previously this pointed at `/reels?reel=<id>`, so every share (copy link,
+ * WhatsApp, X, Facebook, native sheet) sent people to the reels feed rather than
+ * to the listing they were looking at. The detail page is the right destination:
+ * it works for listings with no video, and it is what a recipient expects from a
+ * shared listing.
+ *
+ * `/reels?reel=<id>` still resolves as a deep link, so links already shared
+ * remain valid — this only changes what new shares produce.
+ */
+export function buildProductShareUrl(productId) {
+  if (!productId) return absoluteUrl('')
+  return absoluteUrl(`products/${encodeURIComponent(String(productId))}`)
 }
+
+/** @deprecated Kept so any missed caller still resolves; use buildProductShareUrl. */
+export const buildReelShareUrl = buildProductShareUrl
 
 export function formatReelPrice(product) {
   if (product?.price == null) return ''
@@ -22,14 +38,14 @@ export function formatReelPrice(product) {
   }
 }
 
-export function buildReelShareText(product, message = '', origin) {
-  const title = product?.title || 'this reel'
+export function buildReelShareText(product, message = '') {
+  const title = product?.title || 'this listing'
   const price = formatReelPrice(product)
-  const reelUrl = buildReelShareUrl(product?._id, origin)
+  const shareUrl = buildProductShareUrl(product?._id)
   const lines = [
     message.trim() || `Check out ${title} on Preelly`,
     price,
-    reelUrl,
+    shareUrl,
   ].filter(Boolean)
   return lines.join('\n')
 }
@@ -93,8 +109,7 @@ async function tryNativeVideoShare(product, shareText) {
  * otherwise copy link + open Instagram DMs directly.
  */
 export async function shareReelToInstagram({ product, message = '' }) {
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const shareText = buildReelShareText(product, message, origin)
+  const shareText = buildReelShareText(product, message)
 
   const sharedNatively = await tryNativeVideoShare(product, shareText)
   if (sharedNatively) {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useDispatch, useSelector } from 'react-redux'
 import toast from 'react-hot-toast'
@@ -25,6 +25,16 @@ import SavedCard from '../../components/Profile/SavedCard'
 import NationalitySelect from '../../components/Profile/NationalitySelect'
 import BankAccountModal from '../../components/Profile/BankAccountModal'
 import SavedCardModal from '../../components/Profile/SavedCardModal'
+
+/**
+ * Addresses, bank accounts and saved cards are soft-deleted server-side: the row
+ * survives (orders, payouts and transactions still point at it) and is flagged
+ * `isDeleted`. The API already filters them out — this is the display-side guard
+ * so a flagged record can never reach a card, whatever a response contains.
+ */
+function liveOnly(list) {
+  return Array.isArray(list) ? list.filter((item) => item?.isDeleted !== true) : []
+}
 
 function splitName(fullName = '') {
   const parts = String(fullName).trim().split(/\s+/).filter(Boolean)
@@ -99,20 +109,38 @@ export default function DashboardProfilePage() {
     setCustomGender(currentUser?.genderCustom || '')
   }, [currentUser])
 
+  const loadLocations = useCallback(
+    () =>
+      userService
+        .getLocations()
+        .then((res) => setLocations(liveOnly(res?.data?.locations)))
+        .catch(() => {}),
+    []
+  )
+
+  const loadBankAccounts = useCallback(
+    () =>
+      userService
+        .getBankAccounts()
+        .then((res) => setBankAccounts(liveOnly(res?.data?.bankAccounts)))
+        .catch(() => {}),
+    []
+  )
+
+  const loadSavedCards = useCallback(
+    () =>
+      userService
+        .getSavedCards()
+        .then((res) => setSavedCards(liveOnly(res?.data?.savedCards)))
+        .catch(() => {}),
+    []
+  )
+
   useEffect(() => {
-    userService
-      .getLocations()
-      .then((res) => setLocations(res?.data?.locations || []))
-      .catch(() => {})
-    userService
-      .getBankAccounts()
-      .then((res) => setBankAccounts(res?.data?.bankAccounts || []))
-      .catch(() => {})
-    userService
-      .getSavedCards()
-      .then((res) => setSavedCards(res?.data?.savedCards || []))
-      .catch(() => {})
-  }, [])
+    loadLocations()
+    loadBankAccounts()
+    loadSavedCards()
+  }, [loadLocations, loadBankAccounts, loadSavedCards])
 
   useEffect(() => {
     const hash = location.hash?.replace('#', '')
@@ -208,6 +236,8 @@ export default function DashboardProfilePage() {
       await userService.deleteLocation(loc._id)
       setLocations((prev) => prev.filter((l) => l._id !== loc._id))
       toast.success('Address deleted')
+      // Re-read so the list matches what the server now considers live.
+      await loadLocations()
     } catch {
       toast.error('Failed to delete address')
     }
@@ -261,6 +291,9 @@ export default function DashboardProfilePage() {
       await userService.deleteBankAccount(account._id)
       setBankAccounts((prev) => prev.filter((a) => a._id !== account._id))
       toast.success('Bank account deleted')
+      // Deleting the primary promotes the next account server-side — re-read so
+      // the new primary shows without a page refresh.
+      await loadBankAccounts()
     } catch {
       toast.error('Failed to delete bank account')
     }
@@ -310,6 +343,9 @@ export default function DashboardProfilePage() {
       await userService.deleteSavedCard(card._id)
       setSavedCards((prev) => prev.filter((c) => c._id !== card._id))
       toast.success('Card deleted')
+      // Deleting the primary promotes the next card server-side — re-read so the
+      // new primary shows without a page refresh.
+      await loadSavedCards()
     } catch {
       toast.error('Failed to delete card')
     }

@@ -3,8 +3,13 @@ import toast from 'react-hot-toast'
 import ModalDialog from '../ui/ModalDialog'
 import ToggleSwitch from './ToggleSwitch'
 
+/** Card numbers are 16 digits here — the input stops accepting them past that. */
+const CARD_DIGITS = 16
+/** 16 digits rendered in groups of four: "4111 1111 1111 1111". */
+const CARD_INPUT_MAX_LENGTH = CARD_DIGITS + Math.floor((CARD_DIGITS - 1) / 4)
+
 function formatCardInput(value) {
-  const digits = String(value || '').replace(/\D/g, '').slice(0, 19)
+  const digits = String(value || '').replace(/\D/g, '').slice(0, CARD_DIGITS)
   return digits.replace(/(\d{4})(?=\d)/g, '$1 ').trim()
 }
 
@@ -56,14 +61,26 @@ export default function SavedCardModal({ onClose, onSave, initialData }) {
   const digits = cardNumber.replace(/\D/g, '')
   const brand = useMemo(() => detectBrand(digits), [digits])
 
+  /**
+   * Errors are computed on save, so a message left over from an earlier attempt
+   * would otherwise keep claiming a field is invalid after it has been fixed.
+   * Clearing on edit means the message only ever describes the current input.
+   */
+  const clearError = (key) =>
+    setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev))
+
   const validate = () => {
     const next = {}
-    if (!isEditing) {
-      if (digits.length < 12 || digits.length > 19 || !isValidLuhn(digits)) {
-        next.cardNumber = 'Enter a valid card number'
-      }
-    } else if (digits && (digits.length < 12 || digits.length > 19 || !isValidLuhn(digits))) {
-      next.cardNumber = 'Enter a valid card number'
+    const cardNumberError =
+      digits.length !== CARD_DIGITS
+        ? `Enter all ${CARD_DIGITS} digits of the card number`
+        : !isValidLuhn(digits)
+          ? 'Enter a valid card number'
+          : null
+
+    // On edit the number is optional — it is only re-checked when replacing it.
+    if (cardNumberError && (!isEditing || digits)) {
+      next.cardNumber = cardNumberError
     }
 
     if (!/^\d{2}\/\d{2}$/.test(expiry)) {
@@ -75,9 +92,11 @@ export default function SavedCardModal({ onClose, onSave, initialData }) {
       if (mm < 1 || mm > 12 || exp <= now) next.expiry = 'Card is expired or invalid'
     }
 
-    if (!isEditing || cvv) {
+    // CVV is optional (it is never stored or sent to the API), so an empty field is
+    // fine — only check the length when the user actually typed one.
+    if (cvv) {
       const amex = brand === 'American Express' || /^3[47]/.test(digits)
-      if (!/^\d{3,4}$/.test(cvv) || (amex ? cvv.length !== 4 : cvv.length !== 3)) {
+      if (amex ? cvv.length !== 4 : cvv.length !== 3) {
         next.cvv = amex ? 'Enter 4-digit CVV' : 'Enter 3-digit CVV'
       }
     }
@@ -135,11 +154,15 @@ export default function SavedCardModal({ onClose, onSave, initialData }) {
         <div>
           <input
             value={cardNumber}
-            onChange={(e) => setCardNumber(formatCardInput(e.target.value))}
+            onChange={(e) => {
+              setCardNumber(formatCardInput(e.target.value))
+              clearError('cardNumber')
+            }}
             placeholder="Card No."
             inputMode="numeric"
             autoComplete="cc-number"
             aria-label="Card number"
+            maxLength={CARD_INPUT_MAX_LENGTH}
             className={fieldClass}
           />
           <div className="mt-1 flex items-center justify-between">
@@ -155,7 +178,10 @@ export default function SavedCardModal({ onClose, onSave, initialData }) {
           <div>
             <input
               value={expiry}
-              onChange={(e) => setExpiry(formatExpiryInput(e.target.value))}
+              onChange={(e) => {
+                setExpiry(formatExpiryInput(e.target.value))
+                clearError('expiry')
+              }}
               placeholder="Valid Through (MM/YY)"
               inputMode="numeric"
               autoComplete="cc-exp"
@@ -167,7 +193,10 @@ export default function SavedCardModal({ onClose, onSave, initialData }) {
           <div>
             <input
               value={cvv}
-              onChange={(e) => setCvv(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              onChange={(e) => {
+                setCvv(e.target.value.replace(/\D/g, '').slice(0, 4))
+                clearError('cvv')
+              }}
               placeholder="CVV"
               inputMode="numeric"
               autoComplete="cc-csc"
@@ -181,7 +210,10 @@ export default function SavedCardModal({ onClose, onSave, initialData }) {
         <div>
           <input
             value={holderName}
-            onChange={(e) => setHolderName(e.target.value)}
+            onChange={(e) => {
+              setHolderName(e.target.value)
+              clearError('holderName')
+            }}
             placeholder="Name on card"
             autoComplete="cc-name"
             aria-label="Name on card"

@@ -38,6 +38,7 @@ const AVAILABLE_MODULES = [
   'Buyer Coupons',
   'Transactions',
   'Listings',
+  'Product Drafts',
   'Cart',
   'Users',
   'Contacts',
@@ -69,6 +70,8 @@ const MODULE_MAP = {
   products: 'Listings',
   listings: 'Listings',
   sold: 'Listings',
+  'product-drafts': 'Product Drafts',
+  drafts: 'Product Drafts',
   cart: 'Cart',
   users: 'Users',
   'identity-verification': 'Users',
@@ -96,6 +99,9 @@ const SUPER_ADMIN_ROLE_NAME = 'Super Admin'
 const ROUTE_PERMISSION_RULES = [
   // Dashboard / stats
   { pattern: /^\/stats/, GET: ['Dashboard', 'can_view'] },
+
+  // Product Drafts — before /products so the two never share a rule
+  { pattern: /^\/product-drafts/, GET: ['Product Drafts', 'can_view'], POST: ['Product Drafts', 'can_create'], PATCH: ['Product Drafts', 'can_edit'], PUT: ['Product Drafts', 'can_edit'], DELETE: ['Product Drafts', 'can_delete'] },
 
   // Products / listings
   { pattern: /^\/products/, GET: ['Listings', 'can_view'], PUT: ['Listings', 'can_edit'], PATCH: ['Listings', 'can_edit'], POST: ['Listings', 'can_create'], DELETE: ['Listings', 'can_delete'] },

@@ -41,11 +41,11 @@ export default function BankCard({
         </div>
       </div>
 
-      {/* Body: 2-col grid — Account No | SWIFT, Account No(IBAN) | Branch */}
+      {/* Body: 2-col grid — Account No | SWIFT, IBAN | Branch */}
       <div className="mt-5 grid grid-cols-1 gap-x-12 gap-y-5 sm:grid-cols-2">
         <DetailField label="Account No." value={account?.accountNumber} />
         <DetailField label="SWIFT/BIC Code" value={account?.swift} />
-        <DetailField label="Account No." value={account?.iban} />
+        <DetailField label="IBAN" value={account?.iban} />
         <DetailField label="Branch Name" value={account?.branchName} />
       </div>
 

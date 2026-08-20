@@ -50,6 +50,15 @@ export function toServerDraftPayload(localDraft = {}) {
   }
 }
 
+function extractDraftId(res) {
+  return res?.data?.draftId || res?.data?.data?._id || res?.data?._id || null
+}
+
+/** The cached draftId points at a draft that is no longer live (published/discarded/deleted). */
+function isStaleDraftId(err) {
+  return err?.response?.status === 404
+}
+
 /**
  * Save locally (IndexedDB) and upsert productDraft on the server.
  * Returns the server draftId (or previous id on failure).
@@ -60,18 +69,37 @@ export async function persistPostAdDraft({ userId, draftId, localDraft }) {
   const withId = { ...localDraft, draftId: draftId || localDraft.draftId || null }
   await savePostAdDraft(userId, withId)
 
+  const payload = toServerDraftPayload(withId)
+
   try {
-    const payload = toServerDraftPayload(withId)
     const res = await productDraftService.upsertDraft({
       draftId: withId.draftId || null,
       ...payload,
     })
-    const nextId = res?.data?.draftId || res?.data?.data?._id || res?.data?._id || withId.draftId
+    const nextId = extractDraftId(res) || withId.draftId
     if (nextId && String(nextId) !== String(withId.draftId || '')) {
       await setPostAdDraftId(userId, nextId)
     }
     return nextId || null
   } catch (err) {
+    // A stale cached id must be dropped, not kept: returning it would make every
+    // later autosave retry the same dead draft ("Draft not found") forever.
+    if (withId.draftId && isStaleDraftId(err)) {
+      await setPostAdDraftId(userId, null)
+      try {
+        const res = await productDraftService.upsertDraft({ draftId: null, ...payload })
+        const nextId = extractDraftId(res)
+        if (nextId) await setPostAdDraftId(userId, nextId)
+        return nextId
+      } catch (retryErr) {
+        console.error(
+          '[persistPostAdDraft] retry after stale draftId failed:',
+          retryErr?.message || retryErr
+        )
+        return null
+      }
+    }
+
     console.error('[persistPostAdDraft] server sync failed:', err?.message || err)
     return withId.draftId || null
   }

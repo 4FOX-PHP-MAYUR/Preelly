@@ -136,8 +136,14 @@ function buildMergedPatch(existingDoc, payload = {}) {
 /**
  * Create or update the user's single live draft.
  * Prefer updating by draftId when provided; otherwise upsert the active draft.
+ *
+ * `strict` (PUT /:id) 404s when the id doesn't resolve to a live draft. The
+ * default (POST upsert) instead falls back to the user's live draft — or creates
+ * a fresh one — because clients cache the draftId locally (IndexedDB) and that
+ * id goes stale as soon as the draft is published, discarded or deleted. Hard
+ * 404ing there left the wizard permanently unable to autosave.
  */
-async function upsertDraft({ userId, draftId, payload }) {
+async function upsertDraft({ userId, draftId, payload, strict = false }) {
   if (!userId) {
     const err = new Error('userId is required')
     err.status = 400
@@ -148,13 +154,17 @@ async function upsertDraft({ userId, draftId, payload }) {
 
   if (draftId) {
     draft = await ProductDraft.findOne({ _id: draftId, userId, status: 'draft' })
-    if (!draft) {
+    if (!draft && strict) {
       const err = new Error('Draft not found')
       err.status = 404
       throw err
     }
+    if (!draft) {
+      // Stale id — resume the current live draft if there is one.
+      draft = await ProductDraft.findOne({ userId, status: 'draft' }).sort({ updatedAt: -1 })
+    }
   } else {
-    draft = await ProductDraft.findOne({ userId, status: 'draft' })
+    draft = await ProductDraft.findOne({ userId, status: 'draft' }).sort({ updatedAt: -1 })
   }
 
   const patch = buildMergedPatch(draft, payload)

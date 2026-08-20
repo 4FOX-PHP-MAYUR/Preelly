@@ -48,6 +48,7 @@ router.put('/:id', authMiddleware, validateObjectId('id'), async (req, res) => {
       userId: req.user._id,
       draftId: req.params.id,
       payload: req.body || {},
+      strict: true,
     })
 
     return res.json({

@@ -13,10 +13,16 @@ const SavedCardSchema = new Schema(
     holderName: { type: String, default: '', trim: true, maxlength: 120 },
     nickname: { type: String, default: '', trim: true, maxlength: 80 },
     isPrimary: { type: Boolean, default: false },
+
+    // Soft delete: rows are retained (past transactions reference them) and simply
+    // stop being returned. Every read path filters on `isDeleted`.
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
   },
   { timestamps: true }
 )
 
+SavedCardSchema.index({ userId: 1, isDeleted: 1, isPrimary: -1, createdAt: -1 })
 SavedCardSchema.index({ userId: 1, isPrimary: 1 })
 SavedCardSchema.index({ userId: 1, createdAt: -1 })
 

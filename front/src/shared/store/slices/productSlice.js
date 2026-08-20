@@ -32,6 +32,8 @@ export const fetchProducts = createAsyncThunk(
       fuelType,
       filterIds,
       sortBy,
+      isFeature,
+      status,
     },
     { rejectWithValue }
   ) => {
@@ -68,6 +70,13 @@ export const fetchProducts = createAsyncThunk(
       if (fuelType) params.fuelType = fuelType
       if (filterIds) params.filterIds = filterIds
       if (sortBy) params.sortBy = sortBy
+      // Featured Listings (/featured) relies on both of these; the params list here
+      // is a whitelist, so anything missing is silently dropped and the page falls
+      // back to showing every listing.
+      if (isFeature !== undefined && isFeature !== null && isFeature !== '') {
+        params.isFeature = isFeature
+      }
+      if (status) params.status = status
       const response = await productService.getProducts(params)
       return response.data
     } catch (error) {

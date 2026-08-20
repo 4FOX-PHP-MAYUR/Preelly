@@ -25,6 +25,7 @@ import {
   Quote,
   Files,
   ShoppingCart,
+  FileEdit,
 } from 'lucide-react'
 
 // App routes are root-relative. Nginx + Vite base=/admin/ mount the app under /admin.
@@ -74,6 +75,7 @@ export const ADMIN_MENU_GROUPS = [
           { key: 'products-sold', label: 'Sold', to: '/products/sold' },
         ],
       },
+      { key: 'product-drafts', label: 'Product Drafts', to: '/product-drafts', icon: FileEdit },
       {
         key: 'cart',
         label: 'Cart',
@@ -137,6 +139,7 @@ export const MENU_PERMISSION_MAP = {
   'products-pending': 'Listings',
   'products-approved': 'Listings',
   'products-sold': 'Listings',
+  'product-drafts': 'Product Drafts',
   cart: 'Cart',
   'cart-all': 'Cart',
   'cart-pending': 'Cart',
@@ -169,6 +172,7 @@ export const ADMIN_ROUTE_META = {
   '/products/pending': { title: 'Pending Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'Pending' }] },
   '/products/approved': { title: 'Approved Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'Approved' }] },
   '/products/sold': { title: 'Sold Products', breadcrumbs: [{ label: 'Marketplace', to: '/products' }, { label: 'Products', to: '/products' }, { label: 'Sold' }] },
+  '/product-drafts': { title: 'Product Drafts', breadcrumbs: [{ label: 'Marketplace', to: '/product-drafts' }, { label: 'Product Drafts' }] },
   '/cart': { title: 'All Cart Items', breadcrumbs: [{ label: 'Marketplace', to: '/cart' }, { label: 'Cart', to: '/cart' }, { label: 'All Cart Items' }] },
   '/cart/pending': { title: 'Pending Cart Items', breadcrumbs: [{ label: 'Marketplace', to: '/cart' }, { label: 'Cart', to: '/cart' }, { label: 'Pending' }] },
   '/cart/purchased': { title: 'Purchased Cart Items', breadcrumbs: [{ label: 'Marketplace', to: '/cart' }, { label: 'Cart', to: '/cart' }, { label: 'Purchased' }] },
@@ -206,6 +210,7 @@ export const ADMIN_MODULE_FORM_META = {
   coupons: { listPath: '/coupons', section: 'Marketplace', label: 'Coupons', singular: 'Coupon' },
   'buyers-coupons': { listPath: '/buyers-coupons', section: 'Marketplace', label: 'Buyer Coupons', singular: 'Buyer Coupon' },
   transactions: { listPath: '/transactions', section: 'Marketplace', label: 'Transactions', singular: 'Transaction' },
+  'product-drafts': { listPath: '/product-drafts', section: 'Marketplace', label: 'Product Drafts', singular: 'Draft' },
   pages: { listPath: '/pages', section: 'Content Management', label: 'Pages', singular: 'Page' },
   users: { listPath: '/users', section: 'Users & Support', label: 'Users', singular: 'User' },
   roles: { listPath: '/roles', section: 'Admin Management', label: 'Admin Roles', singular: 'Role' },

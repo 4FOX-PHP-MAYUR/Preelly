@@ -672,6 +672,64 @@ router.get('/users', adminMiddleware, async (req, res) => {
 // @route   POST /api/admin/users
 // @desc    Create a new user (including admin users)
 // @access  Private (Admin only)
+const USER_GENDERS = ['male', 'female', 'other', 'prefer_not_to_say']
+
+/**
+ * Optional profile fields an admin may set alongside the account basics. Mirrors
+ * what the customer's own profile page can edit, so the admin form is not a
+ * strictly smaller view of the same record.
+ */
+function applyUserProfileFields(user, body = {}) {
+  if (body.displayName !== undefined) {
+    const displayName = String(body.displayName || '').trim()
+    if (displayName.length > 80) return 'Display name is too long'
+    user.displayName = displayName || null
+  }
+
+  if (body.gender !== undefined) {
+    const gender = String(body.gender || '').trim()
+    if (gender && !USER_GENDERS.includes(gender)) return 'Invalid gender value'
+    user.gender = gender || null
+    // A custom label only belongs to the "other" option.
+    if (gender !== 'other') user.genderCustom = null
+  }
+
+  if (body.genderCustom !== undefined) {
+    const custom = String(body.genderCustom || '').trim()
+    if (custom.length > 80) return 'Custom gender is too long'
+    const gender = body.gender !== undefined ? String(body.gender || '') : user.gender
+    user.genderCustom = gender === 'other' ? custom || null : null
+  }
+
+  if (body.dob !== undefined) {
+    if (!body.dob) {
+      user.dob = null
+    } else {
+      const dob = new Date(body.dob)
+      if (Number.isNaN(dob.getTime())) return 'Invalid date of birth'
+      if (dob > new Date()) return 'Date of birth cannot be in the future'
+      user.dob = dob
+    }
+  }
+
+  if (body.address !== undefined && body.address !== null) {
+    if (typeof body.address !== 'object' || Array.isArray(body.address)) {
+      return 'Invalid address'
+    }
+    const limits = { line1: 120, line2: 120, postalCode: 20, country: 80 }
+    const next = { ...(user.address ? user.address.toObject?.() || user.address : {}) }
+    for (const [key, max] of Object.entries(limits)) {
+      if (body.address[key] === undefined) continue
+      const value = String(body.address[key] || '').trim()
+      if (value.length > max) return `Address ${key} is too long`
+      next[key] = value || null
+    }
+    user.address = next
+  }
+
+  return null
+}
+
 router.post('/users', adminMiddleware, async (req, res) => {
   try {
     const { name, email, phone, password, role = 'user', status = 'active', adminRole } = req.body
@@ -714,6 +772,10 @@ router.post('/users', adminMiddleware, async (req, res) => {
       status,
       adminRole: adminRole || null,
     })
+
+    const profileError = applyUserProfileFields(user, req.body)
+    if (profileError) return res.status(400).json({ message: profileError })
+
     await user.save()
 
     const populated = await User.findById(user._id).populate('adminRole', 'role_name status')
@@ -831,7 +893,9 @@ router.get('/users/:id', adminMiddleware, async (req, res) => {
 })
 
 // @route   PATCH /api/admin/users/:id
-// @desc    Update a user's core profile fields (name/email/phone/role/status/password)
+// @desc    Update a user's account fields (name/email/phone/role/status/password)
+//          plus the optional profile fields handled by applyUserProfileFields
+//          (displayName/gender/genderCustom/dob/address)
 // @access  Private (Admin only)
 router.patch('/users/:id', adminMiddleware, async (req, res) => {
   try {
@@ -888,6 +952,9 @@ router.patch('/users/:id', adminMiddleware, async (req, res) => {
       }
       user.password = password
     }
+
+    const profileError = applyUserProfileFields(user, req.body)
+    if (profileError) return res.status(400).json({ message: profileError })
 
     await user.save()
 
@@ -5811,6 +5878,167 @@ router.put('/user-reports/:userId/action', adminMiddleware, async (req, res) => 
     })
   }
 })
+
+// ---------------------------------------------------------------------------
+// Product Drafts (admin management of the existing `productDraft` collection —
+// the seller's in-progress "Post Your Ad" wizard state). The seller-facing
+// routes in routes/productDrafts.js are untouched; these operate on the same
+// documents without changing their shape.
+// ---------------------------------------------------------------------------
+
+const adminProductDraftService = require('../core/services/adminProductDraftService')
+const productDraftValidator = require('../core/validators/productDraft.validator')
+const {
+  toAdminProductDraftDto,
+  toPaginatedAdminProductDraftsResponse,
+} = require('../dto/adminProductDraft.dto')
+
+// GET /api/admin/product-drafts - paginated list with search, filters and sorting
+router.get(
+  '/product-drafts',
+  adminMiddleware,
+  productDraftValidator.listQueryRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const {
+        page = 1,
+        limit = 20,
+        search,
+        status,
+        userId,
+        hasVideo,
+        step,
+        fromDate,
+        toDate,
+        sortBy = 'updatedAt',
+        sortDir = 'desc',
+      } = req.query
+
+      const result = await adminProductDraftService.listDrafts({
+        page: Number(page),
+        limit: Number(limit),
+        search,
+        status: status && status !== 'all' ? status : undefined,
+        userId,
+        hasVideo: hasVideo && hasVideo !== 'all' ? hasVideo : undefined,
+        step,
+        fromDate,
+        toDate,
+        sortBy,
+        sortDir,
+      })
+
+      res.json(toPaginatedAdminProductDraftsResponse(result))
+    } catch (error) {
+      console.error('Error fetching product drafts:', error)
+      res.status(error.statusCode || 500).json({
+        message: error.message || 'Error fetching product drafts',
+      })
+    }
+  }
+)
+
+// GET /api/admin/product-drafts/stats - status counts (declared before /:id)
+router.get('/product-drafts/stats', adminMiddleware, async (req, res) => {
+  try {
+    const counts = await adminProductDraftService.getDraftStatusCounts()
+    res.json(counts)
+  } catch (error) {
+    console.error('Error fetching product draft stats:', error)
+    res.status(error.statusCode || 500).json({
+      message: error.message || 'Error fetching product draft stats',
+    })
+  }
+})
+
+// GET /api/admin/product-drafts/:id - full record with resolved references
+router.get(
+  '/product-drafts/:id',
+  adminMiddleware,
+  productDraftValidator.mongoIdParamRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const { draft, categoryMap } = await adminProductDraftService.getDraftById(req.params.id)
+      res.json(toAdminProductDraftDto(draft, categoryMap))
+    } catch (error) {
+      console.error('Error fetching product draft:', error)
+      res.status(error.statusCode || 500).json({
+        message: error.message || 'Error fetching product draft',
+      })
+    }
+  }
+)
+
+// POST /api/admin/product-drafts - create a draft for a user
+router.post(
+  '/product-drafts',
+  adminMiddleware,
+  productDraftValidator.createDraftRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const { draft, categoryMap } = await adminProductDraftService.createDraft(req.body || {})
+      res.status(201).json(toAdminProductDraftDto(draft, categoryMap))
+    } catch (error) {
+      console.error('Error creating product draft:', error)
+      res.status(error.statusCode || 500).json({
+        message: error.message || 'Error creating product draft',
+      })
+    }
+  }
+)
+
+// PATCH /api/admin/product-drafts/:id - update in place (never creates a copy)
+router.patch(
+  '/product-drafts/:id',
+  adminMiddleware,
+  productDraftValidator.updateDraftRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const { draft, categoryMap } = await adminProductDraftService.updateDraft(
+        req.params.id,
+        req.body || {}
+      )
+      res.json(toAdminProductDraftDto(draft, categoryMap))
+    } catch (error) {
+      console.error('Error updating product draft:', error)
+      res.status(error.statusCode || 500).json({
+        message: error.message || 'Error updating product draft',
+      })
+    }
+  }
+)
+
+// DELETE /api/admin/product-drafts/:id - ?soft=true discards (status 'discarded',
+// the collection's own soft-delete state); otherwise removes the record.
+router.delete(
+  '/product-drafts/:id',
+  adminMiddleware,
+  productDraftValidator.deleteDraftRules,
+  validateRequest,
+  async (req, res) => {
+    try {
+      const soft = String(req.query.soft || '').toLowerCase() === 'true'
+      if (soft) {
+        const { draft, categoryMap } = await adminProductDraftService.discardDraft(req.params.id)
+        return res.json({
+          message: 'Draft discarded',
+          draft: toAdminProductDraftDto(draft, categoryMap),
+        })
+      }
+      await adminProductDraftService.deleteDraft(req.params.id)
+      return res.json({ message: 'Draft deleted' })
+    } catch (error) {
+      console.error('Error deleting product draft:', error)
+      return res.status(error.statusCode || 500).json({
+        message: error.message || 'Error deleting product draft',
+      })
+    }
+  }
+)
 
 module.exports = router
 

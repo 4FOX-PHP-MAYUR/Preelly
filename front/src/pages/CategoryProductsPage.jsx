@@ -8,6 +8,7 @@ import { selectIsAuthenticated } from '@shared/store/slices/authSlice'
 import { productService } from '@shared/services/api'
 import { categoryService } from '@shared/services/api'
 import { KMS_FILTER_RANGE } from '@shared/utils/constants'
+import { PUBLIC_LISTING_STATUS } from '@shared/utils/publicListings'
 import CategoryBrowseLayout from '@shared/components/CategoryBrowseLayout'
 import {
   matchesListingChip,
@@ -538,7 +539,13 @@ function CategoryProductsPage() {
       if (!rootCategoryId) return
       if (!append) dispatch(clearProducts())
 
-      const params = { page: pageNum, limit: 20, categoryId: rootCategoryId, sortBy }
+      const params = {
+        page: pageNum,
+        limit: 20,
+        categoryId: rootCategoryId,
+        sortBy,
+        status: PUBLIC_LISTING_STATUS,
+      }
       // Levels below the root (unlimited depth) are matched on product.categoryPath.
       if (deepCategoryPathIds.length) params.categoryPathIds = deepCategoryPathIds.join(',')
       if (subcategoryFilterId && subcategoryFilterId.trim()) params.subcategoryId = subcategoryFilterId.trim()

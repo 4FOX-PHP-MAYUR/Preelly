@@ -261,6 +261,15 @@ export const adminService = {
   getProductRejectionReasons: () => api.get('/admin/products/rejection-reasons'),
    setProductStatus: (productId, status) => api.put(`/admin/products/${productId}/status`, { status }),
   setProductFeatured: (productId, isFeature) => api.put(`/admin/products/${productId}/feature`, { isFeature }),
+  // Product Drafts admin endpoints (the `productDraft` collection — seller
+  // "Post Your Ad" wizard state). `soft: true` discards instead of removing.
+  getProductDrafts: (params) => api.get('/admin/product-drafts', { params }),
+  getProductDraftStats: () => api.get('/admin/product-drafts/stats'),
+  getProductDraftById: (id) => api.get(`/admin/product-drafts/${id}`),
+  createProductDraft: (data) => api.post('/admin/product-drafts', data),
+  updateProductDraft: (id, data) => api.patch(`/admin/product-drafts/${id}`, data),
+  deleteProductDraft: (id, { soft = false } = {}) =>
+    api.delete(`/admin/product-drafts/${id}`, { params: soft ? { soft: true } : undefined }),
   getStats: () => api.get('/admin/stats'),
   getUsers: (params) => api.get('/admin/users', { params }),
   getUserById: (id) => api.get(`/admin/users/${id}`),

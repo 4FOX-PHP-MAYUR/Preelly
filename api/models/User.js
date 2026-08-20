@@ -113,6 +113,10 @@ const userSchema = new mongoose.Schema(
           _id: false,
         },
         isDefault: { type: Boolean, default: false },
+        // Soft delete: the subdocument stays on the user (orders may reference the
+        // address it was delivered to) and is filtered out of every read.
+        isDeleted: { type: Boolean, default: false },
+        deletedAt: { type: Date, default: null },
       },
     ],
     genderCustom: {

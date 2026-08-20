@@ -6,6 +6,7 @@ import { Toaster } from 'react-hot-toast'
 import App from './App'
 import { ChatProvider } from '@shared/components/Chat/ChatContext'
 import { CallProvider } from '@shared/components/Call/CallContext'
+import { LoginPromptProvider } from '@shared/components/LoginPrompt/LoginPromptContext'
 import { store } from './store/store'
 import './index.css'
 
@@ -22,12 +23,21 @@ ReactDOM.createRoot(document.getElementById('root')).render(
           v7_relativeSplatPath: true,
         }}
       >
-        <ChatProvider>
-          <CallProvider>
-            <App />
-            <Toaster position="top-right" />
-          </CallProvider>
-        </ChatProvider>
+        {/*
+          Shared marketplace pages rendered inside the admin app (the user detail
+          view, product detail, chat) call useRequireAuth(), which throws outright
+          when this provider is missing — that crash renders as a blank page. It is
+          mounted for the same reason ChatProvider/CallProvider are: to satisfy
+          shared components, never to make an admin auth decision.
+        */}
+        <LoginPromptProvider>
+          <ChatProvider>
+            <CallProvider>
+              <App />
+              <Toaster position="top-right" />
+            </CallProvider>
+          </ChatProvider>
+        </LoginPromptProvider>
       </BrowserRouter>
     </Provider>
   </React.StrictMode>,

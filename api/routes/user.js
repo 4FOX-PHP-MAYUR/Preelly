@@ -1262,6 +1262,11 @@ router.get('/search', authMiddleware, async (req, res) => {
 
 // ─── Saved Locations ────────────────────────────────────────────────────────
 
+/** Saved locations are soft-deleted, so every read has to skip the deleted ones. */
+function isLiveLocation(loc) {
+  return Boolean(loc) && loc.isDeleted !== true
+}
+
 // @route   GET /api/user/locations
 // @desc    Get all saved locations for authenticated user
 // @access  Private
@@ -1269,7 +1274,7 @@ router.get('/locations', authMiddleware, async (req, res) => {
   try {
     const user = await User.findById(req.user._id).select('savedLocations').lean()
     if (!user) return res.status(404).json({ message: 'User not found' })
-    res.json({ locations: user.savedLocations || [] })
+    res.json({ locations: (user.savedLocations || []).filter(isLiveLocation) })
   } catch (error) {
     console.error('Error fetching locations:', error)
     res.status(500).json({ message: 'Error fetching locations' })
@@ -1328,7 +1333,7 @@ router.put('/locations/:locId', authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' })
 
     const loc = user.savedLocations?.id(req.params.locId)
-    if (!loc) return res.status(404).json({ message: 'Location not found' })
+    if (!isLiveLocation(loc)) return res.status(404).json({ message: 'Location not found' })
 
     // If setting as default, clear others
     if (isDefault) {
@@ -1358,7 +1363,7 @@ router.put('/locations/:locId', authMiddleware, async (req, res) => {
 })
 
 // @route   DELETE /api/user/locations/:locId
-// @desc    Delete a saved location
+// @desc    Soft-delete a saved location (kept on the user, hidden from reads)
 // @access  Private
 router.delete('/locations/:locId', authMiddleware, async (req, res) => {
   try {
@@ -1366,9 +1371,12 @@ router.delete('/locations/:locId', authMiddleware, async (req, res) => {
     if (!user) return res.status(404).json({ message: 'User not found' })
 
     const loc = user.savedLocations?.id(req.params.locId)
-    if (!loc) return res.status(404).json({ message: 'Location not found' })
+    if (!isLiveLocation(loc)) return res.status(404).json({ message: 'Location not found' })
 
-    loc.deleteOne()
+    loc.isDeleted = true
+    loc.deletedAt = new Date()
+    // A hidden address must not stay the default one.
+    loc.isDefault = false
     await user.save()
     res.json({ message: 'Location deleted' })
   } catch (error) {
@@ -1391,15 +1399,18 @@ function sanitizeBankPayload(body = {}) {
   }
 }
 
+/** Bank accounts are soft-deleted — every query is scoped to the live ones. */
+const LIVE_BANK_FILTER = { isDeleted: { $ne: true } }
+
 async function clearPrimaryBankAccounts(userId, exceptId = null) {
-  const filter = { userId, isPrimary: true }
+  const filter = { userId, isPrimary: true, ...LIVE_BANK_FILTER }
   if (exceptId) filter._id = { $ne: exceptId }
   await BankAccount.updateMany(filter, { $set: { isPrimary: false } })
 }
 
 router.get('/bank-accounts', authMiddleware, async (req, res) => {
   try {
-    const bankAccounts = await BankAccount.find({ userId: req.user._id })
+    const bankAccounts = await BankAccount.find({ userId: req.user._id, ...LIVE_BANK_FILTER })
       .sort({ isPrimary: -1, createdAt: -1 })
       .lean()
     res.json({ bankAccounts })
@@ -1417,7 +1428,10 @@ router.post('/bank-accounts', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Enter a valid account number' })
     }
 
-    const existingCount = await BankAccount.countDocuments({ userId: req.user._id })
+    const existingCount = await BankAccount.countDocuments({
+      userId: req.user._id,
+      ...LIVE_BANK_FILTER,
+    })
     if (payload.isPrimary || existingCount === 0) {
       await clearPrimaryBankAccounts(req.user._id)
       payload.isPrimary = true
@@ -1439,6 +1453,7 @@ router.put('/bank-accounts/:accountId', authMiddleware, async (req, res) => {
     const account = await BankAccount.findOne({
       _id: req.params.accountId,
       userId: req.user._id,
+      ...LIVE_BANK_FILTER,
     })
     if (!account) return res.status(404).json({ message: 'Bank account not found' })
 
@@ -1468,19 +1483,25 @@ router.put('/bank-accounts/:accountId', authMiddleware, async (req, res) => {
   }
 })
 
+// Soft delete — the row is kept (payouts reference it) and hidden from every read.
 router.delete('/bank-accounts/:accountId', authMiddleware, async (req, res) => {
   try {
     const account = await BankAccount.findOne({
       _id: req.params.accountId,
       userId: req.user._id,
+      ...LIVE_BANK_FILTER,
     })
     if (!account) return res.status(404).json({ message: 'Bank account not found' })
 
     const wasPrimary = account.isPrimary
-    await account.deleteOne()
+    account.isDeleted = true
+    account.deletedAt = new Date()
+    account.isPrimary = false
+    await account.save()
 
     if (wasPrimary) {
-      const next = await BankAccount.findOne({ userId: req.user._id }).sort({ createdAt: 1 })
+      const next = await BankAccount.findOne({ userId: req.user._id, ...LIVE_BANK_FILTER })
+        .sort({ createdAt: 1 })
       if (next) {
         next.isPrimary = true
         await next.save()
@@ -1530,15 +1551,18 @@ function sanitizeCardPayload(body = {}, { requireNumber = false } = {}) {
   }
 }
 
+/** Saved cards are soft-deleted — every query is scoped to the live ones. */
+const LIVE_CARD_FILTER = { isDeleted: { $ne: true } }
+
 async function clearPrimarySavedCards(userId, exceptId = null) {
-  const filter = { userId, isPrimary: true }
+  const filter = { userId, isPrimary: true, ...LIVE_CARD_FILTER }
   if (exceptId) filter._id = { $ne: exceptId }
   await SavedCard.updateMany(filter, { $set: { isPrimary: false } })
 }
 
 router.get('/saved-cards', authMiddleware, async (req, res) => {
   try {
-    const savedCards = await SavedCard.find({ userId: req.user._id })
+    const savedCards = await SavedCard.find({ userId: req.user._id, ...LIVE_CARD_FILTER })
       .sort({ isPrimary: -1, createdAt: -1 })
       .lean()
     res.json({ savedCards })
@@ -1561,7 +1585,10 @@ router.post('/saved-cards', authMiddleware, async (req, res) => {
       return res.status(400).json({ message: 'Expiry must be MM/YY' })
     }
 
-    const existingCount = await SavedCard.countDocuments({ userId: req.user._id })
+    const existingCount = await SavedCard.countDocuments({
+      userId: req.user._id,
+      ...LIVE_CARD_FILTER,
+    })
     if (payload.isPrimary || existingCount === 0) {
       await clearPrimarySavedCards(req.user._id)
       payload.isPrimary = true
@@ -1588,6 +1615,7 @@ router.put('/saved-cards/:cardId', authMiddleware, async (req, res) => {
     const card = await SavedCard.findOne({
       _id: req.params.cardId,
       userId: req.user._id,
+      ...LIVE_CARD_FILTER,
     })
     if (!card) return res.status(404).json({ message: 'Saved card not found' })
 
@@ -1632,19 +1660,25 @@ router.put('/saved-cards/:cardId', authMiddleware, async (req, res) => {
   }
 })
 
+// Soft delete — the row is kept (past transactions reference it) and hidden from reads.
 router.delete('/saved-cards/:cardId', authMiddleware, async (req, res) => {
   try {
     const card = await SavedCard.findOne({
       _id: req.params.cardId,
       userId: req.user._id,
+      ...LIVE_CARD_FILTER,
     })
     if (!card) return res.status(404).json({ message: 'Saved card not found' })
 
     const wasPrimary = card.isPrimary
-    await card.deleteOne()
+    card.isDeleted = true
+    card.deletedAt = new Date()
+    card.isPrimary = false
+    await card.save()
 
     if (wasPrimary) {
-      const next = await SavedCard.findOne({ userId: req.user._id }).sort({ createdAt: 1 })
+      const next = await SavedCard.findOne({ userId: req.user._id, ...LIVE_CARD_FILTER })
+        .sort({ createdAt: 1 })
       if (next) {
         next.isPrimary = true
         await next.save()

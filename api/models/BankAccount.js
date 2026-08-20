@@ -10,10 +10,16 @@ const BankAccountSchema = new Schema(
     swift: { type: String, default: '', trim: true, maxlength: 32 },
     branchName: { type: String, default: '', trim: true, maxlength: 120 },
     isPrimary: { type: Boolean, default: false },
+
+    // Soft delete: rows are retained (payout history references them) and simply
+    // stop being returned. Every read path filters on `isDeleted`.
+    isDeleted: { type: Boolean, default: false, index: true },
+    deletedAt: { type: Date, default: null },
   },
   { timestamps: true }
 )
 
+BankAccountSchema.index({ userId: 1, isDeleted: 1, isPrimary: -1, createdAt: -1 })
 BankAccountSchema.index({ userId: 1, isPrimary: 1 })
 BankAccountSchema.index({ userId: 1, createdAt: -1 })
 

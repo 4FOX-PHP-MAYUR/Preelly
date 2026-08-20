@@ -3158,7 +3158,9 @@ function PostAdPage() {
         dynamicFormValues: dynamicFormSubmitValues,
       },
     })
-    if (nextId) draftIdRef.current = nextId
+    // `null` means the server has no live draft for this id anymore — keeping it
+    // would make every later save retry a dead draft, so drop it.
+    draftIdRef.current = nextId || null
     return nextId
   }
 
